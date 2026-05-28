@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -129,6 +131,14 @@ def receber_mensagem(dados: MensagemRequest):
             ),
             "resumo_vendedor": resumo,
             "lead_id": lead_id
+        }
+
+    except Exception as erro:
+        traceback.print_exc()
+
+        return {
+            "erro": str(erro),
+            "tipo": type(erro).__name__
         }
 
     finally:
