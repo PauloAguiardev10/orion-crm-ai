@@ -4,60 +4,88 @@ from database.db import conectar
 
 
 STATUS_PAGAMENTO = [
-    "Aguardando pagamento",
-    "Aguardando confirmação",
-    "Pagamento confirmado",
-    "Pagamento recusado",
+    "Pendente",
+    "Pago",
+    "Atrasado",
+    "Cancelado"
 ]
 
 
 STATUS_PEDIDO = [
-    "Novo pedido",
-    "Em separação",
-    "Enviado",
-    "Entregue",
-    "Cancelado",
+    "Pendente",
+    "Em andamento",
+    "Concluído",
+    "Cancelado"
 ]
 
 
 FORMAS_PAGAMENTO = [
-    "PIX",
+    "Pix",
     "Cartão",
+    "Boleto",
     "Dinheiro",
-    "Outro",
+    "Transferência"
 ]
 
 
-def garantir_tabela_pedidos():
+def criar_tabela_pedidos():
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pedidos (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             empresa_id INTEGER DEFAULT 1,
-            cliente_nome TEXT,
-            cliente_telefone TEXT,
-            produto_id INTEGER,
-            produto_nome TEXT,
+
+            cliente TEXT,
+
+            produto TEXT,
+
             quantidade INTEGER DEFAULT 1,
+
             valor_total REAL DEFAULT 0,
-            forma_pagamento TEXT,
-            status_pagamento TEXT DEFAULT 'Aguardando pagamento',
-            status_pedido TEXT DEFAULT 'Novo pedido',
-            origem TEXT,
-            vendido_por TEXT DEFAULT 'IA',
-            observacoes TEXT,
+
+            status TEXT DEFAULT 'Pendente',
+
+            status_pagamento TEXT DEFAULT 'Pendente',
+
+            forma_pagamento TEXT DEFAULT 'Pix',
+
             criado_em TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    cursor.execute("PRAGMA table_info(pedidos)")
+    colunas = [col[1] for col in cursor.fetchall()]
+
+    if "status_pagamento" not in colunas:
+        cursor.execute("""
+            ALTER TABLE pedidos
+            ADD COLUMN status_pagamento TEXT DEFAULT 'Pendente'
+        """)
+
+    if "forma_pagamento" not in colunas:
+        cursor.execute("""
+            ALTER TABLE pedidos
+            ADD COLUMN forma_pagamento TEXT DEFAULT 'Pix'
+        """)
+
+    if "status" not in colunas:
+        cursor.execute("""
+            ALTER TABLE pedidos
+            ADD COLUMN status TEXT DEFAULT 'Pendente'
+        """)
 
     conn.commit()
     conn.close()
 
 
-def listar_pedidos(empresa_id):
-    garantir_tabela_pedidos()
+def listar_pedidos(empresa_id=1):
+
+    criar_tabela_pedidos()
 
     conn = conectar()
 
@@ -73,101 +101,138 @@ def listar_pedidos(empresa_id):
     return pedidos
 
 
+def carregar_pedidos(empresa_id=1):
+    return listar_pedidos(empresa_id)
+
+
 def cadastrar_pedido(
     empresa_id,
-    cliente_nome,
-    cliente_telefone,
-    produto_id,
-    produto_nome,
+    cliente,
+    produto,
     quantidade,
     valor_total,
-    forma_pagamento,
-    status_pagamento,
-    status_pedido,
-    origem,
-    vendido_por,
-    observacoes
+    status="Pendente",
+    status_pagamento="Pendente",
+    forma_pagamento="Pix"
 ):
+
+    criar_tabela_pedidos()
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         INSERT INTO pedidos (
+
             empresa_id,
-            cliente_nome,
-            cliente_telefone,
-            produto_id,
-            produto_nome,
+            cliente,
+            produto,
             quantidade,
             valor_total,
-            forma_pagamento,
+            status,
             status_pagamento,
-            status_pedido,
-            origem,
-            vendido_por,
-            observacoes
+            forma_pagamento
+
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+
         empresa_id,
-        cliente_nome.strip(),
-        cliente_telefone.strip(),
-        int(produto_id) if produto_id else None,
-        produto_nome.strip(),
-        int(quantidade),
-        float(valor_total),
-        forma_pagamento,
+        cliente,
+        produto,
+        quantidade,
+        valor_total,
+        status,
         status_pagamento,
-        status_pedido,
-        origem,
-        vendido_por,
-        observacoes.strip()
+        forma_pagamento
     ))
 
     conn.commit()
     conn.close()
 
-    return True
+
+def salvar_pedido(
+    empresa_id,
+    cliente,
+    produto,
+    quantidade,
+    valor_total,
+    status="Pendente",
+    status_pagamento="Pendente",
+    forma_pagamento="Pix"
+):
+
+    cadastrar_pedido(
+        empresa_id,
+        cliente,
+        produto,
+        quantidade,
+        valor_total,
+        status,
+        status_pagamento,
+        forma_pagamento
+    )
 
 
 def atualizar_pedido(
     pedido_id,
-    status_pagamento,
-    status_pedido,
-    observacoes
+    cliente,
+    produto,
+    quantidade,
+    valor_total,
+    status,
+    status_pagamento="Pendente",
+    forma_pagamento="Pix"
 ):
+
+    criar_tabela_pedidos()
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE pedidos
-        SET status_pagamento = ?,
-            status_pedido = ?,
-            observacoes = ?
+
+        SET
+
+            cliente = ?,
+            produto = ?,
+            quantidade = ?,
+            valor_total = ?,
+            status = ?,
+            status_pagamento = ?,
+            forma_pagamento = ?
+
         WHERE id = ?
     """, (
+
+        cliente,
+        produto,
+        quantidade,
+        valor_total,
+        status,
         status_pagamento,
-        status_pedido,
-        observacoes.strip(),
+        forma_pagamento,
         int(pedido_id)
     ))
 
     conn.commit()
     conn.close()
 
-    return True
-
 
 def excluir_pedido(pedido_id):
+
+    criar_tabela_pedidos()
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         DELETE FROM pedidos
         WHERE id = ?
-    """, (int(pedido_id),))
+    """, (
+        int(pedido_id),
+    ))
 
     conn.commit()
     conn.close()
-
-    return True

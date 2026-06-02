@@ -39,6 +39,11 @@ def buscar_empresas_permitidas():
 
 
 def buscar_dados_empresa(empresa_id):
+    from services.pedidos_service import criar_tabela_pedidos
+    from services.produtos_service import criar_tabela_produtos
+    criar_tabela_pedidos()
+    criar_tabela_produtos()
+    
     conn = conectar()
 
     leads = pd.read_sql_query("""

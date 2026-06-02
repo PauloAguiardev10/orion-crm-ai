@@ -3,21 +3,38 @@ import pandas as pd
 from database.db import conectar
 
 
-def garantir_tabela_produtos():
+CATEGORIAS_PRODUTOS = [
+    "Serviço",
+    "Produto",
+    "Plano",
+    "Marketing",
+    "Automação",
+    "Website"
+]
+
+
+def criar_tabela_produtos():
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS produtos (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             empresa_id INTEGER DEFAULT 1,
-            nome TEXT NOT NULL,
+
+            nome TEXT,
+
             categoria TEXT,
+
             descricao TEXT,
+
             preco REAL DEFAULT 0,
-            estoque INTEGER DEFAULT 0,
-            imagem_url TEXT,
-            status TEXT DEFAULT 'ativo',
+
+            ativo INTEGER DEFAULT 1,
+
             criado_em TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -26,8 +43,9 @@ def garantir_tabela_produtos():
     conn.close()
 
 
-def listar_produtos(empresa_id):
-    garantir_tabela_produtos()
+def listar_produtos(empresa_id=1):
+
+    criar_tabela_produtos()
 
     conn = conectar()
 
@@ -43,49 +61,48 @@ def listar_produtos(empresa_id):
     return produtos
 
 
+def carregar_produtos(empresa_id=1):
+    return listar_produtos(empresa_id)
+
+
 def cadastrar_produto(
     empresa_id,
     nome,
     categoria,
     descricao,
     preco,
-    estoque,
-    imagem_url,
-    status
+    ativo=1
 ):
-    if not nome.strip():
-        return False
+
+    criar_tabela_produtos()
 
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         INSERT INTO produtos (
+
             empresa_id,
             nome,
             categoria,
             descricao,
             preco,
-            estoque,
-            imagem_url,
-            status
+            ativo
+
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, (
+
         empresa_id,
-        nome.strip(),
-        categoria.strip(),
-        descricao.strip(),
-        float(preco),
-        int(estoque),
-        imagem_url.strip(),
-        status
+        nome,
+        categoria,
+        descricao,
+        preco,
+        ativo
     ))
 
     conn.commit()
     conn.close()
-
-    return True
 
 
 def atualizar_produto(
@@ -94,50 +111,53 @@ def atualizar_produto(
     categoria,
     descricao,
     preco,
-    estoque,
-    imagem_url,
-    status
+    ativo=1
 ):
+
+    criar_tabela_produtos()
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE produtos
-        SET nome = ?,
+
+        SET
+
+            nome = ?,
             categoria = ?,
             descricao = ?,
             preco = ?,
-            estoque = ?,
-            imagem_url = ?,
-            status = ?
+            ativo = ?
+
         WHERE id = ?
     """, (
-        nome.strip(),
-        categoria.strip(),
-        descricao.strip(),
-        float(preco),
-        int(estoque),
-        imagem_url.strip(),
-        status,
+
+        nome,
+        categoria,
+        descricao,
+        preco,
+        ativo,
         int(produto_id)
     ))
 
     conn.commit()
     conn.close()
 
-    return True
-
 
 def excluir_produto(produto_id):
+
+    criar_tabela_produtos()
+
     conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute("""
         DELETE FROM produtos
         WHERE id = ?
-    """, (int(produto_id),))
+    """, (
+        int(produto_id),
+    ))
 
     conn.commit()
     conn.close()
-
-    return True

@@ -1,24 +1,19 @@
 import streamlit as st
+import pandas as pd
 
 from components.graficos import grafico_donut
 
 
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def melhor_valor(df, coluna):
-    if df.empty:
+    if df.empty or coluna not in df.columns:
         return "N/A"
 
-    if coluna not in df.columns:
-        return "N/A"
-
-    serie = (
-        df[coluna]
-        .dropna()
-        .astype(str)
-    )
-
-    serie = serie[
-        serie.str.strip() != ""
-    ]
+    serie = df[coluna].dropna().astype(str)
+    serie = serie[serie.str.strip() != ""]
 
     if serie.empty:
         return "N/A"
@@ -31,6 +26,18 @@ def melhor_valor(df, coluna):
     return contagem.idxmax()
 
 
+def card(titulo, valor):
+    st.markdown(
+        f"""
+        <div class="metric-card">
+            <div class="metric-title">{titulo}</div>
+            <div class="metric-value">{valor}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 def render_resultados(leads):
 
     st.title("📌 Resultados Comerciais")
@@ -41,20 +48,24 @@ def render_resultados(leads):
 
     leads = leads.copy()
 
-    if "status" not in leads.columns:
-        leads["status"] = "Aguardando atendimento"
+    colunas_padrao = {
+        "status": "Aguardando atendimento",
+        "produto": "Não informado",
+        "responsavel": "Não atribuído",
+        "canal": "Não informado",
+        "origem": "Não informado",
+        "valor_negocio": 0,
+        "mensalidade": 0,
+        "motivo_perda": "",
+        "observacao_comercial": "",
+    }
 
-    if "produto" not in leads.columns:
-        leads["produto"] = "Não informado"
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
 
-    if "responsavel" not in leads.columns:
-        leads["responsavel"] = "Não atribuído"
-
-    if "canal" not in leads.columns:
-        if "origem" in leads.columns:
-            leads["canal"] = leads["origem"]
-        else:
-            leads["canal"] = "Não informado"
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
 
     status_normalizado = (
         leads["status"]
@@ -78,6 +89,29 @@ def render_resultados(leads):
         (len(fechados_df) / total) * 100,
         1
     ) if total > 0 else 0
+
+    valor_fechado = 0
+    mensalidade_total = 0
+
+    if "valor_negocio" in fechados_df.columns:
+        valor_fechado = (
+            pd.to_numeric(
+                fechados_df["valor_negocio"],
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum()
+        )
+
+    if "mensalidade" in fechados_df.columns:
+        mensalidade_total = (
+            pd.to_numeric(
+                fechados_df["mensalidade"],
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum()
+        )
 
     melhor_canal = melhor_valor(
         fechados_df,
@@ -124,24 +158,24 @@ def render_resultados(leads):
 
     c1, c2, c3, c4 = st.columns(4)
 
-    metricas = [
-        ("✅ Fechados", len(fechados_df)),
-        ("⚪ Não fechados", len(nao_fechados_df)),
-        ("📈 Conversão", f"{taxa}%"),
-        ("🏆 Melhor canal", melhor_canal),
-    ]
+    with c1:
+        card("✅ Fechados", len(fechados_df))
+    with c2:
+        card("⚪ Não fechados", len(nao_fechados_df))
+    with c3:
+        card("📈 Conversão", f"{taxa}%")
+    with c4:
+        card("🏆 Melhor canal", melhor_canal)
 
-    for col, (titulo, valor) in zip([c1, c2, c3, c4], metricas):
-        with col:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-title">{titulo}</div>
-                    <div class="metric-value">{valor}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    f1, f2 = st.columns(2)
+
+    with f1:
+        card("💰 Valor Fechado", formatar_moeda(valor_fechado))
+
+    with f2:
+        card("🔁 Receita Mensal", formatar_moeda(mensalidade_total))
 
     st.markdown("## 🧠 Insights Comerciais")
 
@@ -152,6 +186,36 @@ def render_resultados(leads):
 
     with i2:
         st.info(f"👨‍💼 Especialista destaque: {melhor_especialista}")
+
+    if not nao_fechados_df.empty and "motivo_perda" in nao_fechados_df.columns:
+
+        motivos = (
+            nao_fechados_df["motivo_perda"]
+            .fillna("")
+            .astype(str)
+        )
+
+        motivos = motivos[motivos.str.strip() != ""]
+
+        if not motivos.empty:
+            st.markdown("## ❌ Motivos de Perda")
+
+            motivos_df = (
+                motivos
+                .value_counts()
+                .reset_index()
+            )
+
+            motivos_df.columns = [
+                "Motivo",
+                "Quantidade"
+            ]
+
+            st.dataframe(
+                motivos_df,
+                use_container_width=True,
+                hide_index=True
+            )
 
     st.markdown("## 📊 Conversão")
 

@@ -61,6 +61,10 @@ def garantir_colunas_leads():
             resumo_vendedor TEXT,
             status TEXT DEFAULT 'Aguardando atendimento',
             responsavel TEXT DEFAULT 'Não atribuído',
+            valor_negocio REAL DEFAULT 0,
+            mensalidade REAL DEFAULT 0,
+            motivo_perda TEXT,
+            observacao_comercial TEXT,
             criado_em TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -68,29 +72,67 @@ def garantir_colunas_leads():
     cursor.execute("PRAGMA table_info(leads)")
     colunas_leads = [col[1] for col in cursor.fetchall()]
 
-    if "empresa_id" not in colunas_leads:
-        cursor.execute("""
-            ALTER TABLE leads
-            ADD COLUMN empresa_id INTEGER DEFAULT 1
-        """)
+    colunas_obrigatorias_leads = {
+        "empresa_id": "INTEGER DEFAULT 1",
+        "cliente_id": "INTEGER",
+        "produto": "TEXT",
+        "temperatura": "TEXT",
+        "prioridade": "TEXT",
+        "score": "INTEGER DEFAULT 0",
+        "origem": "TEXT",
+        "observacoes": "TEXT",
+        "resumo_vendedor": "TEXT",
+        "status": "TEXT DEFAULT 'Aguardando atendimento'",
+        "responsavel": "TEXT DEFAULT 'Não atribuído'",
+        "valor_negocio": "REAL DEFAULT 0",
+        "mensalidade": "REAL DEFAULT 0",
+        "motivo_perda": "TEXT",
+        "observacao_comercial": "TEXT",
+        "criado_em": "TEXT DEFAULT CURRENT_TIMESTAMP",
+    }
+
+    for coluna, tipo in colunas_obrigatorias_leads.items():
+        if coluna not in colunas_leads:
+            cursor.execute(f"""
+                ALTER TABLE leads
+                ADD COLUMN {coluna} {tipo}
+            """)
 
     cursor.execute("PRAGMA table_info(clientes)")
     colunas_clientes = [col[1] for col in cursor.fetchall()]
 
-    if "empresa_id" not in colunas_clientes:
-        cursor.execute("""
-            ALTER TABLE clientes
-            ADD COLUMN empresa_id INTEGER DEFAULT 1
-        """)
+    colunas_obrigatorias_clientes = {
+        "empresa_id": "INTEGER DEFAULT 1",
+        "nome": "TEXT",
+        "empresa": "TEXT",
+        "telefone": "TEXT",
+        "canal": "TEXT",
+    }
+
+    for coluna, tipo in colunas_obrigatorias_clientes.items():
+        if coluna not in colunas_clientes:
+            cursor.execute(f"""
+                ALTER TABLE clientes
+                ADD COLUMN {coluna} {tipo}
+            """)
 
     cursor.execute("PRAGMA table_info(conversas)")
     colunas_conversas = [col[1] for col in cursor.fetchall()]
 
-    if "empresa_id" not in colunas_conversas:
-        cursor.execute("""
-            ALTER TABLE conversas
-            ADD COLUMN empresa_id INTEGER DEFAULT 1
-        """)
+    colunas_obrigatorias_conversas = {
+        "empresa_id": "INTEGER DEFAULT 1",
+        "nome": "TEXT",
+        "telefone": "TEXT",
+        "canal": "TEXT",
+        "historico": "TEXT",
+    }
+
+    for coluna, tipo in colunas_obrigatorias_conversas.items():
+        if coluna not in colunas_conversas:
+            cursor.execute(f"""
+                ALTER TABLE conversas
+                ADD COLUMN {coluna} {tipo}
+            """)
 
     conn.commit()
     conn.close()
@@ -134,6 +176,10 @@ def carregar_leads(empresa_id=1):
             leads.resumo_vendedor,
             leads.status,
             leads.responsavel,
+            leads.valor_negocio,
+            leads.mensalidade,
+            leads.motivo_perda,
+            leads.observacao_comercial,
             leads.criado_em
 
         FROM leads
@@ -170,11 +216,20 @@ def carregar_leads(empresa_id=1):
             "Não identificado"
         )
 
+        leads["canal"] = leads["canal"].fillna(
+            "WhatsApp"
+        )
+
         leads["canal"] = leads["canal"].replace({
             "Facebook": "Facebook Messenger",
             "Messenger": "Facebook Messenger",
             "Instagram": "Instagram Direct"
         })
+
+        leads["valor_negocio"] = leads["valor_negocio"].fillna(0)
+        leads["mensalidade"] = leads["mensalidade"].fillna(0)
+        leads["motivo_perda"] = leads["motivo_perda"].fillna("")
+        leads["observacao_comercial"] = leads["observacao_comercial"].fillna("")
 
         leads["criado_em"] = pd.to_datetime(
             leads["criado_em"],
@@ -200,8 +255,14 @@ def carregar_leads(empresa_id=1):
 def atualizar_lead(
     lead_id,
     novo_status,
-    responsavel
+    responsavel,
+    valor_negocio=0,
+    mensalidade=0,
+    motivo_perda="",
+    observacao_comercial=""
 ):
+
+    garantir_colunas_leads()
 
     conn = conectar()
     cursor = conn.cursor()
@@ -209,11 +270,19 @@ def atualizar_lead(
     cursor.execute("""
         UPDATE leads
         SET status = ?,
-            responsavel = ?
+            responsavel = ?,
+            valor_negocio = ?,
+            mensalidade = ?,
+            motivo_perda = ?,
+            observacao_comercial = ?
         WHERE id = ?
     """, (
         novo_status,
         responsavel,
+        float(valor_negocio or 0),
+        float(mensalidade or 0),
+        motivo_perda,
+        observacao_comercial,
         int(lead_id)
     ))
 

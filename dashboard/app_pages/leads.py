@@ -10,6 +10,16 @@ from services.configuracoes_service import (
 )
 
 
+MOTIVOS_PERDA = [
+    "Sem orçamento",
+    "Sem interesse",
+    "Fechou com concorrente",
+    "Não respondeu",
+    "Momento errado",
+    "Outro motivo"
+]
+
+
 def valor_seguro(lead, coluna, padrao="Não informado"):
     try:
         valor = lead[coluna]
@@ -18,6 +28,27 @@ def valor_seguro(lead, coluna, padrao="Não informado"):
         return valor
     except Exception:
         return padrao
+
+
+def normalizar_status(status):
+    status = str(status).strip().lower()
+
+    if "aguardando" in status:
+        return "Aguardando atendimento"
+
+    if status == "em" or "em atendimento" in status:
+        return "Em atendimento"
+
+    if "proposta" in status:
+        return "Proposta enviada"
+
+    if "não fechado" in status or "nao fechado" in status:
+        return "Não fechado"
+
+    if "fechado" in status:
+        return "Negócio fechado"
+
+    return "Aguardando atendimento"
 
 
 def render_leads(leads):
@@ -43,6 +74,10 @@ def render_leads(leads):
         "responsavel": "Não atribuído",
         "resumo_vendedor": "",
         "historico": "",
+        "valor_negocio": 0,
+        "mensalidade": 0,
+        "motivo_perda": "",
+        "observacao_comercial": "",
     }
 
     for coluna, padrao in colunas_padrao.items():
@@ -51,6 +86,8 @@ def render_leads(leads):
 
     if "canal" not in leads.columns or leads["canal"].isna().all():
         leads["canal"] = leads["origem"]
+
+    leads["status"] = leads["status"].apply(normalizar_status)
 
     leads["status_normalizado"] = (
         leads["status"]
@@ -184,8 +221,44 @@ def render_leads(leads):
         produto = valor_seguro(lead, "produto", "Não identificado")
         temperatura = valor_seguro(lead, "temperatura", "fria")
         score = valor_seguro(lead, "score", 0)
-        status_atual = valor_seguro(lead, "status", "Aguardando atendimento")
-        responsavel_atual = valor_seguro(lead, "responsavel", "Não atribuído")
+
+        status_atual = normalizar_status(
+            valor_seguro(
+                lead,
+                "status",
+                "Aguardando atendimento"
+            )
+        )
+
+        responsavel_atual = valor_seguro(
+            lead,
+            "responsavel",
+            "Não atribuído"
+        )
+
+        valor_atual = valor_seguro(
+            lead,
+            "valor_negocio",
+            0
+        )
+
+        mensalidade_atual = valor_seguro(
+            lead,
+            "mensalidade",
+            0
+        )
+
+        motivo_perda_atual = valor_seguro(
+            lead,
+            "motivo_perda",
+            ""
+        )
+
+        observacao_atual = valor_seguro(
+            lead,
+            "observacao_comercial",
+            ""
+        )
 
         st.markdown(
             f"""
@@ -225,14 +298,81 @@ def render_leads(leads):
                 key=f"responsavel_{lead_id}"
             )
 
+        valor_negocio = float(valor_atual or 0)
+        mensalidade = float(mensalidade_atual or 0)
+        motivo_perda = str(motivo_perda_atual or "")
+        observacao_comercial = str(observacao_atual or "")
+
+        if novo_status == "Negócio fechado":
+
+            st.markdown("### 💰 Dados do negócio fechado")
+
+            n1, n2 = st.columns(2)
+
+            with n1:
+                valor_negocio = st.number_input(
+                    f"Valor do contrato Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(valor_atual or 0),
+                    step=100.0,
+                    key=f"valor_negocio_{lead_id}"
+                )
+
+            with n2:
+                mensalidade = st.number_input(
+                    f"Mensalidade Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(mensalidade_atual or 0),
+                    step=100.0,
+                    key=f"mensalidade_{lead_id}"
+                )
+
+            motivo_perda = ""
+
+        elif novo_status == "Não fechado":
+
+            st.markdown("### ❌ Motivo da perda")
+
+            index_motivo = (
+                MOTIVOS_PERDA.index(motivo_perda_atual)
+                if motivo_perda_atual in MOTIVOS_PERDA
+                else 0
+            )
+
+            motivo_perda = st.selectbox(
+                f"Motivo da perda Lead #{lead_id}",
+                MOTIVOS_PERDA,
+                index=index_motivo,
+                key=f"motivo_perda_{lead_id}"
+            )
+
+            observacao_comercial = st.text_area(
+                f"Observação comercial Lead #{lead_id}",
+                value=str(observacao_atual or ""),
+                key=f"observacao_comercial_{lead_id}"
+            )
+
+            valor_negocio = 0
+            mensalidade = 0
+
+        else:
+            motivo_perda = ""
+            valor_negocio = float(valor_atual or 0)
+            mensalidade = float(mensalidade_atual or 0)
+            observacao_comercial = str(observacao_atual or "")
+
         if st.button(
             f"Salvar Lead #{lead_id}",
             key=f"salvar_{lead_id}"
         ):
             atualizar_lead(
                 lead_id,
-                novo_status,
-                responsavel
+                normalizar_status(novo_status),
+                responsavel,
+                valor_negocio,
+                mensalidade,
+                motivo_perda,
+                observacao_comercial
             )
 
             st.success("Lead atualizada com sucesso.")

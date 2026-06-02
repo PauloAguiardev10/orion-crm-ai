@@ -1,8 +1,4 @@
-from app.services.gpt_service import (
-    gerar_resposta_gpt,
-    gerar_resumo_comercial_gpt,
-    gerar_apresentacao_servicos_gpt
-)
+from app.services.gpt_service import gerar_resumo_comercial_gpt
 
 
 def limpar_nome_cliente(texto: str):
@@ -46,7 +42,11 @@ def detectar_intencao_cliente(mensagem: str):
         "outra agência",
         "outra agencia",
         "tenho medo",
-        "medo de contratar"
+        "medo de contratar",
+        "não gostei",
+        "nao gostei",
+        "fui enganado",
+        "fui enganada"
     ]):
         return "objecao_experiencia_ruim"
 
@@ -114,7 +114,9 @@ def detectar_intencao_cliente(mensagem: str):
         "chatbot",
         "sdr",
         "robô",
-        "robo"
+        "robo",
+        "atendimento automático",
+        "atendimento automatico"
     ]):
         return "automacao"
 
@@ -153,9 +155,13 @@ def analisar_mensagem(mensagem: str):
         "vender mais",
         "aumentar vendas",
         "marcar reunião",
+        "marcar reuniao",
         "agendar",
         "tenho interesse",
-        "quero saber mais"
+        "quero saber mais",
+        "gerar leads",
+        "mais clientes",
+        "automatizar atendimento"
     ]
 
     palavras_objeção = [
@@ -168,7 +174,9 @@ def analisar_mensagem(mensagem: str):
         "outra agência",
         "outra agencia",
         "experiência ruim",
-        "experiencia ruim"
+        "experiencia ruim",
+        "não gostei",
+        "nao gostei"
     ]
 
     produtos = {
@@ -278,7 +286,7 @@ Pontos importantes:
 • Lead foi atendida inicialmente pela Sofia
 • Demonstrou abertura para entender melhor a solução
 • Deve ser conduzida de forma consultiva
-• Se houver objeção ou experiência ruim anterior, Luciano deve reforçar o diagnóstico antes de falar de valores
+• Se houver objeção ou experiência ruim anterior, Luciano deve reforçar diagnóstico, confiança e clareza antes de falar de valores
 
 Próxima ação recomendada:
 Luciano deve entrar em contato para aprofundar o diagnóstico e conduzir a lead para uma reunião comercial.
@@ -306,7 +314,18 @@ def conduzir_conversa(conversa, mensagem: str):
 
     if conversa.etapa == "inicio":
 
-        if intencao == "conhecer_servicos":
+        if intencao == "objecao_experiencia_ruim":
+            conversa.etapa = "entender_objetivo_inicial"
+
+            resposta = (
+                "Olá! Tudo bem? 😊\n\n"
+                "Entendo perfeitamente o que você está dizendo. Isso é mais comum do que parece.\n\n"
+                "Muitas empresas chegam até a Forway depois de experiências que não deram certo com marketing, tráfego ou agência, normalmente por falta de acompanhamento, estratégia clara ou alinhamento com o momento real da empresa.\n\n"
+                "Por isso, antes de falar em pacote ou valor, a gente prefere entender melhor o cenário para não indicar algo genérico.\n\n"
+                "Me conta uma coisa: hoje qual é o principal desafio da sua empresa?"
+            )
+
+        elif intencao == "conhecer_servicos":
             conversa.etapa = "entender_objetivo_inicial"
 
             resposta = (
@@ -330,7 +349,11 @@ def conduzir_conversa(conversa, mensagem: str):
     elif conversa.etapa == "entender_objetivo_inicial":
 
         conversa.objetivo = texto
-        analise = analisar_mensagem(f"{conversa.historico or ''}\n{texto}")
+
+        analise = analisar_mensagem(f"""
+        {conversa.historico or ''}
+        {texto}
+        """)
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
@@ -339,10 +362,9 @@ def conduzir_conversa(conversa, mensagem: str):
 
         if intencao == "objecao_experiencia_ruim":
             resposta = (
-                "Entendo perfeitamente 😊\n\n"
-                "Isso é mais comum do que parece. Muitas empresas chegam até a Forway depois de experiências que não deram certo, normalmente por falta de acompanhamento, estratégia ou clareza no processo.\n\n"
-                "Por isso nosso atendimento começa entendendo o cenário antes de indicar qualquer solução.\n\n"
-                "Pra eu registrar certinho aqui, como posso te chamar?"
+                "Entendi 😊\n\n"
+                "Esse tipo de situação precisa mesmo ser olhado com cuidado. Quando uma estratégia anterior não funciona, geralmente o problema não está só no anúncio, mas no conjunto: comunicação, público, oferta, acompanhamento e processo comercial.\n\n"
+                "Pra eu registrar certinho e encaminhar isso para o Luciano analisar com mais contexto, como posso te chamar?"
             )
         else:
             resposta = (
