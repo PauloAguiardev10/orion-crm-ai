@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 
@@ -35,6 +36,12 @@ SERVICOS_PREMIUM = [
     "Link Pagamento",
     "Relatórios",
 ]
+
+
+def limpar_formulario_nova_empresa():
+    st.session_state["reset_nova_empresa"] = (
+        st.session_state.get("reset_nova_empresa", 0) + 1
+    )
 
 
 def garantir_colunas_empresas():
@@ -266,6 +273,7 @@ def converter_labels_para_servicos(labels):
 def render_empresas():
     nivel = st.session_state.get("nivel")
     empresa_logada = st.session_state.get("empresa")
+    reset_key = st.session_state.get("reset_nova_empresa", 0)
 
     st.title("🏢 Empresas")
 
@@ -292,30 +300,54 @@ def render_empresas():
     c1, c2 = st.columns(2)
 
     with c1:
-        nome = st.text_input("Nome empresa")
-        usuario_admin = st.text_input("Usuário admin")
-        logo_path = st.text_input("Logo", value="assets/logo_forway.png")
+        nome = st.text_input(
+            "Nome empresa",
+            key=f"nova_empresa_nome_{reset_key}",
+        )
+
+        usuario_admin = st.text_input(
+            "Usuário admin",
+            key=f"nova_empresa_usuario_{reset_key}",
+        )
+
+        logo_path = st.text_input(
+            "Logo",
+            value="assets/logo_forway.png",
+            key=f"nova_empresa_logo_{reset_key}",
+        )
 
         if nivel == "parceiro_admin":
             parceiro_nome = empresa_logada
-            st.text_input("Parceiro responsável", value=parceiro_nome, disabled=True)
+            st.text_input(
+                "Parceiro responsável",
+                value=parceiro_nome,
+                disabled=True,
+                key=f"nova_empresa_parceiro_{reset_key}",
+            )
         else:
             parceiro_nome = st.selectbox(
                 "Parceiro responsável",
                 ["Forway", "Orion"],
+                key=f"nova_empresa_parceiro_select_{reset_key}",
             )
 
     with c2:
-        senha_admin = st.text_input("Senha admin", type="password")
+        senha_admin = st.text_input(
+            "Senha admin",
+            type="password",
+            key=f"nova_empresa_senha_{reset_key}",
+        )
 
         plano = st.selectbox(
             "Plano",
             ["Lite", "Pro", "Premium"],
+            key=f"nova_empresa_plano_{reset_key}",
         )
 
         status = st.selectbox(
             "Status",
             ["ativa", "suspensa"],
+            key=f"nova_empresa_status_{reset_key}",
         )
 
     servicos = []
@@ -332,7 +364,7 @@ def render_empresas():
         servicos_labels = st.multiselect(
             "Serviços adicionais",
             opcoes_servicos,
-            key="servicos_nova_empresa",
+            key=f"servicos_nova_empresa_{reset_key}",
         )
 
         servicos = converter_labels_para_servicos(servicos_labels)
@@ -373,6 +405,9 @@ def render_empresas():
                 )
 
                 st.success("Empresa cadastrada com admin criado.")
+
+                limpar_formulario_nova_empresa()
+
                 st.rerun()
 
             except Exception as erro:
@@ -532,3 +567,4 @@ def render_empresas():
                     st.rerun()
         else:
             st.caption("Exclusão de empresa disponível apenas para Orion Admin.")
+

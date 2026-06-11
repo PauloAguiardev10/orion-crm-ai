@@ -35,18 +35,24 @@ def obter_logo_empresa(empresa_id):
 def render_sidebar():
     nivel = st.session_state.get("nivel", "usuario")
     empresa_id = st.session_state.get("empresa_id")
+    empresa = st.session_state.get("empresa", "")
 
     with st.sidebar:
         st.markdown("<br>", unsafe_allow_html=True)
 
-        logo_path = obter_logo_empresa(empresa_id)
+        if nivel == "parceiro_admin" and empresa == "Forway":
+            logo_path = "assets/logo_forway.png"
+            titulo_crm = "FORWAY CRM"
+        else:
+            logo_path = obter_logo_empresa(empresa_id)
+            titulo_crm = "ORION SYSTEMS CRM"
 
         try:
             st.image(logo_path, width=180)
         except Exception:
-            st.markdown("## ORION SYSTEMS")
+            st.markdown(f"## {titulo_crm}")
 
-        st.markdown("### 🚀 CRM SDR")
+        st.markdown(f"### {titulo_crm}")
 
         menu = [
             "🏠 Visão Geral",
@@ -74,10 +80,10 @@ def render_sidebar():
         st.markdown("---")
 
         try:
-            st.image("assets/logo_orion.png", width=150)
+            st.image("assets/logo_orion.png", width=130)
         except Exception:
             st.markdown("**ORION SYSTEMS**")
 
-        st.caption("Desenvolvido por Orion Systems")
+        st.caption("Powered by Orion Systems")
 
         return pagina
