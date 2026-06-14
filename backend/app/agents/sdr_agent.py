@@ -546,6 +546,19 @@ def resposta_base_por_servico(conversa, intencao):
 def conduzir_conversa(conversa, mensagem: str):
     texto = mensagem.strip()
     canal = conversa.canal.lower()
+
+    if conversa.etapa == "aguardando_humano":
+
+        resposta = (
+            f"{conversa.nome or 'Olá'}, suas informações já foram encaminhadas para o Luciano. "
+            "Ele pode estar em atendimento ou reunião neste momento, mas assim que possível continuará com você por aqui 😊"
+        )
+
+        conversa.historico = (conversa.historico or "") + f"\nCliente: {texto}"
+        conversa.historico += f"\nAgente: {resposta}"
+
+        return resposta, analisar_mensagem(conversa.historico)
+
     intencao = detectar_intencao_cliente(texto)
 
     texto_para_analise = f"""
@@ -687,7 +700,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
             else:
 
-                conversa.etapa = "encaminhar"
+                conversa.etapa = "aguardando_humano"
 
                 resposta = (
                     "Perfeito 😊\n\n"
@@ -732,7 +745,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
         else:
 
-            conversa.etapa = "encaminhar"
+            conversa.etapa = "aguardando_humano"
 
             resposta = (
                 f"{resposta_base}\n\n"
@@ -743,7 +756,7 @@ def conduzir_conversa(conversa, mensagem: str):
     elif conversa.etapa == "coletar_whatsapp":
 
         conversa.telefone = texto
-        conversa.etapa = "encaminhar"
+        conversa.etapa = "aguardando_humano"
 
         resposta = (
             f"Perfeito, {conversa.nome} 😊\n\n"

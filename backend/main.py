@@ -41,6 +41,8 @@ def receber_mensagem(dados: MensagemRequest):
             conversa = Conversa(
                 identificador=dados.identificador,
                 canal=dados.canal,
+                nome=dados.nome,
+                telefone=dados.telefone,
                 etapa="inicio",
                 historico=""
             )
@@ -59,7 +61,7 @@ def receber_mensagem(dados: MensagemRequest):
         resumo = None
         lead_id = None
 
-        if conversa.etapa == "encaminhar":
+        if conversa.etapa in ["encaminhar", "aguardando_humano"]:
 
             lead_existente = None
 
@@ -126,7 +128,7 @@ def receber_mensagem(dados: MensagemRequest):
             "score": analise["score"],
             "status": (
                 "encaminhado"
-                if conversa.etapa == "encaminhar"
+                if conversa.etapa in ["encaminhar", "aguardando_humano"]
                 else "em_atendimento"
             ),
             "resumo_vendedor": resumo,

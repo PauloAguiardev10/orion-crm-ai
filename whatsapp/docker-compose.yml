@@ -2,9 +2,7 @@ services:
 
   evolution-postgres:
     image: postgres:15
-
     container_name: evolution_postgres
-
     restart: always
 
     environment:
@@ -16,10 +14,8 @@ services:
       - evolution_postgres_data:/var/lib/postgresql/data
 
   evolution-api:
-    image: atendai/evolution-api:latest
-
+    image: atendai/evolution-api:v2.1.1
     container_name: evolution_api
-
     restart: always
 
     depends_on:
@@ -29,12 +25,12 @@ services:
       - "8080:8080"
 
     command: >
-      sh -c "apk add --no-cache chromium &&
+      sh -c "apk update &&
+      apk add --no-cache chromium &&
       npm run start:prod"
 
     environment:
       SERVER_URL: http://localhost:8080
-
       AUTHENTICATION_API_KEY: orionsystems
 
       DATABASE_ENABLED: true
@@ -43,9 +39,9 @@ services:
 
       CACHE_REDIS_ENABLED: false
 
-      CONFIG_SESSION_PHONE_CLIENT: OrionSystems
+      CONFIG_SESSION_PHONE_CLIENT: Evolution API
       CONFIG_SESSION_PHONE_NAME: Chrome
-      CONFIG_SESSION_PHONE_VERSION: 2.3000.1015901307
+      CONFIG_SESSION_PHONE_VERSION: 2.3000.1023204200
 
       QRCODE_LIMIT: 30
 
