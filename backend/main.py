@@ -145,3 +145,55 @@ def receber_mensagem(dados: MensagemRequest):
 
     finally:
         db.close()
+@app.post("/webhook/waha")
+async def webhook_waha(payload: dict):
+    import requests
+
+    evento = payload.get("event")
+    mensagem = payload.get("payload", {})
+
+    if evento != "message":
+        return {"status": "ignorado", "motivo": "evento_diferente_de_message"}
+
+    if mensagem.get("fromMe") is True:
+        return {"status": "ignorado", "motivo": "mensagem_enviada_pelo_proprio_numero"}
+
+    texto = mensagem.get("body")
+    chat_id = mensagem.get("from")
+    nome = mensagem.get("_data", {}).get("notifyName")
+
+    if not texto or not chat_id:
+        return {"status": "ignorado", "motivo": "sem_texto_ou_chat_id"}
+
+    dados = MensagemRequest(
+        nome=nome,
+        telefone=chat_id,
+        canal="whatsapp",
+        identificador=chat_id,
+        mensagem=texto
+    )
+
+    resultado = receber_mensagem(dados)
+    resposta = resultado.get("resposta_agente")
+
+    if resposta:
+        requests.post(
+            "http://localhost:3000/api/sendText",
+            headers={
+                "Content-Type": "application/json",
+                "X-Api-Key": "orionsystems"
+            },
+            json={
+                "session": "default",
+                "chatId": chat_id,
+                "text": resposta
+            },
+            timeout=15
+        )
+
+    return {
+        "status": "processado",
+        "chat_id": chat_id,
+        "mensagem": texto,
+        "resposta": resposta
+    }
