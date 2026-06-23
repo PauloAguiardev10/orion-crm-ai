@@ -1,4 +1,6 @@
 import traceback
+import time
+import random
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -177,6 +179,49 @@ async def webhook_waha(payload: dict):
     resposta = resultado.get("resposta_agente")
 
     if resposta:
+        tamanho = len(resposta)
+
+        if tamanho <= 120:
+            delay = random.uniform(2, 4)
+        elif tamanho <= 350:
+            delay = random.uniform(4, 7)
+        else:
+            delay = random.uniform(7, 12)
+
+        try:
+            requests.post(
+                "http://localhost:3000/api/startTyping",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Api-Key": "orionsystems"
+                },
+                json={
+                    "session": "default",
+                    "chatId": chat_id
+                },
+                timeout=10
+            )
+        except Exception:
+            pass
+
+        time.sleep(delay)
+
+        try:
+            requests.post(
+                "http://localhost:3000/api/stopTyping",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Api-Key": "orionsystems"
+                },
+                json={
+                    "session": "default",
+                    "chatId": chat_id
+                },
+                timeout=10
+            )
+        except Exception:
+            pass
+
         requests.post(
             "http://localhost:3000/api/sendText",
             headers={

@@ -18,6 +18,32 @@ def resposta_aleatoria(lista):
     return random.choice(lista)
 
 
+def parece_nome(texto: str):
+    texto = texto.lower().strip()
+
+    palavras_bloqueadas = [
+        "quero", "queria", "gostaria", "serviço", "serviços",
+        "servico", "servicos", "informação", "informações",
+        "informacao", "informacoes", "tráfego", "trafego",
+        "instagram", "facebook", "whatsapp", "como funciona",
+        "orçamento", "orcamento", "valor", "preço", "preco",
+        "empresa", "anúncio", "anuncio", "forway", "oferece",
+        "trabalham", "atendimento", "marketing"
+    ]
+
+    for palavra in palavras_bloqueadas:
+        if palavra in texto:
+            return False
+
+    if len(texto.split()) > 4:
+        return False
+
+    if len(texto) < 2:
+        return False
+
+    return True
+
+
 def limpar_nome_cliente(texto: str):
     nome = texto.strip()
     substituicoes = [
@@ -72,6 +98,24 @@ def limpar_segmento(texto: str):
     return segmento
 
 
+def saudacao_personalizada(texto: str):
+    texto = texto.lower()
+
+    if "bom dia" in texto:
+        return "Bom dia 😊"
+
+    if "boa tarde" in texto:
+        return "Boa tarde 😊"
+
+    if "boa noite" in texto:
+        return "Boa noite 😊"
+
+    if "olá" in texto or "ola" in texto or "oi" in texto:
+        return "Olá 😊"
+
+    return "Olá 😊"
+
+
 def detectar_interacao_social(mensagem: str):
     texto = mensagem.lower().strip()
 
@@ -115,6 +159,24 @@ def detectar_intencao_cliente(mensagem: str):
         return "objecao_experiencia_ruim"
 
     if contem_termo(texto, [
+        "quais serviços", "quais servicos",
+        "serviços vocês oferecem", "servicos voces oferecem",
+        "serviços que a forway oferece", "servicos que a forway oferece",
+        "informações sobre os serviços", "informacoes sobre os servicos",
+        "informação sobre os serviços", "informacao sobre os servicos",
+        "o que vocês fazem", "o que voces fazem",
+        "como vocês trabalham", "como voces trabalham",
+        "me fala dos serviços", "me fala dos servicos",
+        "o que oferecem", "não sei o que preciso",
+        "nao sei o que preciso", "não sei qual serviço",
+        "nao sei qual servico", "quero conhecer",
+        "serviços da forway", "servicos da forway",
+        "gostaria de saber os serviços", "gostaria de saber os servicos",
+        "queria saber informações", "queria saber informacoes"
+    ]):
+        return "conhecer_servicos"
+
+    if contem_termo(texto, [
         "estrutura completa", "marketing completo", "tudo completo",
         "tráfego e social media", "trafego e social media",
         "tráfego, social media e atendimento",
@@ -123,22 +185,11 @@ def detectar_intencao_cliente(mensagem: str):
         return "estrutura_completa"
 
     if contem_termo(texto, [
-        "quais serviços", "quais servicos",
-        "serviços vocês oferecem", "servicos voces oferecem",
-        "o que vocês fazem", "o que voces fazem",
-        "como vocês trabalham", "como voces trabalham",
-        "me fala dos serviços", "me fala dos servicos",
-        "o que oferecem", "não sei o que preciso",
-        "nao sei o que preciso", "não sei qual serviço",
-        "nao sei qual servico", "quero conhecer",
-        "serviços da forway", "servicos da forway",
         "vi um anúncio", "vi um anuncio",
         "vi vocês no instagram", "vi voces no instagram",
-        "vim pelo instagram", "gostaria de saber como trabalham",
-        "gostaria de saber como vocês trabalham",
-        "gostaria de saber como voces trabalham",
+        "vim pelo instagram", "anúncio de vocês", "anuncio de voces"
     ]):
-        return "conhecer_servicos"
+        return "anuncio_instagram"
 
     if contem_termo(texto, [
         "orçamento", "orcamento", "preço", "preco", "valor",
@@ -203,7 +254,8 @@ def analisar_mensagem(mensagem: str):
         "marcar reunião", "marcar reuniao", "agendar",
         "tenho interesse", "quero saber mais", "gerar leads",
         "mais clientes", "captar clientes", "automatizar atendimento",
-        "presença digital", "presenca digital", "atendimento comercial"
+        "presença digital", "presenca digital", "atendimento comercial",
+        "reconhecimento de marca"
     ]
 
     palavras_objecao = [
@@ -215,8 +267,25 @@ def analisar_mensagem(mensagem: str):
 
     produtos = {
         "Estrutura Completa": [
-            "estrutura completa", "marketing completo", "tudo completo",
-            "tráfego e social media", "trafego e social media",
+            "estrutura completa",
+            "marketing completo",
+            "tudo completo",
+            "tráfego e social media",
+            "trafego e social media",
+
+            "mais vendas",
+            "aumentar vendas",
+            "gerar mais vendas",
+
+            "reconhecimento de marca",
+            "fortalecer a presença",
+            "fortalecer presença",
+
+            "presença digital",
+            "presenca digital",
+
+            "mais clientes",
+            "captar clientes"
         ],
         "Gestão de Tráfego Pago": [
             "tráfego", "trafego", "anúncio", "anuncio",
@@ -298,74 +367,119 @@ Luciano deve continuar o atendimento de forma consultiva e entender melhor o cen
 """.strip()
 
 
-def resposta_inicial_por_servico(intencao):
+def resposta_servicos_forway(saudacao=None):
+    inicio = f"{saudacao}\n\n" if saudacao else "Claro 😊\n\n"
+
+    return (
+        f"{inicio}"
+        "Hoje a Forway trabalha com:\n\n"
+        "• Gestão de tráfego pago\n"
+        "• Social media estratégico\n"
+        "• Design\n"
+        "• Atendimento automatizado com IA\n"
+        "• Web design\n"
+        "• Treinamento e suporte comercial\n\n"
+        "Para eu entender melhor o cenário, me fala o nome da sua empresa?"
+    )
+
+
+def resposta_inicial_por_servico(intencao, mensagem=""):
+    saudacao = saudacao_personalizada(mensagem)
+
+    if intencao == "saudacao":
+        return (
+            f"{saudacao}\n\n"
+            "Tudo bem?\n\n"
+            "Sou a Sofia, da Forway.\n\n"
+            "Como posso ajudar você hoje?"
+        )
+
+    if intencao == "conhecer_servicos":
+        return resposta_servicos_forway(saudacao)
+
+    if intencao == "anuncio_instagram":
+        return (
+            f"{saudacao}\n\n"
+            "Que bom que nosso anúncio chegou até você 😊\n\n"
+            "A Forway trabalha entendendo primeiro o objetivo da empresa para indicar uma estratégia mais adequada.\n\n"
+            "Hoje você busca mais vendas, mais contatos ou fortalecer a presença da marca?"
+        )
+
     if intencao == "trafego":
         return (
-            "Que bom que entrou em contato 😊\n\n"
+            f"{saudacao}\n\n"
             "Posso te ajudar com tráfego pago sim.\n\n"
             "Antes de te encaminhar para o especialista, me fala seu nome?"
         )
 
-    if intencao == "conhecer_servicos":
-        return (
-            "Bom falar com você 😊\n\n"
-            "A Forway trabalha entendendo primeiro o momento da empresa para depois indicar o melhor caminho.\n\n"
-            "Hoje você busca mais vendas, mais contatos ou fortalecer a presença da marca?"
-        )
-
     if intencao == "orcamento":
         return (
-            "Claro 😊\n\n"
+            f"{saudacao}\n\n"
             "Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\n"
             "Me fala seu nome?"
         )
 
     if intencao == "reuniao":
         return (
-            "Claro 😊\n\n"
+            f"{saudacao}\n\n"
             "Antes de te passar para o Luciano, vou pegar um contexto rápido para ele já continuar com mais clareza.\n\n"
             "Qual é o seu nome?"
         )
 
     if intencao == "automacao":
         return (
-            "Legal 😊\n\n"
+            f"{saudacao}\n\n"
             "Automação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\n\n"
             "Me fala seu nome para eu entender seu cenário?"
         )
 
     if intencao == "social_media":
         return (
-            "Claro 😊\n\n"
+            f"{saudacao}\n\n"
             "A Forway trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\n\n"
             "Como posso te chamar?"
         )
 
     if intencao == "web_design":
         return (
-            "Claro 😊\n\n"
+            f"{saudacao}\n\n"
             "Um site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\n\n"
             "Me fala seu nome?"
         )
 
     if intencao == "design":
         return (
-            "Claro 😊\n\n"
+            f"{saudacao}\n\n"
             "Design e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\n\n"
             "Como posso te chamar?"
         )
 
     if intencao == "estrutura_completa":
         return (
-            "Perfeito 😊\n\n"
+            f"{saudacao}\n\n"
             "Quando a empresa busca uma estrutura mais completa, o ideal é olhar tráfego, conteúdo, atendimento e presença digital juntos.\n\n"
             "Me fala seu nome para eu organizar melhor seu atendimento?"
         )
 
     return (
-        "Oi, tudo bem? 😊\n\n"
+        f"{saudacao}\n\n"
         "Sou a Sofia, da Forway.\n\n"
-        "Me conta rapidinho: você quer entender algum serviço específico ou precisa de ajuda para saber o melhor caminho?"
+        "Como posso ajudar você hoje?"
+    )
+
+
+def comentario_segmento(segmento: str):
+    texto = segmento.lower()
+
+    if "moda" in texto or "roupa" in texto:
+        return (
+            "Que legal 😊\n\n"
+            "Moda feminina é um segmento onde tráfego, presença digital e fortalecimento de marca costumam fazer bastante diferença."
+        )
+
+    return (
+        "Entendi 😊\n\n"
+        "Agora já consigo ter uma visão melhor do seu cenário."
     )
 
 
@@ -374,7 +488,7 @@ def resposta_apos_encaminhamento(texto, nome=None):
 
     if interacao == "agradecimento":
         return resposta_aleatoria([
-            "Eu que agradeço pelo contato 😊\n\nJá deixei tudo organizado para o Luciano continuar com você.",
+            f"Eu que agradeço pelo contato{', ' + nome if nome else ''} 😊\n\nJá deixei tudo organizado para o Luciano continuar com você.",
             "Obrigado você pela confiança 😊\n\nO Luciano já recebeu as informações e continua por aqui assim que possível.",
             "Foi um prazer falar com você 😊\n\nAssim que o Luciano estiver disponível, ele segue o atendimento por aqui."
         ])
@@ -419,7 +533,12 @@ def resposta_base_por_servico(conversa, intencao):
             "Entendi.\n\n"
             "Nesse caso, o foco não é só colocar anúncio no ar, mas atrair pessoas com perfil real de compra."
         )
-
+    if conversa.servico == "Estrutura Completa":
+        return (
+        "Entendi.\n\n"
+        "Nesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada."
+    )
+    
     if conversa.servico == "Atendimento com IA":
         return (
             "Entendi.\n\n"
@@ -469,7 +588,6 @@ def conduzir_conversa(conversa, mensagem: str):
     intencao = detectar_intencao_cliente(texto)
 
     texto_para_analise = f"""
-    {conversa.historico or ''}
     {texto}
     {conversa.objetivo or ''}
     {conversa.servico or ''}
@@ -501,24 +619,32 @@ def conduzir_conversa(conversa, mensagem: str):
             )
 
         elif intencao == "conhecer_servicos":
+            conversa.etapa = "coletar_empresa"
+            resposta = resposta_inicial_por_servico("conhecer_servicos", texto)
+
+        elif intencao == "anuncio_instagram":
             conversa.etapa = "entender_objetivo_inicial"
-            resposta = resposta_inicial_por_servico("conhecer_servicos")
+            resposta = resposta_inicial_por_servico("anuncio_instagram", texto)
+
+        elif intencao == "saudacao":
+            conversa.etapa = "inicio"
+            resposta = resposta_inicial_por_servico("saudacao", texto)
 
         elif intencao in [
             "orcamento", "reuniao", "estrutura_completa", "trafego",
             "automacao", "social_media", "web_design", "design"
         ]:
             conversa.etapa = "coletar_nome"
-            resposta = resposta_inicial_por_servico(intencao)
+            resposta = resposta_inicial_por_servico(intencao, texto)
 
         else:
             conversa.etapa = "coletar_nome"
-            resposta = resposta_inicial_por_servico("geral")
+            resposta = resposta_inicial_por_servico("geral", texto)
 
     elif conversa.etapa == "entender_objetivo_inicial":
 
         conversa.objetivo = texto
-        analise = analisar_mensagem(f"{conversa.historico or ''}\n{texto}")
+        analise = analisar_mensagem(f"{texto}\n{conversa.objetivo or ''}\n{conversa.segmento or ''}")
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
@@ -531,6 +657,23 @@ def conduzir_conversa(conversa, mensagem: str):
         )
 
     elif conversa.etapa == "coletar_nome":
+
+        nova_intencao = detectar_intencao_cliente(texto)
+
+        if nova_intencao == "conhecer_servicos":
+            conversa.etapa = "coletar_empresa"
+            resposta = resposta_servicos_forway()
+            conversa.historico += f"\nAgente: {resposta}"
+            return resposta, analise
+
+        if not parece_nome(texto):
+            resposta = (
+                "Desculpa 😊\n\n"
+                "Não consegui identificar seu nome.\n\n"
+                "Como posso te chamar?"
+            )
+            conversa.historico += f"\nAgente: {resposta}"
+            return resposta, analise
 
         conversa.nome = limpar_nome_cliente(texto)
         conversa.etapa = "coletar_empresa"
@@ -558,20 +701,20 @@ def conduzir_conversa(conversa, mensagem: str):
             if canal in ["instagram", "facebook", "messenger"]:
                 conversa.etapa = "coletar_whatsapp"
                 resposta = (
-                    "Perfeito.\n\n"
+                    f"{comentario_segmento(conversa.segmento)}\n\n"
                     "Para o Luciano continuar com você de forma mais direta, me passa seu WhatsApp?"
                 )
             else:
                 conversa.etapa = "aguardando_humano"
                 resposta = (
-                    "Perfeito 😊\n\n"
+                    f"{comentario_segmento(conversa.segmento)}\n\n"
                     "Já deixei as informações principais organizadas para o Luciano analisar seu cenário.\n\n"
                     "Ele continua com você por aqui assim que estiver disponível."
                 )
         else:
             conversa.etapa = "entender_objetivo"
             resposta = (
-                "Entendi.\n\n"
+                f"{comentario_segmento(conversa.segmento)}\n\n"
                 "Hoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?"
             )
 
@@ -579,11 +722,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
         conversa.objetivo = texto
 
-        analise = analisar_mensagem(f"""
-        {conversa.historico or ''}
-        {texto}
-        {conversa.objetivo or ''}
-        """)
+        analise = analisar_mensagem(f"{texto}\n{conversa.objetivo or ''}\n{conversa.segmento or ''}")
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
