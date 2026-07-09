@@ -173,6 +173,12 @@ def detectar_intencao_cliente(mensagem: str):
         "serviços da forway", "servicos da forway",
         "gostaria de saber os serviços", "gostaria de saber os servicos",
         "queria saber informações", "queria saber informacoes"
+        "gostaria de saber sobre os serviços",
+        "gostaria de saber sobre os servicos",
+        "serviços de vocês",
+        "servicos de voces",
+        "saber sobre os serviços",
+        "saber sobre os servicos",
     ]):
         return "conhecer_servicos"
 
@@ -255,7 +261,13 @@ def analisar_mensagem(mensagem: str):
         "tenho interesse", "quero saber mais", "gerar leads",
         "mais clientes", "captar clientes", "automatizar atendimento",
         "presença digital", "presenca digital", "atendimento comercial",
-        "reconhecimento de marca"
+        "reconhecimento de marca""vendas",
+        "contatos",
+        "mais contatos",
+        "receber mais contatos",
+        "gerar contatos",
+        "gerar vendas",
+        "vendas e contatos",
     ]
 
     palavras_objecao = [
@@ -286,6 +298,14 @@ def analisar_mensagem(mensagem: str):
 
             "mais clientes",
             "captar clientes"
+            
+            "vendas",
+            "contatos",
+            "mais contatos",
+            "receber mais contatos",
+            "gerar contatos",
+            "gerar vendas",
+            "vendas e contatos",
         ],
         "Gestão de Tráfego Pago": [
             "tráfego", "trafego", "anúncio", "anuncio",
@@ -395,7 +415,7 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
         )
 
     if intencao == "conhecer_servicos":
-        return resposta_servicos_forway(saudacao)
+        return resposta_servicos_forway()
 
     if intencao == "anuncio_instagram":
         return (
