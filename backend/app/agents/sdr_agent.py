@@ -399,7 +399,7 @@ def resposta_servicos_forway(saudacao=None):
         "• Atendimento automatizado com IA\n"
         "• Web design\n"
         "• Treinamento e suporte comercial\n\n"
-        "Para eu entender melhor o cenário, me fala o nome da sua empresa?"
+        "Para eu organizar melhor seu atendimento, como posso te chamar?"
     )
 
 
@@ -615,7 +615,17 @@ def conduzir_conversa(conversa, mensagem: str):
 
     analise = analisar_mensagem(texto_para_analise)
 
-    if conversa.servico is None and analise["produto"] != "não identificado":
+    etapas_que_podem_identificar_servico = [
+        "inicio",
+        "entender_objetivo_inicial",
+        "entender_objetivo",
+    ]
+
+    if (
+        conversa.etapa in etapas_que_podem_identificar_servico
+        and conversa.servico is None
+        and analise["produto"] != "não identificado"
+    ):
         conversa.servico = analise["produto"]
 
     conversa.historico = (conversa.historico or "") + f"\nCliente: {texto}"
@@ -639,7 +649,7 @@ def conduzir_conversa(conversa, mensagem: str):
             )
 
         elif intencao == "conhecer_servicos":
-            conversa.etapa = "coletar_empresa"
+            conversa.etapa = "coletar_nome"
             resposta = resposta_inicial_por_servico("conhecer_servicos", texto)
 
         elif intencao == "anuncio_instagram":
@@ -664,7 +674,7 @@ def conduzir_conversa(conversa, mensagem: str):
     elif conversa.etapa == "entender_objetivo_inicial":
 
         conversa.objetivo = texto
-        analise = analisar_mensagem(f"{texto}\n{conversa.objetivo or ''}\n{conversa.segmento or ''}")
+        analise = analisar_mensagem(f"{conversa.objetivo or ''}\n{conversa.segmento or ''}")
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
@@ -681,7 +691,7 @@ def conduzir_conversa(conversa, mensagem: str):
         nova_intencao = detectar_intencao_cliente(texto)
 
         if nova_intencao == "conhecer_servicos":
-            conversa.etapa = "coletar_empresa"
+            conversa.etapa = "coletar_nome"
             resposta = resposta_servicos_forway()
             conversa.historico += f"\nAgente: {resposta}"
             return resposta, analise
@@ -742,7 +752,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
         conversa.objetivo = texto
 
-        analise = analisar_mensagem(f"{texto}\n{conversa.objetivo or ''}\n{conversa.segmento or ''}")
+        analise = analisar_mensagem(f"{conversa.objetivo or ''}\n{conversa.segmento or ''}")
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
