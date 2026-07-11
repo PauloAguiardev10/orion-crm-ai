@@ -39,36 +39,46 @@ def buscar_empresas_permitidas():
 
 
 def buscar_dados_empresa(empresa_id):
-    from services.pedidos_service import criar_tabela_pedidos
-    from services.produtos_service import criar_tabela_produtos
-    criar_tabela_pedidos()
-    criar_tabela_produtos()
-    
     conn = conectar()
 
-    leads = pd.read_sql_query("""
-        SELECT *
-        FROM leads
-        WHERE empresa_id = ?
-        ORDER BY id DESC
-    """, conn, params=(empresa_id,))
+    try:
+        leads = pd.read_sql_query(
+            """
+            SELECT *
+            FROM leads
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
 
-    pedidos = pd.read_sql_query("""
-        SELECT *
-        FROM pedidos
-        WHERE empresa_id = ?
-        ORDER BY id DESC
-    """, conn, params=(empresa_id,))
+        pedidos = pd.read_sql_query(
+            """
+            SELECT *
+            FROM pedidos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
 
-    produtos = pd.read_sql_query("""
-        SELECT *
-        FROM produtos
-        WHERE empresa_id = ?
-        ORDER BY id DESC
-    """, conn, params=(empresa_id,))
+        produtos = pd.read_sql_query(
+            """
+            SELECT *
+            FROM produtos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
 
-    conn.close()
-    return leads, pedidos, produtos
+        return leads, pedidos, produtos
+
+    finally:
+        conn.close()
 
 
 def formatar_moeda(valor):

@@ -1,9 +1,15 @@
-import sqlite3
+import os
 
-DB_PATH = "../database/agente_sdr.db"
+import psycopg2
+from psycopg2.extras import DictCursor
 
 
 def conectar():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=os.getenv("POSTGRES_PORT", "5432"),
+        database=os.getenv("POSTGRES_DB", "orion_crm_ai"),
+        user=os.getenv("POSTGRES_USER", "orion_user"),
+        password=os.environ["POSTGRES_PASSWORD"],
+        cursor_factory=DictCursor,
+    )
