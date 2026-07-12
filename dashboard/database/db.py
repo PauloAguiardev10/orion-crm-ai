@@ -1,7 +1,6 @@
 import os
 
 import psycopg2
-from psycopg2.extras import DictCursor
 
 
 def conectar():
@@ -11,5 +10,4 @@ def conectar():
         database=os.getenv("POSTGRES_DB", "orion_crm_ai"),
         user=os.getenv("POSTGRES_USER", "orion_user"),
         password=os.environ["POSTGRES_PASSWORD"],
-        cursor_factory=DictCursor,
     )

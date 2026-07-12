@@ -1,7 +1,7 @@
 import hashlib
 
 from database.db import conectar
-
+from psycopg2.extras import RealDictCursor
 
 EMAIL_ADMIN_PADRAO = "admin@forway.local"
 NOME_ADMIN_PADRAO = "admin"
@@ -22,7 +22,7 @@ def garantir_tabelas_auth():
     """
 
     conn = conectar()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
         cursor.execute(
@@ -124,7 +124,7 @@ def validar_login(usuario: str, senha: str) -> bool:
     senha_hash = criptografar_senha(senha)
 
     conn = conectar()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
         cursor.execute(
@@ -184,7 +184,7 @@ def obter_empresa_usuario(usuario: str):
     login = usuario.strip().lower()
 
     conn = conectar()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
         cursor.execute(
@@ -228,7 +228,7 @@ def obter_empresa_id_usuario(usuario: str):
     login = usuario.strip().lower()
 
     conn = conectar()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
         cursor.execute(
@@ -272,7 +272,7 @@ def obter_nivel_usuario(usuario: str):
     login = usuario.strip().lower()
 
     conn = conectar()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
         cursor.execute(

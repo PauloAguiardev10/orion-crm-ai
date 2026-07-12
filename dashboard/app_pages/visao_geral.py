@@ -8,34 +8,48 @@ from components.graficos import grafico_donut
 def buscar_empresas_permitidas():
     nivel = st.session_state.get("nivel")
     empresa_id = st.session_state.get("empresa_id")
-    empresa_nome = st.session_state.get("empresa")
 
     conn = conectar()
 
-    if nivel == "orion_admin":
-        empresas = pd.read_sql_query(
-            "SELECT * FROM empresas ORDER BY id DESC",
-            conn
-        )
+    try:
+        if nivel == "orion_admin":
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                ORDER BY id DESC
+                """,
+                conn,
+            )
 
-    elif nivel == "parceiro_admin":
-        empresas = pd.read_sql_query("""
-            SELECT *
-            FROM empresas
-            WHERE parceiro_nome = ?
-            AND nome != 'Orion Systems'
-            ORDER BY id DESC
-        """, conn, params=(empresa_nome,))
+        elif nivel == "parceiro_admin":
+            # Temporariamente mostra empresas ativas.
+            # A coluna parceiro_nome ainda não existe no PostgreSQL.
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                WHERE status = 'ativa'
+                ORDER BY id DESC
+                """,
+                conn,
+            )
 
-    else:
-        empresas = pd.read_sql_query("""
-            SELECT *
-            FROM empresas
-            WHERE id = ?
-        """, conn, params=(empresa_id,))
+        else:
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                WHERE id = %s
+                """,
+                conn,
+                params=(empresa_id,),
+            )
 
-    conn.close()
-    return empresas
+        return empresas
+
+    finally:
+        conn.close()
 
 
 def buscar_dados_empresa(empresa_id):
