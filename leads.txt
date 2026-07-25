@@ -1,0 +1,395 @@
+﻿import streamlit as st
+
+from services.leads_service import (
+    atualizar_lead,
+    STATUS_LISTA
+)
+
+from services.configuracoes_service import (
+    carregar_especialistas
+)
+
+
+MOTIVOS_PERDA = [
+    "Sem orÃ§amento",
+    "Sem interesse",
+    "Fechou com concorrente",
+    "NÃ£o respondeu",
+    "Momento errado",
+    "Outro motivo"
+]
+
+
+def valor_seguro(lead, coluna, padrao="NÃ£o informado"):
+    try:
+        valor = lead[coluna]
+        if valor is None or str(valor).lower() in ["none", "nan", ""]:
+            return padrao
+        return valor
+    except Exception:
+        return padrao
+
+
+def normalizar_status(status):
+    status = str(status).strip().lower()
+
+    if "aguardando" in status:
+        return "Aguardando atendimento"
+
+    if status == "em" or "em atendimento" in status:
+        return "Em atendimento"
+
+    if "proposta" in status:
+        return "Proposta enviada"
+
+    if "nÃ£o fechado" in status or "nao fechado" in status:
+        return "NÃ£o fechado"
+
+    if "fechado" in status:
+        return "NegÃ³cio fechado"
+
+    return "Aguardando atendimento"
+
+
+def render_leads(leads):
+
+    st.title("ðŸ“‹ Leads")
+
+    if leads.empty:
+        st.info("Nenhuma lead encontrada.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "nome": "Lead sem nome",
+        "empresa": "Empresa nÃ£o informada",
+        "telefone": "NÃ£o informado",
+        "canal": None,
+        "origem": "NÃ£o informado",
+        "produto": "NÃ£o identificado",
+        "temperatura": "fria",
+        "score": 0,
+        "status": "Aguardando atendimento",
+        "responsavel": "NÃ£o atribuÃ­do",
+        "resumo_vendedor": "",
+        "historico": "",
+        "valor_negocio": 0,
+        "mensalidade": 0,
+        "motivo_perda": "",
+        "observacao_comercial": "",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    leads["status"] = leads["status"].apply(normalizar_status)
+
+    leads["status_normalizado"] = (
+        leads["status"]
+        .fillna("Aguardando atendimento")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    especialistas_df = carregar_especialistas(
+        st.session_state.get("empresa_id", 1)
+    )
+
+    responsaveis = (
+        especialistas_df["nome"].tolist()
+        if not especialistas_df.empty and "nome" in especialistas_df.columns
+        else ["NÃ£o atribuÃ­do"]
+    )
+
+    if "NÃ£o atribuÃ­do" not in responsaveis:
+        responsaveis.insert(0, "NÃ£o atribuÃ­do")
+
+    st.markdown("## ðŸ”Ž Filtros")
+
+    f1, f2, f3, f4 = st.columns(4)
+
+    with f1:
+        filtro_status = st.selectbox(
+            "Status",
+            ["Todos"] + STATUS_LISTA
+        )
+
+    with f2:
+        canais = sorted(
+            leads["canal"]
+            .fillna("NÃ£o informado")
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+        filtro_canal = st.selectbox(
+            "Canal",
+            ["Todos"] + canais
+        )
+
+    with f3:
+        filtro_responsavel = st.selectbox(
+            "ResponsÃ¡vel",
+            ["Todos"] + responsaveis
+        )
+
+    with f4:
+        busca = st.text_input("Buscar nome/empresa/produto")
+
+    leads_filtradas = leads.copy()
+
+    if filtro_status != "Todos":
+        filtro_status_normalizado = filtro_status.strip().lower()
+
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["status_normalizado"].str.contains(
+                filtro_status_normalizado,
+                na=False
+            )
+        ]
+
+    if filtro_canal != "Todos":
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["canal"].astype(str) == filtro_canal
+        ]
+
+    if filtro_responsavel != "Todos":
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["responsavel"].astype(str) == filtro_responsavel
+        ]
+
+    if busca:
+        busca = busca.lower()
+
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["nome"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+            |
+            leads_filtradas["empresa"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+            |
+            leads_filtradas["produto"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+        ]
+
+    st.markdown("---")
+
+    if leads_filtradas.empty:
+        st.warning("Nenhuma lead encontrada nos filtros.")
+        return
+
+    st.markdown(
+        """
+        <style>
+        .lead-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .lead-title {
+            color: #FFFFFF;
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .lead-line {
+            color: #CBD5E1;
+            font-size: 15px;
+            margin-bottom: 5px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    for _, lead in leads_filtradas.iterrows():
+
+        lead_id = valor_seguro(lead, "id", "0")
+        nome = valor_seguro(lead, "nome", "Lead sem nome")
+        empresa = valor_seguro(lead, "empresa", "Empresa nÃ£o informada")
+        telefone = valor_seguro(lead, "telefone", "NÃ£o informado")
+        canal = valor_seguro(lead, "canal", "NÃ£o informado")
+        produto = valor_seguro(lead, "produto", "NÃ£o identificado")
+        temperatura = valor_seguro(lead, "temperatura", "fria")
+        score = valor_seguro(lead, "score", 0)
+
+        status_atual = normalizar_status(
+            valor_seguro(
+                lead,
+                "status",
+                "Aguardando atendimento"
+            )
+        )
+
+        responsavel_atual = valor_seguro(
+            lead,
+            "responsavel",
+            "NÃ£o atribuÃ­do"
+        )
+
+        valor_atual = valor_seguro(
+            lead,
+            "valor_negocio",
+            0
+        )
+
+        mensalidade_atual = valor_seguro(
+            lead,
+            "mensalidade",
+            0
+        )
+
+        motivo_perda_atual = valor_seguro(
+            lead,
+            "motivo_perda",
+            ""
+        )
+
+        observacao_atual = valor_seguro(
+            lead,
+            "observacao_comercial",
+            ""
+        )
+
+        st.markdown(
+            f"""
+            <div class="lead-card">
+                <div class="lead-title">#{lead_id} - {nome}</div>
+                <div class="lead-line">ðŸ¢ {empresa}</div>
+                <div class="lead-line">ðŸ“² {telefone}</div>
+                <div class="lead-line">ðŸ“¡ {canal}</div>
+                <div class="lead-line">ðŸ§© {produto}</div>
+                <div class="lead-line">ðŸ”¥ {temperatura} â€¢ Score {score}</div>
+                <div class="lead-line">ðŸ“Œ {status_atual}</div>
+                <div class="lead-line">ðŸ‘¨â€ðŸ’¼ {responsavel_atual}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            novo_status = st.selectbox(
+                f"Status Lead #{lead_id}",
+                STATUS_LISTA,
+                index=STATUS_LISTA.index(status_atual)
+                if status_atual in STATUS_LISTA
+                else 0,
+                key=f"status_{lead_id}"
+            )
+
+        with c2:
+            responsavel = st.selectbox(
+                f"ResponsÃ¡vel Lead #{lead_id}",
+                responsaveis,
+                index=responsaveis.index(responsavel_atual)
+                if responsavel_atual in responsaveis
+                else 0,
+                key=f"responsavel_{lead_id}"
+            )
+
+        valor_negocio = float(valor_atual or 0)
+        mensalidade = float(mensalidade_atual or 0)
+        motivo_perda = str(motivo_perda_atual or "")
+        observacao_comercial = str(observacao_atual or "")
+
+        if novo_status == "NegÃ³cio fechado":
+
+            st.markdown("### ðŸ’° Dados do negÃ³cio fechado")
+
+            n1, n2 = st.columns(2)
+
+            with n1:
+                valor_negocio = st.number_input(
+                    f"Valor do contrato Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(valor_atual or 0),
+                    step=100.0,
+                    key=f"valor_negocio_{lead_id}"
+                )
+
+            with n2:
+                mensalidade = st.number_input(
+                    f"Mensalidade Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(mensalidade_atual or 0),
+                    step=100.0,
+                    key=f"mensalidade_{lead_id}"
+                )
+
+            motivo_perda = ""
+
+        elif novo_status == "NÃ£o fechado":
+
+            st.markdown("### âŒ Motivo da perda")
+
+            index_motivo = (
+                MOTIVOS_PERDA.index(motivo_perda_atual)
+                if motivo_perda_atual in MOTIVOS_PERDA
+                else 0
+            )
+
+            motivo_perda = st.selectbox(
+                f"Motivo da perda Lead #{lead_id}",
+                MOTIVOS_PERDA,
+                index=index_motivo,
+                key=f"motivo_perda_{lead_id}"
+            )
+
+            observacao_comercial = st.text_area(
+                f"ObservaÃ§Ã£o comercial Lead #{lead_id}",
+                value=str(observacao_atual or ""),
+                key=f"observacao_comercial_{lead_id}"
+            )
+
+            valor_negocio = 0
+            mensalidade = 0
+
+        else:
+            motivo_perda = ""
+            valor_negocio = float(valor_atual or 0)
+            mensalidade = float(mensalidade_atual or 0)
+            observacao_comercial = str(observacao_atual or "")
+
+        if st.button(
+            f"Salvar Lead #{lead_id}",
+            key=f"salvar_{lead_id}"
+        ):
+            atualizar_lead(
+                lead_id,
+                normalizar_status(novo_status),
+                responsavel,
+                valor_negocio,
+                mensalidade,
+                motivo_perda,
+                observacao_comercial
+            )
+
+            st.success("Lead atualizada com sucesso.")
+            st.rerun()
+
+        resumo = valor_seguro(lead, "resumo_vendedor", "")
+
+        with st.expander("ðŸ§  Resumo Comercial"):
+            if resumo:
+                st.text(resumo)
+            else:
+                st.info("Resumo nÃ£o disponÃ­vel.")
+
+        historico = valor_seguro(lead, "historico", "")
+
+        if historico:
+            with st.expander("ðŸ’¬ Conversa da Sofia"):
+                st.text(historico)
+
+        st.markdown("<br>", unsafe_allow_html=True)

@@ -1,0 +1,3263 @@
+﻿=====================================================
+configuracoes.py
+=====================================================
+import streamlit as st
+
+from database.db import conectar
+
+from services.configuracoes_service import (
+    carregar_especialistas,
+    carregar_servicos,
+    cadastrar_especialista,
+    cadastrar_servico,
+    carregar_ids_servicos_especialista,
+    excluir_especialista_por_nome,
+    excluir_servico,
+)
+
+from services.usuarios_service import (
+    listar_usuarios,
+    criar_usuario,
+    alterar_senha,
+)
+
+
+def limpar_formularios():
+    st.session_state["reset_config"] = (
+        st.session_state.get("reset_config", 0) + 1
+    )
+
+
+def excluir_usuario(usuario_id, usuario_nome, empresa_id):
+    excluir_especialista_por_nome(
+        usuario_nome,
+        empresa_id,
+    )
+
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM usuarios
+        WHERE id = ?
+    """, (
+        int(usuario_id),
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def render_configuracoes():
+
+    empresa_id = st.session_state.empresa_id
+    reset_key = st.session_state.get("reset_config", 0)
+
+    st.title("âš™ï¸ ConfiguraÃ§Ãµes Operacionais")
+
+    st.markdown("## ðŸ‘¤ UsuÃ¡rios / Especialistas da Empresa")
+
+    usuarios = listar_usuarios()
+    usuarios_empresa = usuarios
+
+    if not usuarios.empty:
+        usuarios_empresa = usuarios[
+            usuarios["empresa"] == st.session_state.empresa
+        ]
+
+        st.dataframe(
+            usuarios_empresa,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown("### âž• Criar funcionÃ¡rio")
+
+    u1, u2 = st.columns(2)
+
+    with u1:
+        novo_usuario = st.text_input(
+            "UsuÃ¡rio novo",
+            key=f"novo_usuario_{reset_key}"
+        )
+
+    with u2:
+        nova_senha = st.text_input(
+            "Senha do novo usuÃ¡rio",
+            type="password",
+            key=f"nova_senha_{reset_key}"
+        )
+
+        nivel = st.selectbox(
+            "NÃ­vel de acesso",
+            ["admin_empresa", "usuario"],
+            index=None,
+            placeholder="Selecione o nÃ­vel de acesso",
+            key=f"nivel_{reset_key}"
+        )
+
+    if st.button("Criar usuÃ¡rio"):
+
+        if not novo_usuario.strip():
+            st.warning("Informe o nome do usuÃ¡rio.")
+
+        elif not nova_senha.strip():
+            st.warning("Informe a senha do usuÃ¡rio.")
+
+        elif not nivel:
+            st.warning("Selecione o nÃ­vel de acesso.")
+
+        elif criar_usuario(
+            novo_usuario,
+            nova_senha,
+            st.session_state.empresa,
+            nivel,
+        ):
+            st.success("UsuÃ¡rio criado com sucesso.")
+            limpar_formularios()
+            st.rerun()
+
+        else:
+            st.error("NÃ£o foi possÃ­vel criar o usuÃ¡rio.")
+
+    st.markdown("### ðŸ—‘ï¸ Excluir funcionÃ¡rio")
+
+    usuarios_lista_excluir = []
+
+    if not usuarios_empresa.empty:
+        usuarios_lista_excluir = [
+            f"{row['id']} - {row['usuario']}"
+            for _, row in usuarios_empresa.iterrows()
+        ]
+
+    if usuarios_lista_excluir:
+
+        usuario_excluir = st.selectbox(
+            "Selecionar funcionÃ¡rio para excluir",
+            usuarios_lista_excluir,
+            index=None,
+            placeholder="Selecione um funcionÃ¡rio",
+            key=f"usuario_excluir_{reset_key}"
+        )
+
+        if st.button("Excluir usuÃ¡rio"):
+
+            if not usuario_excluir:
+                st.warning("Selecione um funcionÃ¡rio para excluir.")
+
+            else:
+                usuario_id = usuario_excluir.split(" - ")[0]
+                usuario_nome = usuario_excluir.split(" - ", 1)[1]
+
+                excluir_usuario(
+                    usuario_id,
+                    usuario_nome,
+                    empresa_id,
+                )
+
+                st.success("UsuÃ¡rio excluÃ­do com sucesso.")
+                limpar_formularios()
+                st.rerun()
+
+    else:
+        st.info("Nenhum usuÃ¡rio disponÃ­vel para exclusÃ£o.")
+
+    st.markdown("### ðŸ”‘ Alterar senha")
+
+    usuarios_lista = []
+
+    if not usuarios_empresa.empty:
+        usuarios_lista = usuarios_empresa["usuario"].tolist()
+
+    if usuarios_lista:
+
+        usuario_alterar = st.selectbox(
+            "Selecionar usuÃ¡rio",
+            usuarios_lista,
+            index=None,
+            placeholder="Selecione um usuÃ¡rio",
+            key=f"usuario_alterar_{reset_key}"
+        )
+
+        nova_senha_alterar = st.text_input(
+            "Nova senha",
+            type="password",
+            key=f"nova_senha_alterar_{reset_key}"
+        )
+
+        if st.button("Alterar senha"):
+
+            if not usuario_alterar:
+                st.warning("Selecione um usuÃ¡rio.")
+
+            elif not nova_senha_alterar.strip():
+                st.warning("Informe a nova senha.")
+
+            elif alterar_senha(
+                usuario_alterar,
+                nova_senha_alterar,
+            ):
+                st.success("Senha alterada com sucesso.")
+                limpar_formularios()
+                st.rerun()
+
+            else:
+                st.error("NÃ£o foi possÃ­vel alterar a senha.")
+
+    else:
+        st.info("Nenhum usuÃ¡rio disponÃ­vel para alterar senha.")
+
+    st.markdown("---")
+
+    st.markdown("## ðŸ§© ServiÃ§os / Especialidades")
+
+    novo_servico = st.text_input(
+        "Novo serviÃ§o ou especialidade",
+        key=f"novo_servico_{reset_key}"
+    )
+
+    if st.button("Cadastrar ServiÃ§o"):
+
+        if novo_servico.strip():
+            cadastrar_servico(
+                novo_servico,
+                empresa_id,
+            )
+
+            st.success("ServiÃ§o cadastrado.")
+            limpar_formularios()
+            st.rerun()
+
+        else:
+            st.warning("Informe o nome do serviÃ§o.")
+
+    servicos = carregar_servicos(empresa_id)
+
+    if not servicos.empty:
+
+        st.dataframe(
+            servicos,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.markdown("### ðŸ—‘ï¸ Excluir especialidade")
+
+        servico_excluir = st.selectbox(
+            "Selecionar especialidade",
+            [
+                f"{row['id']} - {row['nome']}"
+                for _, row in servicos.iterrows()
+            ],
+            index=None,
+            placeholder="Selecione uma especialidade",
+            key=f"servico_excluir_{reset_key}"
+        )
+
+        if st.button("Excluir especialidade"):
+
+            if not servico_excluir:
+                st.warning("Selecione uma especialidade para excluir.")
+
+            else:
+                servico_id = servico_excluir.split(" - ")[0]
+
+                excluir_servico(
+                    servico_id,
+                    empresa_id,
+                )
+
+                st.success("Especialidade excluÃ­da com sucesso.")
+                limpar_formularios()
+                st.rerun()
+
+    else:
+        st.info("Nenhum serviÃ§o/especialidade cadastrado.")
+
+    st.markdown("---")
+
+    st.markdown("## ðŸ‘¨â€ðŸ’¼ Especialistas / Atendentes")
+
+    st.info(
+        "Os especialistas sÃ£o os prÃ³prios usuÃ¡rios cadastrados da empresa. "
+        "Selecione um funcionÃ¡rio e vincule as especialidades que ele atende."
+    )
+
+    especialistas = carregar_especialistas(empresa_id)
+
+    funcionarios = []
+
+    if not usuarios_empresa.empty:
+        funcionarios = usuarios_empresa["usuario"].tolist()
+
+    if not funcionarios:
+
+        st.warning("Cadastre um funcionÃ¡rio antes de vincular especialidades.")
+
+    else:
+
+        funcionario_selecionado = st.selectbox(
+            "Selecionar funcionÃ¡rio",
+            funcionarios,
+            index=None,
+            placeholder="Selecione um funcionÃ¡rio",
+            key=f"funcionario_especialista_{reset_key}"
+        )
+
+        if funcionario_selecionado:
+
+            opcoes_servicos = {
+                row["nome"]: row["id"]
+                for _, row in servicos.iterrows()
+            } if not servicos.empty else {}
+
+            ids_atuais = carregar_ids_servicos_especialista(
+                funcionario_selecionado,
+                empresa_id,
+            )
+
+            nomes_atuais = [
+                nome
+                for nome, servico_id in opcoes_servicos.items()
+                if servico_id in ids_atuais
+            ]
+
+            especialidades = st.multiselect(
+                "Especialidades que esse funcionÃ¡rio atende",
+                list(opcoes_servicos.keys()),
+                default=nomes_atuais,
+                key=f"especialidades_{funcionario_selecionado}_{reset_key}"
+            )
+
+            servicos_ids = [
+                opcoes_servicos[nome]
+                for nome in especialidades
+            ]
+
+            if st.button("Salvar especialidades do funcionÃ¡rio"):
+
+                cadastrar_especialista(
+                    funcionario_selecionado,
+                    servicos_ids,
+                    empresa_id,
+                )
+
+                st.success("Especialidades atualizadas com sucesso.")
+                limpar_formularios()
+                st.rerun()
+
+        else:
+            st.info(
+                "Selecione um funcionÃ¡rio para configurar as especialidades."
+            )
+
+    if not especialistas.empty:
+
+        st.dataframe(
+            especialistas,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown("---")
+
+    st.success("ConfiguraÃ§Ãµes operacionais salvas por empresa.")
+
+=====================================================
+conversas.py
+=====================================================
+import streamlit as st
+
+
+def render_conversas(leads):
+
+    st.title("ðŸ’¬ Conversas")
+
+    if leads.empty:
+        st.info("Nenhuma conversa encontrada.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "id": 0,
+        "produto": "Produto nÃ£o informado",
+        "origem": "WhatsApp",
+        "canal": None,
+        "responsavel": "NÃ£o atribuÃ­do",
+        "score": 0,
+        "temperatura": "NÃ£o informada",
+        "status": "Aguardando atendimento",
+        "historico": "",
+        "resumo_vendedor": "",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    leads["opcao_conversa"] = leads.apply(
+        lambda row: f"#{row['id']} | {row['produto']} | {row['canal']}",
+        axis=1
+    )
+
+    conversa_escolhida = st.selectbox(
+        "Selecione uma conversa:",
+        leads["opcao_conversa"].tolist()
+    )
+
+    lead = leads[
+        leads["opcao_conversa"] == conversa_escolhida
+    ].iloc[0]
+
+    st.subheader(f"ðŸ§© {lead['produto']}")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.metric("Canal", lead["canal"])
+
+    with c2:
+        st.metric("Score", lead["score"])
+
+    with c3:
+        st.metric("Temperatura", lead["temperatura"])
+
+    st.write(f"**ResponsÃ¡vel:** {lead['responsavel']}")
+    st.write(f"**Status:** {lead['status']}")
+
+    st.markdown("---")
+
+    st.markdown("## ðŸ§  Resumo Comercial")
+
+    resumo = str(lead["resumo_vendedor"]).strip()
+
+    if resumo and resumo.lower() not in ["none", "nan"]:
+        st.info(resumo)
+    else:
+        st.info("Resumo ainda nÃ£o disponÃ­vel para esta conversa.")
+
+    st.markdown("---")
+
+    st.markdown("## ðŸ’¬ HistÃ³rico da Conversa")
+
+    historico = str(lead["historico"]).strip()
+
+    if historico and historico.lower() not in ["none", "nan"]:
+        st.text(historico)
+    else:
+        st.warning("HistÃ³rico real ainda nÃ£o disponÃ­vel para esta lead.")
+
+=====================================================
+empresas.py
+=====================================================
+
+import streamlit as st
+import pandas as pd
+
+from datetime import datetime, timedelta
+
+from database.db import conectar
+
+from services.usuarios_service import criar_admin_empresa
+
+
+PLANOS_VALORES = {
+    "Lite": 350.0,
+    "Pro": 700.0,
+    "Premium": 1000.0,
+}
+
+
+SERVICOS_ADICIONAIS = {
+    "Produtos": 150.0,
+    "Pedidos": 150.0,
+    "Instagram": 200.0,
+    "Facebook": 150.0,
+    "RelatÃ³rios": 250.0,
+    "IA Vendas": 350.0,
+    "Agente de Vendas": 500.0,
+    "PIX AutomÃ¡tico": 200.0,
+    "Link Pagamento": 200.0,
+}
+
+
+SERVICOS_PREMIUM = [
+    "IA Vendas",
+    "Agente de Vendas",
+    "PIX AutomÃ¡tico",
+    "Link Pagamento",
+    "RelatÃ³rios",
+]
+
+
+def limpar_formulario_nova_empresa():
+    st.session_state["reset_nova_empresa"] = (
+        st.session_state.get("reset_nova_empresa", 0) + 1
+    )
+
+
+def garantir_colunas_empresas():
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS empresas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT UNIQUE NOT NULL,
+            plano TEXT DEFAULT 'Lite',
+            status TEXT DEFAULT 'ativa',
+            valor_mensal REAL DEFAULT 350,
+            logo_path TEXT,
+            parceiro_nome TEXT DEFAULT 'Forway',
+            data_adesao TEXT,
+            data_vencimento TEXT,
+            status_financeiro TEXT DEFAULT 'em_dia',
+            bloqueio_automatico INTEGER DEFAULT 1,
+            servicos TEXT DEFAULT '',
+            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("PRAGMA table_info(empresas)")
+    colunas = [col[1] for col in cursor.fetchall()]
+
+    novas_colunas = {
+        "logo_path": "ALTER TABLE empresas ADD COLUMN logo_path TEXT",
+        "parceiro_nome": "ALTER TABLE empresas ADD COLUMN parceiro_nome TEXT DEFAULT 'Forway'",
+        "data_adesao": "ALTER TABLE empresas ADD COLUMN data_adesao TEXT",
+        "data_vencimento": "ALTER TABLE empresas ADD COLUMN data_vencimento TEXT",
+        "status_financeiro": "ALTER TABLE empresas ADD COLUMN status_financeiro TEXT DEFAULT 'em_dia'",
+        "bloqueio_automatico": "ALTER TABLE empresas ADD COLUMN bloqueio_automatico INTEGER DEFAULT 1",
+        "valor_mensal": "ALTER TABLE empresas ADD COLUMN valor_mensal REAL DEFAULT 350",
+        "servicos": "ALTER TABLE empresas ADD COLUMN servicos TEXT DEFAULT ''",
+    }
+
+    for coluna, comando in novas_colunas.items():
+        if coluna not in colunas:
+            cursor.execute(comando)
+
+    conn.commit()
+    conn.close()
+
+
+def listar_empresas():
+    garantir_colunas_empresas()
+
+    nivel = st.session_state.get("nivel")
+    empresa_logada = st.session_state.get("empresa")
+
+    conn = conectar()
+
+    if nivel == "parceiro_admin":
+        empresas = pd.read_sql_query("""
+            SELECT *
+            FROM empresas
+            WHERE parceiro_nome = ?
+            AND nome != 'Orion Systems'
+            ORDER BY id DESC
+        """, conn, params=(empresa_logada,))
+    else:
+        empresas = pd.read_sql_query("""
+            SELECT *
+            FROM empresas
+            ORDER BY id DESC
+        """, conn)
+
+    conn.close()
+    return empresas
+
+
+def calcular_valor_mensal(plano, servicos):
+    valor = PLANOS_VALORES.get(plano, 350.0)
+
+    for servico in servicos:
+        valor += SERVICOS_ADICIONAIS.get(servico, 0.0)
+
+    return valor
+
+
+def criar_empresa(
+    nome,
+    plano,
+    status,
+    logo_path,
+    parceiro_nome,
+    data_adesao,
+    data_vencimento,
+    servicos,
+):
+    garantir_colunas_empresas()
+
+    conn = conectar()
+    cursor = conn.cursor()
+
+    valor_mensal = calcular_valor_mensal(plano, servicos)
+
+    cursor.execute("""
+        INSERT INTO empresas (
+            nome,
+            plano,
+            status,
+            valor_mensal,
+            logo_path,
+            parceiro_nome,
+            data_adesao,
+            data_vencimento,
+            status_financeiro,
+            bloqueio_automatico,
+            servicos
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        nome.strip(),
+        plano,
+        status,
+        valor_mensal,
+        logo_path.strip(),
+        parceiro_nome,
+        data_adesao,
+        data_vencimento,
+        "em_dia",
+        1,
+        ",".join(servicos),
+    ))
+
+    conn.commit()
+    empresa_id = cursor.lastrowid
+    conn.close()
+
+    return empresa_id
+
+
+def atualizar_empresa(
+    empresa_id,
+    plano,
+    status,
+    valor_mensal,
+    logo_path,
+    parceiro_nome,
+    data_vencimento,
+    status_financeiro,
+    bloqueio_automatico,
+    servicos,
+):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE empresas
+        SET plano = ?,
+            status = ?,
+            valor_mensal = ?,
+            logo_path = ?,
+            parceiro_nome = ?,
+            data_vencimento = ?,
+            status_financeiro = ?,
+            bloqueio_automatico = ?,
+            servicos = ?
+        WHERE id = ?
+    """, (
+        plano,
+        status,
+        valor_mensal,
+        logo_path.strip(),
+        parceiro_nome,
+        data_vencimento,
+        status_financeiro,
+        int(bloqueio_automatico),
+        ",".join(servicos),
+        int(empresa_id),
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def excluir_empresa(empresa_id):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM usuarios
+        WHERE empresa_id = ?
+    """, (int(empresa_id),))
+
+    cursor.execute("""
+        DELETE FROM empresas
+        WHERE id = ?
+    """, (int(empresa_id),))
+
+    conn.commit()
+    conn.close()
+
+
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def obter_servicos_por_plano(plano):
+    if plano == "Lite":
+        return list(SERVICOS_ADICIONAIS.keys())
+
+    if plano == "Pro":
+        return SERVICOS_PREMIUM
+
+    return []
+
+
+def formatar_opcao_servico(servico):
+    valor = SERVICOS_ADICIONAIS.get(servico, 0.0)
+    return f"{servico} â€” {formatar_moeda(valor)}/mÃªs"
+
+
+def converter_labels_para_servicos(labels):
+    servicos = []
+
+    for label in labels:
+        servico = label.split(" â€” ")[0].strip()
+
+        if servico in SERVICOS_ADICIONAIS:
+            servicos.append(servico)
+
+    return servicos
+
+
+def render_empresas():
+    nivel = st.session_state.get("nivel")
+    empresa_logada = st.session_state.get("empresa")
+    reset_key = st.session_state.get("reset_nova_empresa", 0)
+
+    st.title("ðŸ¢ Empresas")
+
+    if nivel == "parceiro_admin":
+        st.info(f"Painel parceiro: {empresa_logada}. VocÃª visualiza apenas clientes vinculados Ã  sua operaÃ§Ã£o.")
+
+    empresas = listar_empresas()
+
+    st.markdown("## ðŸ“‹ Empresas cadastradas")
+
+    if empresas.empty:
+        st.info("Nenhuma empresa cadastrada.")
+    else:
+        st.dataframe(
+            empresas,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown("---")
+
+    st.markdown("## âž• Nova empresa")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        nome = st.text_input(
+            "Nome empresa",
+            key=f"nova_empresa_nome_{reset_key}",
+        )
+
+        usuario_admin = st.text_input(
+            "UsuÃ¡rio admin",
+            key=f"nova_empresa_usuario_{reset_key}",
+        )
+
+        logo_path = st.text_input(
+            "Logo",
+            value="assets/logo_forway.png",
+            key=f"nova_empresa_logo_{reset_key}",
+        )
+
+        if nivel == "parceiro_admin":
+            parceiro_nome = empresa_logada
+            st.text_input(
+                "Parceiro responsÃ¡vel",
+                value=parceiro_nome,
+                disabled=True,
+                key=f"nova_empresa_parceiro_{reset_key}",
+            )
+        else:
+            parceiro_nome = st.selectbox(
+                "Parceiro responsÃ¡vel",
+                ["Forway", "Orion"],
+                key=f"nova_empresa_parceiro_select_{reset_key}",
+            )
+
+    with c2:
+        senha_admin = st.text_input(
+            "Senha admin",
+            type="password",
+            key=f"nova_empresa_senha_{reset_key}",
+        )
+
+        plano = st.selectbox(
+            "Plano",
+            ["Lite", "Pro", "Premium"],
+            key=f"nova_empresa_plano_{reset_key}",
+        )
+
+        status = st.selectbox(
+            "Status",
+            ["ativa", "suspensa"],
+            key=f"nova_empresa_status_{reset_key}",
+        )
+
+    servicos = []
+    servicos_disponiveis = obter_servicos_por_plano(plano)
+
+    if plano == "Premium":
+        st.success("Plano Premium com todos os recursos liberados.")
+    else:
+        opcoes_servicos = [
+            formatar_opcao_servico(servico)
+            for servico in servicos_disponiveis
+        ]
+
+        servicos_labels = st.multiselect(
+            "ServiÃ§os adicionais",
+            opcoes_servicos,
+            key=f"servicos_nova_empresa_{reset_key}",
+        )
+
+        servicos = converter_labels_para_servicos(servicos_labels)
+
+    valor_total_novo = calcular_valor_mensal(plano, servicos)
+
+    st.metric(
+        "Mensalidade calculada",
+        formatar_moeda(valor_total_novo),
+    )
+
+    data_adesao = datetime.now().strftime("%Y-%m-%d")
+    data_vencimento = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    st.info(f"AdesÃ£o: {data_adesao} | Vencimento: {data_vencimento}")
+
+    if st.button("Cadastrar empresa", use_container_width=True):
+        if not nome.strip() or not usuario_admin.strip() or not senha_admin.strip():
+            st.warning("Preencha todos os campos obrigatÃ³rios.")
+        else:
+            try:
+                empresa_id = criar_empresa(
+                    nome,
+                    plano,
+                    status,
+                    logo_path,
+                    parceiro_nome,
+                    data_adesao,
+                    data_vencimento,
+                    servicos,
+                )
+
+                criar_admin_empresa(
+                    empresa_id,
+                    nome,
+                    usuario_admin,
+                    senha_admin,
+                )
+
+                st.success("Empresa cadastrada com admin criado.")
+
+                limpar_formulario_nova_empresa()
+
+                st.rerun()
+
+            except Exception as erro:
+                st.error(f"Erro ao cadastrar empresa: {erro}")
+
+    st.markdown("---")
+
+    st.markdown("## âš™ï¸ Gerenciar empresa")
+
+    empresas = listar_empresas()
+
+    if empresas.empty:
+        st.info("Nenhuma empresa disponÃ­vel para gerenciamento.")
+        return
+
+    opcoes = {
+        f"{row['id']} - {row['nome']}": row["id"]
+        for _, row in empresas.iterrows()
+    }
+
+    selecionada = st.selectbox(
+        "Empresa",
+        list(opcoes.keys()),
+        key="empresa_gerenciar",
+    )
+
+    empresa_id = int(opcoes[selecionada])
+
+    empresa = empresas[
+        empresas["id"] == empresa_id
+    ].iloc[0]
+
+    novo_plano = st.selectbox(
+        "Plano atualizado",
+        ["Lite", "Pro", "Premium"],
+        index=["Lite", "Pro", "Premium"].index(empresa["plano"])
+        if empresa["plano"] in ["Lite", "Pro", "Premium"]
+        else 0,
+    )
+
+    novo_status = st.selectbox(
+        "Status atualizado",
+        ["ativa", "suspensa"],
+        index=["ativa", "suspensa"].index(empresa["status"])
+        if empresa["status"] in ["ativa", "suspensa"]
+        else 0,
+    )
+
+    status_financeiro = st.selectbox(
+        "Status financeiro",
+        ["em_dia", "vencido", "inadimplente"],
+        index=["em_dia", "vencido", "inadimplente"].index(empresa["status_financeiro"])
+        if empresa["status_financeiro"] in ["em_dia", "vencido", "inadimplente"]
+        else 0,
+    )
+
+    novo_logo_path = st.text_input(
+        "Logo atualizada",
+        value=empresa["logo_path"] if empresa["logo_path"] else "",
+    )
+
+    if nivel == "parceiro_admin":
+        novo_parceiro_nome = empresa_logada
+        st.text_input("Parceiro", value=novo_parceiro_nome, disabled=True)
+    else:
+        novo_parceiro_nome = st.selectbox(
+            "Parceiro",
+            ["Forway", "Orion"],
+            index=["Forway", "Orion"].index(empresa["parceiro_nome"])
+            if empresa["parceiro_nome"] in ["Forway", "Orion"]
+            else 0,
+        )
+
+    data_vencimento = st.text_input(
+        "Vencimento",
+        value=empresa["data_vencimento"] if empresa["data_vencimento"] else "",
+    )
+
+    bloqueio_automatico = st.checkbox(
+        "Bloquear automaticamente",
+        value=bool(empresa["bloqueio_automatico"]),
+    )
+
+    servicos_atuais = []
+
+    if "servicos" in empresa and empresa["servicos"]:
+        servicos_atuais = [
+            item.strip()
+            for item in str(empresa["servicos"]).split(",")
+            if item.strip()
+        ]
+
+    servicos_disponiveis_edicao = obter_servicos_por_plano(novo_plano)
+
+    if novo_plano == "Premium":
+        servicos_ativos = []
+        st.success("Plano Premium com todos os recursos liberados.")
+    else:
+        opcoes_servicos_edicao = [
+            formatar_opcao_servico(servico)
+            for servico in servicos_disponiveis_edicao
+        ]
+
+        default_servicos = [
+            formatar_opcao_servico(servico)
+            for servico in servicos_atuais
+            if servico in servicos_disponiveis_edicao
+        ]
+
+        servicos_labels_ativos = st.multiselect(
+            "ServiÃ§os adicionais ativos",
+            opcoes_servicos_edicao,
+            default=default_servicos,
+            key="servicos_editar_empresa",
+        )
+
+        servicos_ativos = converter_labels_para_servicos(servicos_labels_ativos)
+
+    valor_total = calcular_valor_mensal(
+        novo_plano,
+        servicos_ativos,
+    )
+
+    st.metric(
+        "Mensalidade",
+        formatar_moeda(valor_total),
+    )
+
+    b1, b2 = st.columns(2)
+
+    with b1:
+        if st.button("Salvar alteraÃ§Ãµes", use_container_width=True):
+            atualizar_empresa(
+                empresa_id,
+                novo_plano,
+                novo_status,
+                valor_total,
+                novo_logo_path,
+                novo_parceiro_nome,
+                data_vencimento,
+                status_financeiro,
+                bloqueio_automatico,
+                servicos_ativos,
+            )
+
+            st.success("Empresa atualizada.")
+            st.rerun()
+
+    with b2:
+        if nivel == "orion_admin":
+            if st.button("Excluir empresa", use_container_width=True):
+                if empresa["nome"] == "Orion Systems":
+                    st.error("Orion Systems nÃ£o pode ser excluÃ­da.")
+                else:
+                    excluir_empresa(empresa_id)
+                    st.warning("Empresa excluÃ­da.")
+                    st.rerun()
+        else:
+            st.caption("ExclusÃ£o de empresa disponÃ­vel apenas para Orion Admin.")
+
+
+=====================================================
+especialistas.py
+=====================================================
+import streamlit as st
+
+from components.graficos import grafico_donut
+
+
+def valor_seguro(lead, coluna, padrao="NÃ£o informado"):
+    try:
+        valor = lead[coluna]
+
+        if valor is None or str(valor).lower() in ["none", "nan", ""]:
+            return padrao
+
+        return valor
+
+    except Exception:
+        return padrao
+
+
+def render_especialistas(leads):
+
+    st.title("ðŸ‘¨â€ðŸ’¼ Painel Especialistas")
+
+    if leads.empty:
+        st.info("Nenhuma lead encontrada.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "nome": "Lead sem nome",
+        "empresa": "Empresa nÃ£o informada",
+        "produto": "Produto nÃ£o informado",
+        "score": 0,
+        "temperatura": "fria",
+        "canal": None,
+        "origem": "NÃ£o informado",
+        "status": "Aguardando atendimento",
+        "responsavel": "NÃ£o atribuÃ­do",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    leads["responsavel"] = (
+        leads["responsavel"]
+        .fillna("NÃ£o atribuÃ­do")
+        .astype(str)
+    )
+
+    responsaveis = sorted(
+        leads["responsavel"]
+        .unique()
+        .tolist()
+    )
+
+    especialista = st.selectbox(
+        "Selecione especialista:",
+        responsaveis
+    )
+
+    leads_resp = leads[
+        leads["responsavel"] == especialista
+    ]
+
+    total = len(leads_resp)
+
+    status_normalizado = (
+        leads_resp["status"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+    )
+
+    atendimento = len(
+        status_normalizado[
+            status_normalizado.str.contains(
+                "em atendimento",
+                na=False
+            )
+        ]
+    )
+
+    propostas = len(
+        status_normalizado[
+            status_normalizado.str.contains(
+                "proposta",
+                na=False
+            )
+        ]
+    )
+
+    fechados = len(
+        status_normalizado[
+            status_normalizado.str.contains(
+                "fechado",
+                na=False
+            )
+        ]
+    )
+
+    st.markdown(
+        """
+        <style>
+        .metric-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 18px 20px;
+            min-height: 105px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .metric-title {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: #FFFFFF;
+            font-size: 28px;
+            font-weight: 800;
+        }
+
+        .lead-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .lead-title {
+            color: #FFFFFF;
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .lead-line {
+            color: #CBD5E1;
+            font-size: 15px;
+            margin-bottom: 5px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    metricas = [
+        ("Total Leads", total),
+        ("ðŸ•’ Em atendimento", atendimento),
+        ("ðŸ“¨ Propostas", propostas),
+        ("âœ… Fechados", fechados)
+    ]
+
+    for col, (titulo, valor) in zip([c1, c2, c3, c4], metricas):
+        with col:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-title">{titulo}</div>
+                    <div class="metric-value">{valor}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    st.markdown("## ðŸ“Š Performance")
+
+    if leads_resp.empty:
+        st.info("Nenhuma lead atribuÃ­da para este especialista.")
+    else:
+        g1, g2 = st.columns(2)
+
+        with g1:
+            grafico_donut(
+                leads_resp,
+                "status",
+                "Pipeline Especialista"
+            )
+
+        with g2:
+            grafico_donut(
+                leads_resp,
+                "produto",
+                "ServiÃ§os Atendidos"
+            )
+
+    st.markdown("## ðŸ“‹ Leads")
+
+    if leads_resp.empty:
+        st.info("Nenhuma lead encontrada para este especialista.")
+        return
+
+    for _, lead in leads_resp.iterrows():
+
+        nome = valor_seguro(lead, "nome", "Lead sem nome")
+        empresa = valor_seguro(lead, "empresa", "Empresa nÃ£o informada")
+        produto = valor_seguro(lead, "produto", "Produto nÃ£o informado")
+        score = valor_seguro(lead, "score", 0)
+        temperatura = valor_seguro(lead, "temperatura", "fria")
+        canal = valor_seguro(lead, "canal", "NÃ£o informado")
+        status = valor_seguro(lead, "status", "Aguardando atendimento")
+
+        st.markdown(
+            f"""
+            <div class="lead-card">
+                <div class="lead-title">{nome}</div>
+                <div class="lead-line">ðŸ¢ {empresa}</div>
+                <div class="lead-line">ðŸ§© {produto}</div>
+                <div class="lead-line">ðŸ“Š Score {score}</div>
+                <div class="lead-line">ðŸ”¥ {temperatura}</div>
+                <div class="lead-line">ðŸ“² {canal}</div>
+                <div class="lead-line">ðŸ“Œ {status}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+=====================================================
+funil_comercial.py
+=====================================================
+import streamlit as st
+
+from services.leads_service import STATUS_LISTA
+
+
+def valor_seguro(lead, coluna, padrao="NÃ£o informado"):
+    try:
+        valor = lead[coluna]
+
+        if valor is None or str(valor).lower() in ["none", "nan", ""]:
+            return padrao
+
+        return valor
+
+    except Exception:
+        return padrao
+
+
+def render_funil(leads):
+
+    st.title("ðŸ”¥ Funil Comercial")
+
+    if leads.empty:
+        st.info("Nenhuma lead encontrada.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "nome": "Lead sem nome",
+        "produto": "Produto nÃ£o informado",
+        "temperatura": "fria",
+        "score": 0,
+        "responsavel": "NÃ£o atribuÃ­do",
+        "canal": None,
+        "origem": "NÃ£o informado",
+        "status": "Aguardando atendimento",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    st.markdown(
+        """
+        <style>
+        .kanban-column {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.82));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 16px;
+            min-height: 130px;
+            margin-bottom: 14px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .kanban-title {
+            color: #FFFFFF;
+            font-size: 17px;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+
+        .kanban-count {
+            color: #CBD5E1;
+            font-size: 14px;
+        }
+
+        .kanban-card {
+            background: rgba(30,41,59,.95);
+            border: 1px solid rgba(148,163,184,.14);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 12px;
+            color: #E2E8F0;
+            font-size: 14px;
+        }
+
+        .kanban-card-title {
+            color: #FFFFFF;
+            font-weight: 800;
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .kanban-line {
+            margin-bottom: 6px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    cols = st.columns(len(STATUS_LISTA))
+
+    for col, status in zip(cols, STATUS_LISTA):
+
+        with col:
+
+            subset = leads[
+                leads["status"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains(status.lower(), na=False)
+            ]
+
+            st.markdown(
+                f"""
+                <div class="kanban-column">
+                    <div class="kanban-title">{status}</div>
+                    <div class="kanban-count">{len(subset)} lead(s)</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            for _, lead in subset.iterrows():
+
+                temperatura = str(
+                    valor_seguro(
+                        lead,
+                        "temperatura",
+                        "fria"
+                    )
+                ).lower()
+
+                emoji = "ðŸ”¥"
+
+                if "morna" in temperatura:
+                    emoji = "âš¡"
+
+                elif "fria" in temperatura:
+                    emoji = "â„ï¸"
+
+                nome = valor_seguro(lead, "nome", "Lead sem nome")
+                produto = valor_seguro(lead, "produto", "Produto nÃ£o informado")
+                score = valor_seguro(lead, "score", 0)
+                responsavel = valor_seguro(lead, "responsavel", "NÃ£o atribuÃ­do")
+                canal = valor_seguro(lead, "canal", "NÃ£o informado")
+
+                st.markdown(
+                    f"""
+                    <div class="kanban-card">
+                        <div class="kanban-card-title">{nome}</div>
+                        <div class="kanban-line">ðŸ§© {produto}</div>
+                        <div class="kanban-line">{emoji} {temperatura}</div>
+                        <div class="kanban-line">ðŸ“Š Score {score}</div>
+                        <div class="kanban-line">ðŸ‘¨â€ðŸ’¼ {responsavel}</div>
+                        <div class="kanban-line">ðŸ“² {canal}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+=====================================================
+integracoes.py
+=====================================================
+import streamlit as st
+
+
+def render_integracoes():
+
+    st.title("ðŸ”Œ IntegraÃ§Ãµes")
+
+    st.markdown("## Canais planejados")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>ðŸ“± WhatsApp</h3>
+            <p>Status: aguardando integraÃ§Ã£o</p>
+            <p>Canal principal de atendimento.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>ðŸ“¸ Instagram Direct</h3>
+            <p>Status: aguardando integraÃ§Ã£o</p>
+            <p>Leads vindas do Instagram.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        st.markdown("""
+        <div class="metric-card">
+            <h3>ðŸ”µ Facebook Messenger</h3>
+            <p>Status: aguardando integraÃ§Ã£o</p>
+            <p>Leads vindas da pÃ¡gina do Facebook.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    st.info(
+        "Quando o gestor liberar os acessos, conectaremos os canais reais ao CRM SDR."
+    )
+
+=====================================================
+leads.py
+=====================================================
+import streamlit as st
+
+from services.leads_service import (
+    atualizar_lead,
+    STATUS_LISTA
+)
+
+from services.configuracoes_service import (
+    carregar_especialistas
+)
+
+
+MOTIVOS_PERDA = [
+    "Sem orÃ§amento",
+    "Sem interesse",
+    "Fechou com concorrente",
+    "NÃ£o respondeu",
+    "Momento errado",
+    "Outro motivo"
+]
+
+
+def valor_seguro(lead, coluna, padrao="NÃ£o informado"):
+    try:
+        valor = lead[coluna]
+        if valor is None or str(valor).lower() in ["none", "nan", ""]:
+            return padrao
+        return valor
+    except Exception:
+        return padrao
+
+
+def normalizar_status(status):
+    status = str(status).strip().lower()
+
+    if "aguardando" in status:
+        return "Aguardando atendimento"
+
+    if status == "em" or "em atendimento" in status:
+        return "Em atendimento"
+
+    if "proposta" in status:
+        return "Proposta enviada"
+
+    if "nÃ£o fechado" in status or "nao fechado" in status:
+        return "NÃ£o fechado"
+
+    if "fechado" in status:
+        return "NegÃ³cio fechado"
+
+    return "Aguardando atendimento"
+
+
+def render_leads(leads):
+
+    st.title("ðŸ“‹ Leads")
+
+    if leads.empty:
+        st.info("Nenhuma lead encontrada.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "nome": "Lead sem nome",
+        "empresa": "Empresa nÃ£o informada",
+        "telefone": "NÃ£o informado",
+        "canal": None,
+        "origem": "NÃ£o informado",
+        "produto": "NÃ£o identificado",
+        "temperatura": "fria",
+        "score": 0,
+        "status": "Aguardando atendimento",
+        "responsavel": "NÃ£o atribuÃ­do",
+        "resumo_vendedor": "",
+        "historico": "",
+        "valor_negocio": 0,
+        "mensalidade": 0,
+        "motivo_perda": "",
+        "observacao_comercial": "",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    leads["status"] = leads["status"].apply(normalizar_status)
+
+    leads["status_normalizado"] = (
+        leads["status"]
+        .fillna("Aguardando atendimento")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    especialistas_df = carregar_especialistas(
+        st.session_state.get("empresa_id", 1)
+    )
+
+    responsaveis = (
+        especialistas_df["nome"].tolist()
+        if not especialistas_df.empty and "nome" in especialistas_df.columns
+        else ["NÃ£o atribuÃ­do"]
+    )
+
+    if "NÃ£o atribuÃ­do" not in responsaveis:
+        responsaveis.insert(0, "NÃ£o atribuÃ­do")
+
+    st.markdown("## ðŸ”Ž Filtros")
+
+    f1, f2, f3, f4 = st.columns(4)
+
+    with f1:
+        filtro_status = st.selectbox(
+            "Status",
+            ["Todos"] + STATUS_LISTA
+        )
+
+    with f2:
+        canais = sorted(
+            leads["canal"]
+            .fillna("NÃ£o informado")
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+        filtro_canal = st.selectbox(
+            "Canal",
+            ["Todos"] + canais
+        )
+
+    with f3:
+        filtro_responsavel = st.selectbox(
+            "ResponsÃ¡vel",
+            ["Todos"] + responsaveis
+        )
+
+    with f4:
+        busca = st.text_input("Buscar nome/empresa/produto")
+
+    leads_filtradas = leads.copy()
+
+    if filtro_status != "Todos":
+        filtro_status_normalizado = filtro_status.strip().lower()
+
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["status_normalizado"].str.contains(
+                filtro_status_normalizado,
+                na=False
+            )
+        ]
+
+    if filtro_canal != "Todos":
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["canal"].astype(str) == filtro_canal
+        ]
+
+    if filtro_responsavel != "Todos":
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["responsavel"].astype(str) == filtro_responsavel
+        ]
+
+    if busca:
+        busca = busca.lower()
+
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["nome"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+            |
+            leads_filtradas["empresa"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+            |
+            leads_filtradas["produto"].fillna("").astype(str).str.lower().str.contains(busca, na=False)
+        ]
+
+    st.markdown("---")
+
+    if leads_filtradas.empty:
+        st.warning("Nenhuma lead encontrada nos filtros.")
+        return
+
+    st.markdown(
+        """
+        <style>
+        .lead-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .lead-title {
+            color: #FFFFFF;
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .lead-line {
+            color: #CBD5E1;
+            font-size: 15px;
+            margin-bottom: 5px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    for _, lead in leads_filtradas.iterrows():
+
+        lead_id = valor_seguro(lead, "id", "0")
+        nome = valor_seguro(lead, "nome", "Lead sem nome")
+        empresa = valor_seguro(lead, "empresa", "Empresa nÃ£o informada")
+        telefone = valor_seguro(lead, "telefone", "NÃ£o informado")
+        canal = valor_seguro(lead, "canal", "NÃ£o informado")
+        produto = valor_seguro(lead, "produto", "NÃ£o identificado")
+        temperatura = valor_seguro(lead, "temperatura", "fria")
+        score = valor_seguro(lead, "score", 0)
+
+        status_atual = normalizar_status(
+            valor_seguro(
+                lead,
+                "status",
+                "Aguardando atendimento"
+            )
+        )
+
+        responsavel_atual = valor_seguro(
+            lead,
+            "responsavel",
+            "NÃ£o atribuÃ­do"
+        )
+
+        valor_atual = valor_seguro(
+            lead,
+            "valor_negocio",
+            0
+        )
+
+        mensalidade_atual = valor_seguro(
+            lead,
+            "mensalidade",
+            0
+        )
+
+        motivo_perda_atual = valor_seguro(
+            lead,
+            "motivo_perda",
+            ""
+        )
+
+        observacao_atual = valor_seguro(
+            lead,
+            "observacao_comercial",
+            ""
+        )
+
+        st.markdown(
+            f"""
+            <div class="lead-card">
+                <div class="lead-title">#{lead_id} - {nome}</div>
+                <div class="lead-line">ðŸ¢ {empresa}</div>
+                <div class="lead-line">ðŸ“² {telefone}</div>
+                <div class="lead-line">ðŸ“¡ {canal}</div>
+                <div class="lead-line">ðŸ§© {produto}</div>
+                <div class="lead-line">ðŸ”¥ {temperatura} â€¢ Score {score}</div>
+                <div class="lead-line">ðŸ“Œ {status_atual}</div>
+                <div class="lead-line">ðŸ‘¨â€ðŸ’¼ {responsavel_atual}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            novo_status = st.selectbox(
+                f"Status Lead #{lead_id}",
+                STATUS_LISTA,
+                index=STATUS_LISTA.index(status_atual)
+                if status_atual in STATUS_LISTA
+                else 0,
+                key=f"status_{lead_id}"
+            )
+
+        with c2:
+            responsavel = st.selectbox(
+                f"ResponsÃ¡vel Lead #{lead_id}",
+                responsaveis,
+                index=responsaveis.index(responsavel_atual)
+                if responsavel_atual in responsaveis
+                else 0,
+                key=f"responsavel_{lead_id}"
+            )
+
+        valor_negocio = float(valor_atual or 0)
+        mensalidade = float(mensalidade_atual or 0)
+        motivo_perda = str(motivo_perda_atual or "")
+        observacao_comercial = str(observacao_atual or "")
+
+        if novo_status == "NegÃ³cio fechado":
+
+            st.markdown("### ðŸ’° Dados do negÃ³cio fechado")
+
+            n1, n2 = st.columns(2)
+
+            with n1:
+                valor_negocio = st.number_input(
+                    f"Valor do contrato Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(valor_atual or 0),
+                    step=100.0,
+                    key=f"valor_negocio_{lead_id}"
+                )
+
+            with n2:
+                mensalidade = st.number_input(
+                    f"Mensalidade Lead #{lead_id}",
+                    min_value=0.0,
+                    value=float(mensalidade_atual or 0),
+                    step=100.0,
+                    key=f"mensalidade_{lead_id}"
+                )
+
+            motivo_perda = ""
+
+        elif novo_status == "NÃ£o fechado":
+
+            st.markdown("### âŒ Motivo da perda")
+
+            index_motivo = (
+                MOTIVOS_PERDA.index(motivo_perda_atual)
+                if motivo_perda_atual in MOTIVOS_PERDA
+                else 0
+            )
+
+            motivo_perda = st.selectbox(
+                f"Motivo da perda Lead #{lead_id}",
+                MOTIVOS_PERDA,
+                index=index_motivo,
+                key=f"motivo_perda_{lead_id}"
+            )
+
+            observacao_comercial = st.text_area(
+                f"ObservaÃ§Ã£o comercial Lead #{lead_id}",
+                value=str(observacao_atual or ""),
+                key=f"observacao_comercial_{lead_id}"
+            )
+
+            valor_negocio = 0
+            mensalidade = 0
+
+        else:
+            motivo_perda = ""
+            valor_negocio = float(valor_atual or 0)
+            mensalidade = float(mensalidade_atual or 0)
+            observacao_comercial = str(observacao_atual or "")
+
+        if st.button(
+            f"Salvar Lead #{lead_id}",
+            key=f"salvar_{lead_id}"
+        ):
+            atualizar_lead(
+                lead_id,
+                normalizar_status(novo_status),
+                responsavel,
+                valor_negocio,
+                mensalidade,
+                motivo_perda,
+                observacao_comercial
+            )
+
+            st.success("Lead atualizada com sucesso.")
+            st.rerun()
+
+        resumo = valor_seguro(lead, "resumo_vendedor", "")
+
+        with st.expander("ðŸ§  Resumo Comercial"):
+            if resumo:
+                st.text(resumo)
+            else:
+                st.info("Resumo nÃ£o disponÃ­vel.")
+
+        historico = valor_seguro(lead, "historico", "")
+
+        if historico:
+            with st.expander("ðŸ’¬ Conversa da Sofia"):
+                st.text(historico)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+=====================================================
+pedidos.py
+=====================================================
+import streamlit as st
+
+from services.pedidos_service import (
+    listar_pedidos,
+    cadastrar_pedido,
+    atualizar_pedido,
+    excluir_pedido,
+    STATUS_PAGAMENTO,
+    STATUS_PEDIDO,
+    FORMAS_PAGAMENTO,
+)
+
+from services.produtos_service import (
+    listar_produtos,
+)
+
+
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def render_pedidos():
+
+    empresa_id = st.session_state.empresa_id
+
+    st.title("ðŸ§¾ Pedidos / Vendas")
+
+    produtos = listar_produtos(empresa_id)
+
+    pedidos = listar_pedidos(empresa_id)
+
+    # =========================================
+    # NOVO PEDIDO
+    # =========================================
+
+    st.markdown("## âž• Novo pedido")
+
+    if produtos.empty:
+
+        st.warning(
+            "Cadastre produtos antes de criar pedidos."
+        )
+
+        return
+
+    produtos_dict = {
+
+        f"{row['nome']} - {formatar_moeda(float(row['preco']))}":
+        row
+
+        for _, row in produtos.iterrows()
+    }
+
+    pedido_produto = st.selectbox(
+        "Produto",
+        list(produtos_dict.keys())
+    )
+
+    produto = produtos_dict[pedido_produto]
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+
+        cliente_nome = st.text_input(
+            "Nome cliente"
+        )
+
+        cliente_telefone = st.text_input(
+            "Telefone cliente"
+        )
+
+        quantidade = st.number_input(
+            "Quantidade",
+            min_value=1,
+            value=1
+        )
+
+    with c2:
+
+        forma_pagamento = st.selectbox(
+            "Forma pagamento",
+            FORMAS_PAGAMENTO
+        )
+
+        origem = st.selectbox(
+            "Origem venda",
+            [
+                "WhatsApp",
+                "Instagram",
+                "Facebook",
+                "Manual"
+            ]
+        )
+
+        vendido_por = st.selectbox(
+            "Vendido por",
+            [
+                "IA",
+                "Humano"
+            ]
+        )
+
+    observacoes = st.text_area(
+        "ObservaÃ§Ãµes"
+    )
+
+    valor_total = (
+        float(produto["preco"])
+        * quantidade
+    )
+
+    st.metric(
+        "Valor total",
+        formatar_moeda(valor_total)
+    )
+
+    if st.button(
+        "Cadastrar pedido",
+        use_container_width=True
+    ):
+
+        cadastrar_pedido(
+
+            empresa_id,
+
+            cliente_nome,
+
+            cliente_telefone,
+
+            produto["id"],
+
+            produto["nome"],
+
+            quantidade,
+
+            valor_total,
+
+            forma_pagamento,
+
+            "Aguardando pagamento",
+
+            "Novo pedido",
+
+            origem,
+
+            vendido_por,
+
+            observacoes
+        )
+
+        st.success(
+            "Pedido cadastrado."
+        )
+
+        st.rerun()
+
+    st.markdown("---")
+
+    # =========================================
+    # LISTAGEM
+    # =========================================
+
+    st.markdown(
+        "## ðŸ“‹ Pedidos cadastrados"
+    )
+
+    if pedidos.empty:
+
+        st.info(
+            "Nenhum pedido cadastrado."
+        )
+
+        return
+
+    st.dataframe(
+        pedidos,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.markdown("---")
+
+    # =========================================
+    # GERENCIAR
+    # =========================================
+
+    st.markdown(
+        "## âš™ï¸ Gerenciar pedido"
+    )
+
+    pedidos_dict = {
+
+        f"Pedido #{row['id']} - {row['cliente_nome']}":
+        row
+
+        for _, row in pedidos.iterrows()
+    }
+
+    pedido_escolhido = st.selectbox(
+        "Selecionar pedido",
+        list(pedidos_dict.keys())
+    )
+
+    pedido = pedidos_dict[pedido_escolhido]
+
+    g1, g2 = st.columns(2)
+
+    with g1:
+
+        novo_status_pagamento = st.selectbox(
+            "Status pagamento",
+            STATUS_PAGAMENTO,
+            index=STATUS_PAGAMENTO.index(
+                pedido["status_pagamento"]
+            )
+            if pedido["status_pagamento"] in STATUS_PAGAMENTO
+            else 0
+        )
+
+    with g2:
+
+        novo_status_pedido = st.selectbox(
+            "Status pedido",
+            STATUS_PEDIDO,
+            index=STATUS_PEDIDO.index(
+                pedido["status_pedido"]
+            )
+            if pedido["status_pedido"] in STATUS_PEDIDO
+            else 0
+        )
+
+    nova_observacao = st.text_area(
+        "ObservaÃ§Ãµes atualizadas",
+        value=pedido["observacoes"]
+        if pedido["observacoes"]
+        else ""
+    )
+
+    b1, b2 = st.columns(2)
+
+    with b1:
+
+        if st.button(
+            "Salvar alteraÃ§Ãµes pedido",
+            use_container_width=True
+        ):
+
+            atualizar_pedido(
+
+                pedido["id"],
+
+                novo_status_pagamento,
+
+                novo_status_pedido,
+
+                nova_observacao
+            )
+
+            st.success(
+                "Pedido atualizado."
+            )
+
+            st.rerun()
+
+    with b2:
+
+        if st.button(
+            "Excluir pedido",
+            use_container_width=True
+        ):
+
+            excluir_pedido(
+                pedido["id"]
+            )
+
+            st.warning(
+                "Pedido excluÃ­do."
+            )
+
+            st.rerun()
+
+=====================================================
+produtos.py
+=====================================================
+import streamlit as st
+
+from services.produtos_service import (
+    listar_produtos,
+    cadastrar_produto,
+    atualizar_produto,
+    excluir_produto,
+)
+
+from utils.permissoes import (
+    verificar_permissao,
+    tela_upgrade,
+)
+
+
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def render_produtos():
+
+    empresa_id = st.session_state.empresa_id
+
+    # =========================================
+    # BLOQUEIO PREMIUM
+    # =========================================
+
+    if not verificar_permissao("Premium"):
+
+        tela_upgrade(
+            "Produtos",
+            "Premium"
+        )
+
+        return
+
+    st.title("ðŸ›’ Produtos")
+
+    produtos = listar_produtos(empresa_id)
+
+    st.markdown("## âž• Cadastrar produto")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        nome = st.text_input("Nome do produto")
+        categoria = st.text_input("Categoria")
+        preco = st.number_input("PreÃ§o", min_value=0.0, value=0.0)
+
+    with c2:
+        estoque = st.number_input("Estoque", min_value=0, value=0)
+        status = st.selectbox("Status", ["ativo", "inativo"])
+        imagem_url = st.text_input("Link da imagem")
+
+    descricao = st.text_area("DescriÃ§Ã£o do produto")
+
+    if st.button("Cadastrar produto", use_container_width=True):
+
+        if cadastrar_produto(
+            empresa_id,
+            nome,
+            categoria,
+            descricao,
+            preco,
+            estoque,
+            imagem_url,
+            status,
+        ):
+
+            st.success("Produto cadastrado com sucesso.")
+            st.rerun()
+
+        else:
+
+            st.warning("Informe o nome do produto.")
+
+    st.markdown("---")
+
+    st.markdown("## ðŸ“¦ Produtos cadastrados")
+
+    if produtos.empty:
+
+        st.info("Nenhum produto cadastrado.")
+        return
+
+    st.dataframe(
+        produtos,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.markdown("---")
+
+    st.markdown("## âš™ï¸ Gerenciar produto")
+
+    produto_opcoes = {
+
+        f"{row['id']} - {row['nome']}":
+        row["id"]
+
+        for _, row in produtos.iterrows()
+    }
+
+    produto_escolhido = st.selectbox(
+        "Selecionar produto",
+        list(produto_opcoes.keys()),
+    )
+
+    produto_id = produto_opcoes[
+        produto_escolhido
+    ]
+
+    produto = produtos[
+        produtos["id"] == produto_id
+    ].iloc[0]
+
+    g1, g2 = st.columns(2)
+
+    with g1:
+
+        novo_nome = st.text_input(
+            "Nome atualizado",
+            value=produto["nome"],
+        )
+
+        nova_categoria = st.text_input(
+            "Categoria atualizada",
+            value=produto["categoria"]
+            if produto["categoria"]
+            else "",
+        )
+
+        novo_preco = st.number_input(
+            "PreÃ§o atualizado",
+            min_value=0.0,
+            value=float(produto["preco"]),
+        )
+
+    with g2:
+
+        novo_estoque = st.number_input(
+            "Estoque atualizado",
+            min_value=0,
+            value=int(produto["estoque"]),
+        )
+
+        novo_status = st.selectbox(
+            "Status atualizado",
+            ["ativo", "inativo"],
+            index=["ativo", "inativo"].index(
+                produto["status"]
+            )
+            if produto["status"] in ["ativo", "inativo"]
+            else 0,
+        )
+
+        nova_imagem = st.text_input(
+            "Link imagem atualizado",
+            value=produto["imagem_url"]
+            if produto["imagem_url"]
+            else "",
+        )
+
+    nova_descricao = st.text_area(
+        "DescriÃ§Ã£o atualizada",
+        value=produto["descricao"]
+        if produto["descricao"]
+        else "",
+    )
+
+    b1, b2 = st.columns(2)
+
+    with b1:
+
+        if st.button(
+            "Salvar alteraÃ§Ãµes",
+            use_container_width=True
+        ):
+
+            atualizar_produto(
+                produto_id,
+                novo_nome,
+                nova_categoria,
+                nova_descricao,
+                novo_preco,
+                novo_estoque,
+                nova_imagem,
+                novo_status,
+            )
+
+            st.success("Produto atualizado.")
+            st.rerun()
+
+    with b2:
+
+        if st.button(
+            "Excluir produto",
+            use_container_width=True
+        ):
+
+            excluir_produto(produto_id)
+
+            st.warning("Produto excluÃ­do.")
+            st.rerun()
+
+=====================================================
+resultados.py
+=====================================================
+import streamlit as st
+import pandas as pd
+
+from components.graficos import grafico_donut
+
+
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def melhor_valor(df, coluna):
+    if df.empty or coluna not in df.columns:
+        return "N/A"
+
+    serie = df[coluna].dropna().astype(str)
+    serie = serie[serie.str.strip() != ""]
+
+    if serie.empty:
+        return "N/A"
+
+    contagem = serie.value_counts()
+
+    if contagem.empty:
+        return "N/A"
+
+    return contagem.idxmax()
+
+
+def card(titulo, valor):
+    st.markdown(
+        f"""
+        <div class="metric-card">
+            <div class="metric-title">{titulo}</div>
+            <div class="metric-value">{valor}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_resultados(leads):
+
+    st.title("ðŸ“Œ Resultados Comerciais")
+
+    if leads.empty:
+        st.info("Nenhum dado disponÃ­vel.")
+        return
+
+    leads = leads.copy()
+
+    colunas_padrao = {
+        "status": "Aguardando atendimento",
+        "produto": "NÃ£o informado",
+        "responsavel": "NÃ£o atribuÃ­do",
+        "canal": "NÃ£o informado",
+        "origem": "NÃ£o informado",
+        "valor_negocio": 0,
+        "mensalidade": 0,
+        "motivo_perda": "",
+        "observacao_comercial": "",
+    }
+
+    for coluna, padrao in colunas_padrao.items():
+        if coluna not in leads.columns:
+            leads[coluna] = padrao
+
+    if "canal" not in leads.columns or leads["canal"].isna().all():
+        leads["canal"] = leads["origem"]
+
+    status_normalizado = (
+        leads["status"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+    )
+
+    fechados_df = leads[
+        status_normalizado.str.contains("fechado", na=False)
+        & ~status_normalizado.str.contains("nÃ£o fechado|nao fechado", na=False)
+    ]
+
+    nao_fechados_df = leads[
+        status_normalizado.str.contains("nÃ£o fechado|nao fechado", na=False)
+    ]
+
+    total = len(leads)
+
+    taxa = round(
+        (len(fechados_df) / total) * 100,
+        1
+    ) if total > 0 else 0
+
+    valor_fechado = 0
+    mensalidade_total = 0
+
+    if "valor_negocio" in fechados_df.columns:
+        valor_fechado = (
+            pd.to_numeric(
+                fechados_df["valor_negocio"],
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum()
+        )
+
+    if "mensalidade" in fechados_df.columns:
+        mensalidade_total = (
+            pd.to_numeric(
+                fechados_df["mensalidade"],
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum()
+        )
+
+    melhor_canal = melhor_valor(
+        fechados_df,
+        "canal"
+    )
+
+    melhor_servico = melhor_valor(
+        fechados_df,
+        "produto"
+    )
+
+    melhor_especialista = melhor_valor(
+        fechados_df,
+        "responsavel"
+    )
+
+    st.markdown(
+        """
+        <style>
+        .metric-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 18px 20px;
+            min-height: 105px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .metric-title {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: #FFFFFF;
+            font-size: 28px;
+            font-weight: 800;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        card("âœ… Fechados", len(fechados_df))
+    with c2:
+        card("âšª NÃ£o fechados", len(nao_fechados_df))
+    with c3:
+        card("ðŸ“ˆ ConversÃ£o", f"{taxa}%")
+    with c4:
+        card("ðŸ† Melhor canal", melhor_canal)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    f1, f2 = st.columns(2)
+
+    with f1:
+        card("ðŸ’° Valor Fechado", formatar_moeda(valor_fechado))
+
+    with f2:
+        card("ðŸ” Receita Mensal", formatar_moeda(mensalidade_total))
+
+    st.markdown("## ðŸ§  Insights Comerciais")
+
+    i1, i2 = st.columns(2)
+
+    with i1:
+        st.success(f"ðŸ† ServiÃ§o campeÃ£o: {melhor_servico}")
+
+    with i2:
+        st.info(f"ðŸ‘¨â€ðŸ’¼ Especialista destaque: {melhor_especialista}")
+
+    if not nao_fechados_df.empty and "motivo_perda" in nao_fechados_df.columns:
+
+        motivos = (
+            nao_fechados_df["motivo_perda"]
+            .fillna("")
+            .astype(str)
+        )
+
+        motivos = motivos[motivos.str.strip() != ""]
+
+        if not motivos.empty:
+            st.markdown("## âŒ Motivos de Perda")
+
+            motivos_df = (
+                motivos
+                .value_counts()
+                .reset_index()
+            )
+
+            motivos_df.columns = [
+                "Motivo",
+                "Quantidade"
+            ]
+
+            st.dataframe(
+                motivos_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+    st.markdown("## ðŸ“Š ConversÃ£o")
+
+    if not fechados_df.empty:
+
+        g1, g2 = st.columns(2)
+
+        with g1:
+            grafico_donut(
+                fechados_df,
+                "canal",
+                "Canais que mais convertem"
+            )
+
+        with g2:
+            grafico_donut(
+                fechados_df,
+                "produto",
+                "ServiÃ§os mais vendidos"
+            )
+
+        st.markdown("## ðŸ‘¨â€ðŸ’¼ Ranking Especialistas")
+
+        ranking = (
+            fechados_df["responsavel"]
+            .fillna("NÃ£o atribuÃ­do")
+            .astype(str)
+            .value_counts()
+            .reset_index()
+        )
+
+        ranking.columns = [
+            "Especialista",
+            "Fechamentos"
+        ]
+
+        st.dataframe(
+            ranking,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.warning("Ainda nÃ£o existem negÃ³cios fechados.")
+
+=====================================================
+servicos_canais.py
+=====================================================
+import streamlit as st
+
+from components.graficos import grafico_donut
+
+
+def render_servicos_canais(leads):
+
+    st.title("ðŸ“Š ServiÃ§os e Canais")
+
+    if leads.empty:
+        st.info("Nenhum dado disponÃ­vel.")
+        return
+
+    leads = leads.copy()
+
+    if "produto" not in leads.columns:
+        leads["produto"] = "NÃ£o informado"
+
+    if "canal" not in leads.columns:
+        if "origem" in leads.columns:
+            leads["canal"] = leads["origem"]
+        else:
+            leads["canal"] = "NÃ£o informado"
+
+    leads["produto"] = (
+        leads["produto"]
+        .fillna("NÃ£o informado")
+        .astype(str)
+    )
+
+    leads["canal"] = (
+        leads["canal"]
+        .fillna("NÃ£o informado")
+        .astype(str)
+    )
+
+    g1, g2 = st.columns(2)
+
+    with g1:
+        grafico_donut(
+            leads,
+            "produto",
+            "ServiÃ§os Mais Procurados"
+        )
+
+    with g2:
+        grafico_donut(
+            leads,
+            "canal",
+            "Leads por Canal"
+        )
+
+    st.markdown("## ðŸ“Œ Ranking Detalhado")
+
+    r1, r2 = st.columns(2)
+
+    with r1:
+        st.markdown("### ServiÃ§os")
+
+        ranking_servicos = (
+            leads["produto"]
+            .value_counts()
+            .reset_index()
+        )
+
+        ranking_servicos.columns = [
+            "ServiÃ§o",
+            "Quantidade"
+        ]
+
+        st.dataframe(
+            ranking_servicos,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with r2:
+        st.markdown("### Canais")
+
+        ranking_canais = (
+            leads["canal"]
+            .value_counts()
+            .reset_index()
+        )
+
+        ranking_canais.columns = [
+            "Canal",
+            "Quantidade"
+        ]
+
+        st.dataframe(
+            ranking_canais,
+            use_container_width=True,
+            hide_index=True
+        )
+
+=====================================================
+visao_geral.py
+=====================================================
+import streamlit as st
+import pandas as pd
+
+from database.db import conectar
+from components.graficos import grafico_donut
+
+
+def buscar_empresas_permitidas():
+    nivel = st.session_state.get("nivel")
+    empresa_id = st.session_state.get("empresa_id")
+
+    conn = conectar()
+
+    try:
+        if nivel == "orion_admin":
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                ORDER BY id DESC
+                """,
+                conn,
+            )
+
+        elif nivel == "parceiro_admin":
+            # Temporariamente mostra empresas ativas.
+            # A coluna parceiro_nome ainda nÃ£o existe no PostgreSQL.
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                WHERE status = 'ativa'
+                ORDER BY id DESC
+                """,
+                conn,
+            )
+
+        else:
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                WHERE id = %s
+                """,
+                conn,
+                params=(empresa_id,),
+            )
+
+        return empresas
+
+    finally:
+        conn.close()
+
+
+def buscar_dados_empresa(empresa_id):
+    conn = conectar()
+
+    try:
+        leads = pd.read_sql_query(
+            """
+            SELECT *
+            FROM leads
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
+
+        pedidos = pd.read_sql_query(
+            """
+            SELECT *
+            FROM pedidos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
+
+        produtos = pd.read_sql_query(
+            """
+            SELECT *
+            FROM produtos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+            """,
+            conn,
+            params=(empresa_id,),
+        )
+
+        return leads, pedidos, produtos
+
+    finally:
+        conn.close()
+
+
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def aplicar_css():
+    st.markdown("""
+        <style>
+        .top-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,6,23,.96));
+            border: 1px solid rgba(0,229,255,.20);
+            border-radius: 22px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 0 30px rgba(0,229,255,.05);
+        }
+
+        .top-title {
+            font-size: 42px;
+            font-weight: 900;
+            color: #FFFFFF;
+            margin-bottom: 6px;
+        }
+
+        .top-subtitle {
+            color: #94A3B8;
+            font-size: 15px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.82));
+            border: 1px solid rgba(0,229,255,.16);
+            border-radius: 18px;
+            padding: 18px 20px;
+            min-height: 105px;
+            box-shadow: 0 0 18px rgba(0,229,255,.04);
+        }
+
+        .metric-label {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: #FFFFFF;
+            font-size: 30px;
+            font-weight: 800;
+        }
+
+        .section-title {
+            font-size: 30px;
+            font-weight: 850;
+            margin-top: 28px;
+            margin-bottom: 16px;
+            color: #FFFFFF;
+        }
+
+        .insight-card {
+            background: rgba(8,47,73,.55);
+            border: 1px solid rgba(14,165,233,.22);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            color: #E2E8F0;
+        }
+
+        .diagnostico-card {
+            background: linear-gradient(135deg, rgba(30,41,59,.95), rgba(2,6,23,.96));
+            border-left: 5px solid #06B6D4;
+            border-radius: 16px;
+            padding: 22px;
+            color: #E2E8F0;
+            margin-top: 12px;
+            line-height: 1.7;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+
+def card(label, value):
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">{label}</div>
+            <div class="metric-value">{value}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def topo(titulo, subtitulo):
+    st.markdown(f"""
+        <div class="top-card">
+            <div class="top-title">{titulo}</div>
+            <div class="top-subtitle">{subtitulo}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def calcular_metricas(leads, pedidos, produtos):
+    total = len(leads)
+    quentes = 0
+    em_atendimento = 0
+    aguardando = 0
+    fechados = 0
+    nao_fechados = 0
+
+    if not leads.empty:
+        if "temperatura" in leads.columns:
+            quentes = len(
+                leads[
+                    leads["temperatura"]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains("quente", na=False)
+                ]
+            )
+
+        if "status" in leads.columns:
+            status = leads["status"].astype(str).str.lower()
+
+            em_atendimento = len(
+                status[status.str.contains("em atendimento", na=False)]
+            )
+
+            aguardando = len(
+                status[status.str.contains("aguardando", na=False)]
+            )
+
+            fechados = len(
+                status[
+                    status.str.contains("fechado", na=False)
+                    & ~status.str.contains("nÃ£o fechado|nao fechado", na=False)
+                ]
+            )
+
+            nao_fechados = len(
+                status[
+                    status.str.contains("nÃ£o fechado|nao fechado", na=False)
+                ]
+            )
+
+    valor_pedidos = 0
+
+    if not pedidos.empty and "valor_total" in pedidos.columns:
+        valor_pedidos = pedidos["valor_total"].fillna(0).sum()
+
+    return {
+        "total": total,
+        "quentes": quentes,
+        "em_atendimento": em_atendimento,
+        "aguardando": aguardando,
+        "fechados": fechados,
+        "nao_fechados": nao_fechados,
+        "pedidos": len(pedidos),
+        "produtos": len(produtos),
+        "valor_pedidos": valor_pedidos,
+    }
+
+
+def render_graficos_leads(leads):
+    if leads.empty:
+        st.info("Nenhuma lead registrada ainda.")
+        return
+
+    g1, g2 = st.columns(2)
+
+    with g1:
+        if "status" in leads.columns:
+            grafico_donut(
+                leads,
+                "status",
+                "Status das Leads"
+            )
+
+    with g2:
+        if "temperatura" in leads.columns:
+            grafico_donut(
+                leads,
+                "temperatura",
+                "Temperatura das Leads"
+            )
+
+
+def texto_diagnostico(m):
+    palavra_lead = "lead" if m["aguardando"] == 1 else "leads"
+    verbo = "estÃ¡" if m["aguardando"] == 1 else "estÃ£o"
+
+    return f"""
+        <strong>A IA gerou {m["quentes"]} leads quentes.</strong><br><br>
+        PorÃ©m, <strong>{m["aguardando"]} {palavra_lead}</strong> {verbo} aguardando atendimento humano.<br><br>
+        <strong>ConclusÃ£o:</strong> existem oportunidades sendo geradas, mas parte delas pode estar sendo perdida por demora no atendimento.<br><br>
+        <strong>RecomendaÃ§Ã£o:</strong> oferecer upgrade para IA Vendas/Premium.
+    """
+
+
+def render_cliente():
+    aplicar_css()
+
+    empresa_id = st.session_state.get("empresa_id")
+    empresa_nome = st.session_state.get("empresa")
+
+    leads, pedidos, produtos = buscar_dados_empresa(empresa_id)
+    m = calcular_metricas(leads, pedidos, produtos)
+
+    topo(
+        f"ðŸ  VisÃ£o Geral - {empresa_nome}",
+        "Painel operacional com indicadores de atendimento, leads e resultados comerciais."
+    )
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+
+    with c1:
+        card("Total Leads", m["total"])
+    with c2:
+        card("ðŸ”¥ Quentes", m["quentes"])
+    with c3:
+        card("ðŸ•˜ Atendimento", m["em_atendimento"])
+    with c4:
+        card("â³ Aguardando", m["aguardando"])
+    with c5:
+        card("âœ… Fechados", m["fechados"])
+    with c6:
+        card("âšª NÃ£o fechados", m["nao_fechados"])
+
+    st.markdown(
+        '<div class="section-title">ðŸ§  Insights da OperaÃ§Ã£o</div>',
+        unsafe_allow_html=True
+    )
+
+    if leads.empty:
+        st.markdown("""
+            <div class="insight-card">
+                Nenhuma lead registrada ainda. Assim que a Sofia comeÃ§ar os atendimentos,
+                os dados aparecerÃ£o aqui automaticamente.
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        if m["aguardando"] > 0:
+            st.markdown(f"""
+                <div class="insight-card">
+                    ðŸš¨ Existem <strong>{m["aguardando"]}</strong> leads aguardando atendimento humano.
+                    Isso pode representar perda de oportunidades.
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+                <div class="insight-card">
+                    âœ… Nenhum gargalo crÃ­tico identificado no atendimento humano.
+                </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="section-title">ðŸ“Š Analytics Comercial</div>',
+        unsafe_allow_html=True
+    )
+
+    render_graficos_leads(leads)
+
+    st.markdown(
+        '<div class="section-title">ðŸ“ˆ Ãšltimas Leads</div>',
+        unsafe_allow_html=True
+    )
+
+    if leads.empty:
+        st.info("Nenhuma lead cadastrada.")
+    else:
+        st.dataframe(
+            leads.head(10),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+def render_admin_ou_parceiro():
+    aplicar_css()
+
+    nivel = st.session_state.get("nivel")
+
+    titulo = (
+        "ðŸ  Painel Master Orion"
+        if nivel == "orion_admin"
+        else "ðŸ  Painel Parceiro Forway"
+    )
+
+    topo(
+        titulo,
+        "Acompanhe clientes, indicadores, diagnÃ³sticos comerciais e oportunidades de upgrade."
+    )
+
+    empresas = buscar_empresas_permitidas()
+
+    if empresas.empty:
+        st.info("Nenhuma empresa encontrada.")
+        return
+
+    total_empresas = len(empresas)
+
+    empresas_ativas = (
+        len(empresas[empresas["status"] == "ativa"])
+        if "status" in empresas
+        else 0
+    )
+
+    empresas_vencidas = (
+        len(empresas[empresas["status_financeiro"].isin(["vencido", "inadimplente"])])
+        if "status_financeiro" in empresas
+        else 0
+    )
+
+    receita_mensal = (
+        empresas["valor_mensal"].fillna(0).sum()
+        if "valor_mensal" in empresas
+        else 0
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        card("Empresas", total_empresas)
+    with c2:
+        card("Ativas", empresas_ativas)
+    with c3:
+        card("Vencidas", empresas_vencidas)
+    with c4:
+        card("Receita Mensal", formatar_moeda(receita_mensal))
+
+    st.markdown(
+        '<div class="section-title">ðŸ¢ DiagnÃ³stico por Cliente</div>',
+        unsafe_allow_html=True
+    )
+
+    opcoes = {
+        f"{row['id']} - {row['nome']}": row["id"]
+        for _, row in empresas.iterrows()
+    }
+
+    opcoes_lista = list(opcoes.keys())
+
+    empresa_salva_id = st.session_state.get("empresa_diagnostico_id")
+
+    indice_atual = 0
+
+    if empresa_salva_id:
+        for i, opcao in enumerate(opcoes_lista):
+            if int(opcoes[opcao]) == int(empresa_salva_id):
+                indice_atual = i
+                break
+
+    empresa_escolhida = st.selectbox(
+        "Selecionar cliente",
+        opcoes_lista,
+        index=indice_atual,
+        key="diagnostico_cliente"
+    )
+
+    empresa_id = int(opcoes[empresa_escolhida])
+
+    st.session_state["empresa_diagnostico_id"] = empresa_id
+
+    empresa = empresas[
+        empresas["id"] == empresa_id
+    ].iloc[0]
+
+    st.markdown(f"### Cliente selecionado: {empresa['nome']}")
+
+    leads, pedidos, produtos = buscar_dados_empresa(empresa_id)
+    m = calcular_metricas(leads, pedidos, produtos)
+
+    d1, d2, d3, d4, d5, d6 = st.columns(6)
+
+    with d1:
+        card("Leads", m["total"])
+    with d2:
+        card("ðŸ”¥ Quentes", m["quentes"])
+    with d3:
+        card("â³ Aguardando", m["aguardando"])
+    with d4:
+        card("âœ… Fechados", m["fechados"])
+    with d5:
+        card("âšª NÃ£o fechados", m["nao_fechados"])
+    with d6:
+        card("Valor", formatar_moeda(m["valor_pedidos"]))
+
+    st.markdown(
+        '<div class="section-title">ðŸ”Ž DiagnÃ³stico Comercial</div>',
+        unsafe_allow_html=True
+    )
+
+    if leads.empty:
+        st.markdown("""
+            <div class="diagnostico-card">
+                Ainda nÃ£o existem dados suficientes para diagnÃ³stico deste cliente.
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        if m["aguardando"] > 0:
+            st.markdown(
+                (
+                    '<div class="diagnostico-card">'
+                    f'{texto_diagnostico(m)}'
+                    '</div>'
+                ),
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(f"""
+                <div class="diagnostico-card">
+                    A operaÃ§Ã£o possui <strong>{m["total"]}</strong> leads registradas.
+                    Nenhum gargalo crÃ­tico de atendimento humano foi identificado no momento.
+                </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="section-title">ðŸ“Š GrÃ¡ficos do Cliente</div>',
+        unsafe_allow_html=True
+    )
+
+    render_graficos_leads(leads)
+
+    st.markdown(
+        '<div class="section-title">ðŸ“ˆ Leads do Cliente</div>',
+        unsafe_allow_html=True
+    )
+
+    if leads.empty:
+        st.info("Nenhum lead encontrado.")
+    else:
+        st.dataframe(
+            leads,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+def render_visao_geral(leads_param=None):
+    nivel = st.session_state.get("nivel")
+
+    if nivel in ["orion_admin", "parceiro_admin"]:
+        render_admin_ou_parceiro()
+    else:
+        render_cliente()
+
