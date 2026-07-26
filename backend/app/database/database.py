@@ -2,10 +2,11 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Caminho até o .env da raiz do projeto
+
+# Raiz do projeto: agente-sdr-forway/
 ROOT_DIR = Path(__file__).resolve().parents[3]
 ENV_PATH = ROOT_DIR / ".env"
 
@@ -15,19 +16,19 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError(
-        "DATABASE_URL não encontrada no arquivo .env"
+        f"DATABASE_URL não encontrada no arquivo: {ENV_PATH}"
     )
 
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    pool_recycle=1800,
+    future=True,
 )
 
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
 Base = declarative_base()
@@ -39,13 +40,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-def testar_conexao():
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return True
-    except Exception as e:
-        print(f"Erro ao conectar ao PostgreSQL: {e}")
-        return False
