@@ -1,0 +1,147 @@
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:3:from styles.theme import carregar_tema
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:4:from components.sidebar import render_sidebar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:5:from services.leads_service import carregar_leads
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:7:from services.auth_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:14:from utils.bloqueio import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:19:from app_pages.visao_geral import render_visao_geral
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:20:from app_pages.leads import render_leads
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:21:from app_pages.produtos import render_produtos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:22:from app_pages.pedidos import render_pedidos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:23:from app_pages.conversas import render_conversas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:24:from app_pages.especialistas import render_especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:25:from app_pages.funil_comercial import render_funil
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:26:from app_pages.servicos_canais import render_servicos_canais
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:27:from app_pages.resultados import render_resultados
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:28:from app_pages.integracoes import render_integracoes
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:29:from app_pages.configuracoes import render_configuracoes
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app.py:30:from app_pages.empresas import render_empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\configurar_logo.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\configurar_logo.py:8:UPDATE empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:19:"SELECT id FROM empresas WHERE id = ?",
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:66:INSERT INTO produtos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:165:INSERT INTO leads (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:5:from services.configuracoes_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:15:from services.usuarios_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:38:DELETE FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:5:from datetime import datetime, timedelta
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:7:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:9:from services.usuarios_service import criar_admin_empresa
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:52:CREATE TABLE IF NOT EXISTS empresas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:102:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:110:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:145:INSERT INTO empresas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:196:UPDATE empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:229:DELETE FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:234:DELETE FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\especialistas.py:3:from components.graficos import grafico_donut
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\funil_comercial.py:3:from services.leads_service import STATUS_LISTA
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\leads.py:3:from services.leads_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\leads.py:8:from services.configuracoes_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\pedidos.py:3:from services.pedidos_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\pedidos.py:13:from services.produtos_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\produtos.py:3:from services.produtos_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\produtos.py:10:from utils.permissoes import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\resultados.py:4:from components.graficos import grafico_donut
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\servicos_canais.py:3:from components.graficos import grafico_donut
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:5:from components.graficos import grafico_donut
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:19:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:31:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:42:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:62:FROM leads
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:73:FROM pedidos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:84:FROM produtos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\components\sidebar.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\components\sidebar.py:19:"SELECT logo_path FROM empresas WHERE id = ?",
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:13:CREATE TABLE IF NOT EXISTS agente_config (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:57:FROM agente_config
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:85:INSERT INTO agente_config (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:130:UPDATE agente_config
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:4:from psycopg2.extras import RealDictCursor
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:30:INSERT INTO empresas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:52:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:70:INSERT INTO usuarios (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:93:UPDATE usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:133:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:135:INNER JOIN empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:160:UPDATE usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:193:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:195:INNER JOIN empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:237:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:239:INNER JOIN empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:281:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:283:INNER JOIN empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:11:CREATE TABLE IF NOT EXISTS especialistas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:19:CREATE TABLE IF NOT EXISTS servicos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:27:CREATE TABLE IF NOT EXISTS especialista_servicos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:57:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:70:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:89:UPDATE especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:100:DELETE FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:109:DELETE FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:112:FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:133:FROM servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:154:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:155:LEFT JOIN especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:158:LEFT JOIN servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:178:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:202:FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:230:FROM servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:245:INSERT INTO servicos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:274:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:294:UPDATE especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:306:INSERT INTO especialistas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:320:DELETE FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:330:INSERT INTO especialista_servicos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:358:FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:375:DELETE FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:384:DELETE FROM especialistas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:404:DELETE FROM especialista_servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:413:DELETE FROM servicos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:19:CREATE TABLE IF NOT EXISTS empresas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:64:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:120:INSERT INTO empresas (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:2:from datetime import datetime
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:6:from services.intencao_service import (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:53:FROM conversas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:79:FROM leads
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:81:LEFT JOIN clientes
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:176:UPDATE leads
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:17:CREATE TABLE IF NOT EXISTS modulos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:33:CREATE TABLE IF NOT EXISTS empresa_modulos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:88:FROM modulos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:111:FROM empresa_modulos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:113:LEFT JOIN modulos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:134:DELETE FROM empresa_modulos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:143:INSERT INTO empresa_modulos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:37:CREATE TABLE IF NOT EXISTS pedidos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:94:FROM pedidos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:125:INSERT INTO pedidos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:194:UPDATE pedidos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:231:DELETE FROM pedidos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:22:CREATE TABLE IF NOT EXISTS produtos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:54:FROM produtos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:83:INSERT INTO produtos (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:123:UPDATE produtos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:156:DELETE FROM produtos
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:16:CREATE TABLE IF NOT EXISTS usuarios (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:42:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:70:FROM usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:78:UPDATE usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:93:INSERT INTO usuarios (
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:138:UPDATE usuarios
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\bloqueio.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\bloqueio.py:35:FROM empresas
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\permissoes.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\permissoes.py:13:FROM empresas

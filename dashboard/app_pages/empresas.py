@@ -45,74 +45,54 @@ def limpar_formulario_nova_empresa():
 
 
 def garantir_colunas_empresas():
-    conn = conectar()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS empresas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT UNIQUE NOT NULL,
-            plano TEXT DEFAULT 'Lite',
-            status TEXT DEFAULT 'ativa',
-            valor_mensal REAL DEFAULT 350,
-            logo_path TEXT,
-            parceiro_nome TEXT DEFAULT 'Forway',
-            data_adesao TEXT,
-            data_vencimento TEXT,
-            status_financeiro TEXT DEFAULT 'em_dia',
-            bloqueio_automatico INTEGER DEFAULT 1,
-            servicos TEXT DEFAULT '',
-            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    cursor.execute("PRAGMA table_info(empresas)")
-    colunas = [col[1] for col in cursor.fetchall()]
-
-    novas_colunas = {
-        "logo_path": "ALTER TABLE empresas ADD COLUMN logo_path TEXT",
-        "parceiro_nome": "ALTER TABLE empresas ADD COLUMN parceiro_nome TEXT DEFAULT 'Forway'",
-        "data_adesao": "ALTER TABLE empresas ADD COLUMN data_adesao TEXT",
-        "data_vencimento": "ALTER TABLE empresas ADD COLUMN data_vencimento TEXT",
-        "status_financeiro": "ALTER TABLE empresas ADD COLUMN status_financeiro TEXT DEFAULT 'em_dia'",
-        "bloqueio_automatico": "ALTER TABLE empresas ADD COLUMN bloqueio_automatico INTEGER DEFAULT 1",
-        "valor_mensal": "ALTER TABLE empresas ADD COLUMN valor_mensal REAL DEFAULT 350",
-        "servicos": "ALTER TABLE empresas ADD COLUMN servicos TEXT DEFAULT ''",
-    }
-
-    for coluna, comando in novas_colunas.items():
-        if coluna not in colunas:
-            cursor.execute(comando)
-
-    conn.commit()
-    conn.close()
+    """
+    PostgreSQL já possui toda a estrutura criada pelas migrations.
+    Esta função foi mantida apenas para compatibilidade com o restante
+    do sistema.
+    """
+    return
 
 
 def listar_empresas():
-    garantir_colunas_empresas()
 
     nivel = st.session_state.get("nivel")
     empresa_logada = st.session_state.get("empresa")
 
     conn = conectar()
 
-    if nivel == "parceiro_admin":
-        empresas = pd.read_sql_query("""
-            SELECT *
-            FROM empresas
-            WHERE parceiro_nome = ?
-            AND nome != 'Orion Systems'
-            ORDER BY id DESC
-        """, conn, params=(empresa_logada,))
-    else:
-        empresas = pd.read_sql_query("""
-            SELECT *
-            FROM empresas
-            ORDER BY id DESC
-        """, conn)
+    try:
 
-    conn.close()
-    return empresas
+        if nivel == "parceiro_admin":
+
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                WHERE parceiro_nome = %s
+                  AND nome <> 'Orion Systems'
+                ORDER BY id DESC
+                """,
+                conn,
+                params=(empresa_logada,),
+            )
+
+        else:
+
+            empresas = pd.read_sql_query(
+                """
+                SELECT *
+                FROM empresas
+                ORDER BY id DESC
+                """,
+                conn,
+            )
+
+        return empresas
+
+    finally:
+        conn.close()
+
+    
 
 
 def calcular_valor_mensal(plano, servicos):
@@ -134,47 +114,87 @@ def criar_empresa(
     data_vencimento,
     servicos,
 ):
-    garantir_colunas_empresas()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    valor_mensal = calcular_valor_mensal(plano, servicos)
+    try:
 
-    cursor.execute("""
-        INSERT INTO empresas (
-            nome,
+        valor_mensal = calcular_valor_mensal(
             plano,
-            status,
-            valor_mensal,
-            logo_path,
-            parceiro_nome,
-            data_adesao,
-            data_vencimento,
-            status_financeiro,
-            bloqueio_automatico,
-            servicos
+            servicos,
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        nome.strip(),
-        plano,
-        status,
-        valor_mensal,
-        logo_path.strip(),
-        parceiro_nome,
-        data_adesao,
-        data_vencimento,
-        "em_dia",
-        1,
-        ",".join(servicos),
-    ))
 
-    conn.commit()
-    empresa_id = cursor.lastrowid
-    conn.close()
+        with conn.cursor() as cursor:
 
-    return empresa_id
+            cursor.execute(
+                """
+                INSERT INTO empresas (
+
+                    nome,
+                    plano,
+                    status,
+                    valor_mensal,
+                    logo_path,
+                    parceiro_nome,
+                    data_adesao,
+                    data_vencimento,
+                    status_financeiro,
+                    bloqueio_automatico,
+                    servicos
+
+                )
+
+                VALUES (
+
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+
+                )
+
+                RETURNING id
+                """,
+
+                (
+
+                    nome.strip(),
+                    plano,
+                    status,
+                    valor_mensal,
+                    logo_path.strip(),
+                    parceiro_nome,
+                    data_adesao,
+                    data_vencimento,
+                    "em_dia",
+                    True,
+                    ",".join(servicos),
+
+                )
+
+            )
+
+            empresa_id = cursor.fetchone()[0]
+
+        conn.commit()
+
+        return empresa_id
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
 
 
 def atualizar_empresa(
@@ -189,54 +209,99 @@ def atualizar_empresa(
     bloqueio_automatico,
     servicos,
 ):
+
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE empresas
-        SET plano = ?,
-            status = ?,
-            valor_mensal = ?,
-            logo_path = ?,
-            parceiro_nome = ?,
-            data_vencimento = ?,
-            status_financeiro = ?,
-            bloqueio_automatico = ?,
-            servicos = ?
-        WHERE id = ?
-    """, (
-        plano,
-        status,
-        valor_mensal,
-        logo_path.strip(),
-        parceiro_nome,
-        data_vencimento,
-        status_financeiro,
-        int(bloqueio_automatico),
-        ",".join(servicos),
-        int(empresa_id),
-    ))
+    try:
 
-    conn.commit()
-    conn.close()
+        with conn.cursor() as cursor:
+
+            cursor.execute(
+                """
+                UPDATE empresas
+
+                SET
+
+                    plano = %s,
+                    status = %s,
+                    valor_mensal = %s,
+                    logo_path = %s,
+                    parceiro_nome = %s,
+                    data_vencimento = %s,
+                    status_financeiro = %s,
+                    bloqueio_automatico = %s,
+                    servicos = %s
+
+                WHERE id = %s
+                """,
+
+                (
+
+                    plano,
+                    status,
+                    valor_mensal,
+                    logo_path.strip(),
+                    parceiro_nome,
+                    data_vencimento,
+                    status_financeiro,
+                    bool(bloqueio_automatico),
+                    ",".join(servicos),
+                    int(empresa_id),
+
+                )
+
+            )
+
+        conn.commit()
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
 
 
 def excluir_empresa(empresa_id):
+
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM usuarios
-        WHERE empresa_id = ?
-    """, (int(empresa_id),))
+    try:
 
-    cursor.execute("""
-        DELETE FROM empresas
-        WHERE id = ?
-    """, (int(empresa_id),))
+        with conn.cursor() as cursor:
 
-    conn.commit()
-    conn.close()
+            cursor.execute(
+                """
+                DELETE FROM usuarios
+                WHERE empresa_id = %s
+                """,
+                (
+                    int(empresa_id),
+                ),
+            )
+
+            cursor.execute(
+                """
+                DELETE FROM empresas
+                WHERE id = %s
+                """,
+                (
+                    int(empresa_id),
+                ),
+            )
+
+        conn.commit()
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
 
 
 def formatar_moeda(valor):

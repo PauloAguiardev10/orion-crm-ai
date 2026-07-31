@@ -32,17 +32,28 @@ def excluir_usuario(usuario_id, usuario_nome, empresa_id):
     )
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM usuarios
-        WHERE id = ?
-    """, (
-        int(usuario_id),
-    ))
+    try:
 
-    conn.commit()
-    conn.close()
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                DELETE FROM usuarios
+                WHERE id = %s
+            """, (
+                int(usuario_id),
+            ))
+
+        conn.commit()
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
 
 
 def render_configuracoes():

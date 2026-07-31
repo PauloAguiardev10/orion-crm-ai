@@ -1,30 +1,36 @@
 import hashlib
+
 import pandas as pd
 
 from database.db import conectar
 
 
-def hash_senha(senha):
+def hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode()).hexdigest()
 
 
-def criar_tabela_usuarios():
+def criar_tabela_usuarios() -> None:
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER,
-            empresa TEXT NOT NULL,
-            usuario TEXT UNIQUE NOT NULL,
-            senha TEXT NOT NULL,
-            nivel TEXT DEFAULT 'usuario'
-        )
-    """)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    empresa_id INTEGER,
+                    empresa VARCHAR(255) NOT NULL,
+                    usuario VARCHAR(150) UNIQUE NOT NULL,
+                    senha VARCHAR(255) NOT NULL,
+                    nivel VARCHAR(50) DEFAULT 'usuario'
+                )
+                """
+            )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+
+    finally:
+        conn.close()
 
 
 def listar_usuarios():
@@ -32,20 +38,25 @@ def listar_usuarios():
 
     conn = conectar()
 
-    usuarios = pd.read_sql_query("""
-        SELECT
-            id,
-            empresa_id,
-            empresa,
-            usuario,
-            nivel
-        FROM usuarios
-        ORDER BY id
-    """, conn)
+    try:
+        usuarios = pd.read_sql_query(
+            """
+            SELECT
+                id,
+                empresa_id,
+                empresa,
+                usuario,
+                nivel
+            FROM usuarios
+            ORDER BY id
+            """,
+            conn,
+        )
 
-    conn.close()
+        return usuarios
 
-    return usuarios
+    finally:
+        conn.close()
 
 
 def criar_usuario(
@@ -53,98 +64,130 @@ def criar_usuario(
     senha,
     empresa,
     nivel,
-    empresa_id=None
+    empresa_id=None,
 ):
-    if not usuario.strip() or not senha.strip() or not empresa.strip():
+    usuario = usuario.strip()
+    senha = senha.strip()
+    empresa = empresa.strip()
+
+    if not usuario or not senha or not empresa:
         return False
 
     criar_tabela_usuarios()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    senha_hash = hash_senha(senha)
+    try:
+        senha_hash = hash_senha(senha)
 
-    cursor.execute("""
-        SELECT id
-        FROM usuarios
-        WHERE usuario = ?
-    """, (usuario.strip(),))
-
-    existente = cursor.fetchone()
-
-    if existente:
-        cursor.execute("""
-            UPDATE usuarios
-            SET empresa_id = ?,
-                empresa = ?,
-                senha = ?,
-                nivel = ?
-            WHERE usuario = ?
-        """, (
-            empresa_id,
-            empresa.strip(),
-            senha_hash,
-            nivel,
-            usuario.strip()
-        ))
-    else:
-        cursor.execute("""
-            INSERT INTO usuarios (
-                empresa_id,
-                empresa,
-                usuario,
-                senha,
-                nivel
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id
+                FROM usuarios
+                WHERE usuario = %s
+                """,
+                (usuario,),
             )
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            empresa_id,
-            empresa.strip(),
-            usuario.strip(),
-            senha_hash,
-            nivel
-        ))
 
-    conn.commit()
-    conn.close()
+            existente = cursor.fetchone()
 
-    return True
+            if existente:
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET
+                        empresa_id = %s,
+                        empresa = %s,
+                        senha = %s,
+                        nivel = %s
+                    WHERE usuario = %s
+                    """,
+                    (
+                        empresa_id,
+                        empresa,
+                        senha_hash,
+                        nivel,
+                        usuario,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO usuarios (
+                        empresa_id,
+                        empresa,
+                        usuario,
+                        senha,
+                        nivel
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        empresa_id,
+                        empresa,
+                        usuario,
+                        senha_hash,
+                        nivel,
+                    ),
+                )
+
+        conn.commit()
+        return True
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def criar_admin_empresa(
     empresa_id,
     empresa_nome,
     usuario,
-    senha
+    senha,
 ):
     return criar_usuario(
         usuario=usuario,
         senha=senha,
         empresa=empresa_nome,
         nivel="admin_empresa",
-        empresa_id=empresa_id
+        empresa_id=empresa_id,
     )
 
 
 def alterar_senha(usuario, nova_senha):
-    if not nova_senha.strip():
+    nova_senha = nova_senha.strip()
+
+    if not nova_senha:
         return False
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE usuarios
-        SET senha = ?
-        WHERE usuario = ?
-    """, (
-        hash_senha(nova_senha),
-        usuario
-    ))
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE usuarios
+                SET senha = %s
+                WHERE usuario = %s
+                """,
+                (
+                    hash_senha(nova_senha),
+                    usuario,
+                ),
+            )
 
-    conn.commit()
-    alterado = cursor.rowcount > 0
-    conn.close()
+            alterado = cursor.rowcount > 0
 
-    return alterado
+        conn.commit()
+        return alterado
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

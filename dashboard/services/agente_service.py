@@ -1,47 +1,54 @@
-from database.db import conectar
-
 import pandas as pd
+
+from database.db import conectar
 
 
 def criar_tabela_agente():
 
     conn = conectar()
 
-    cursor = conn.cursor()
+    try:
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS agente_config (
+        with conn.cursor() as cursor:
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agente_config (
 
-            empresa_id INTEGER UNIQUE,
+                    id SERIAL PRIMARY KEY,
 
-            nome_agente TEXT DEFAULT 'Sofia',
+                    empresa_id INTEGER UNIQUE,
 
-            tom TEXT DEFAULT 'Humanizado',
+                    nome_agente VARCHAR(100) DEFAULT 'Sofia',
 
-            nicho TEXT,
+                    tom VARCHAR(100) DEFAULT 'Humanizado',
 
-            objetivo TEXT,
+                    nicho TEXT,
 
-            ia_pode_vender BOOLEAN DEFAULT 0,
+                    objetivo TEXT,
 
-            ia_envia_pix BOOLEAN DEFAULT 0,
+                    ia_pode_vender BOOLEAN DEFAULT FALSE,
 
-            ia_envia_link BOOLEAN DEFAULT 0,
+                    ia_envia_pix BOOLEAN DEFAULT FALSE,
 
-            whatsapp BOOLEAN DEFAULT 1,
+                    ia_envia_link BOOLEAN DEFAULT FALSE,
 
-            instagram BOOLEAN DEFAULT 0,
+                    whatsapp BOOLEAN DEFAULT TRUE,
 
-            facebook BOOLEAN DEFAULT 0
+                    instagram BOOLEAN DEFAULT FALSE,
 
-        )
-    """)
+                    facebook BOOLEAN DEFAULT FALSE
 
-    conn.commit()
+                )
+            """)
 
-    conn.close()
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def carregar_config_agente(
@@ -52,13 +59,16 @@ def carregar_config_agente(
 
     conn = conectar()
 
-    config = pd.read_sql_query("""
-        SELECT *
-        FROM agente_config
-        WHERE empresa_id = ?
-    """, conn, params=(empresa_id,))
+    try:
 
-    conn.close()
+        config = pd.read_sql_query("""
+            SELECT *
+            FROM agente_config
+            WHERE empresa_id = %s
+        """, conn, params=(empresa_id,))
+
+    finally:
+        conn.close()
 
     if config.empty:
 
@@ -79,22 +89,29 @@ def criar_config_padrao(
 
     conn = conectar()
 
-    cursor = conn.cursor()
+    try:
 
-    cursor.execute("""
-        INSERT INTO agente_config (
+        with conn.cursor() as cursor:
 
-            empresa_id
+            cursor.execute("""
+                INSERT INTO agente_config (
 
-        )
-        VALUES (?)
-    """, (
-        empresa_id,
-    ))
+                    empresa_id
 
-    conn.commit()
+                )
+                VALUES (%s)
+            """, (
+                empresa_id,
+            ))
 
-    conn.close()
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def salvar_config_agente(
@@ -124,59 +141,67 @@ def salvar_config_agente(
 
     conn = conectar()
 
-    cursor = conn.cursor()
+    try:
 
-    cursor.execute("""
-        UPDATE agente_config
+        with conn.cursor() as cursor:
 
-        SET
+            cursor.execute("""
+                UPDATE agente_config
 
-            nome_agente = ?,
+                SET
 
-            tom = ?,
+                    nome_agente = %s,
 
-            nicho = ?,
+                    tom = %s,
 
-            objetivo = ?,
+                    nicho = %s,
 
-            ia_pode_vender = ?,
+                    objetivo = %s,
 
-            ia_envia_pix = ?,
+                    ia_pode_vender = %s,
 
-            ia_envia_link = ?,
+                    ia_envia_pix = %s,
 
-            whatsapp = ?,
+                    ia_envia_link = %s,
 
-            instagram = ?,
+                    whatsapp = %s,
 
-            facebook = ?
+                    instagram = %s,
 
-        WHERE empresa_id = ?
-    """, (
+                    facebook = %s
 
-        nome_agente,
+                WHERE empresa_id = %s
+            """, (
 
-        tom,
+                nome_agente,
 
-        nicho,
+                tom,
 
-        objetivo,
+                nicho,
 
-        ia_pode_vender,
+                objetivo,
 
-        ia_envia_pix,
+                ia_pode_vender,
 
-        ia_envia_link,
+                ia_envia_pix,
 
-        whatsapp,
+                ia_envia_link,
 
-        instagram,
+                whatsapp,
 
-        facebook,
+                instagram,
 
-        empresa_id
-    ))
+                facebook,
 
-    conn.commit()
+                empresa_id
 
-    conn.close()
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

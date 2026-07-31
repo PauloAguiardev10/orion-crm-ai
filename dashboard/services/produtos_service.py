@@ -16,31 +16,36 @@ CATEGORIAS_PRODUTOS = [
 def criar_tabela_produtos():
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS produtos (
+    try:
+        with conn.cursor() as cursor:
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS produtos (
 
-            empresa_id INTEGER DEFAULT 1,
+                    id SERIAL PRIMARY KEY,
 
-            nome TEXT,
+                    empresa_id INTEGER DEFAULT 1,
 
-            categoria TEXT,
+                    nome VARCHAR(255),
 
-            descricao TEXT,
+                    categoria VARCHAR(100),
 
-            preco REAL DEFAULT 0,
+                    descricao TEXT,
 
-            ativo INTEGER DEFAULT 1,
+                    preco NUMERIC(10,2) DEFAULT 0,
 
-            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+                    ativo BOOLEAN DEFAULT TRUE,
 
-    conn.commit()
-    conn.close()
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+                )
+            """)
+
+        conn.commit()
+
+    finally:
+        conn.close()
 
 
 def listar_produtos(empresa_id=1):
@@ -49,16 +54,18 @@ def listar_produtos(empresa_id=1):
 
     conn = conectar()
 
-    produtos = pd.read_sql_query("""
-        SELECT *
-        FROM produtos
-        WHERE empresa_id = ?
-        ORDER BY id DESC
-    """, conn, params=(empresa_id,))
+    try:
+        produtos = pd.read_sql_query("""
+            SELECT *
+            FROM produtos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+        """, conn, params=(empresa_id,))
 
-    conn.close()
+        return produtos
 
-    return produtos
+    finally:
+        conn.close()
 
 
 def carregar_produtos(empresa_id=1):
@@ -71,38 +78,47 @@ def cadastrar_produto(
     categoria,
     descricao,
     preco,
-    ativo=1
+    ativo=True
 ):
 
     criar_tabela_produtos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO produtos (
+    try:
+        with conn.cursor() as cursor:
 
-            empresa_id,
-            nome,
-            categoria,
-            descricao,
-            preco,
-            ativo
+            cursor.execute("""
+                INSERT INTO produtos (
 
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
+                    empresa_id,
+                    nome,
+                    categoria,
+                    descricao,
+                    preco,
+                    ativo
 
-        empresa_id,
-        nome,
-        categoria,
-        descricao,
-        preco,
-        ativo
-    ))
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
 
-    conn.commit()
-    conn.close()
+                empresa_id,
+                nome,
+                categoria,
+                descricao,
+                preco,
+                ativo
+
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def atualizar_produto(
@@ -111,38 +127,47 @@ def atualizar_produto(
     categoria,
     descricao,
     preco,
-    ativo=1
+    ativo=True
 ):
 
     criar_tabela_produtos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE produtos
+    try:
+        with conn.cursor() as cursor:
 
-        SET
+            cursor.execute("""
+                UPDATE produtos
 
-            nome = ?,
-            categoria = ?,
-            descricao = ?,
-            preco = ?,
-            ativo = ?
+                SET
 
-        WHERE id = ?
-    """, (
+                    nome = %s,
+                    categoria = %s,
+                    descricao = %s,
+                    preco = %s,
+                    ativo = %s
 
-        nome,
-        categoria,
-        descricao,
-        preco,
-        ativo,
-        int(produto_id)
-    ))
+                WHERE id = %s
+            """, (
 
-    conn.commit()
-    conn.close()
+                nome,
+                categoria,
+                descricao,
+                preco,
+                ativo,
+                int(produto_id)
+
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def excluir_produto(produto_id):
@@ -150,14 +175,22 @@ def excluir_produto(produto_id):
     criar_tabela_produtos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM produtos
-        WHERE id = ?
-    """, (
-        int(produto_id),
-    ))
+    try:
+        with conn.cursor() as cursor:
 
-    conn.commit()
-    conn.close()
+            cursor.execute("""
+                DELETE FROM produtos
+                WHERE id = %s
+            """, (
+                int(produto_id),
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

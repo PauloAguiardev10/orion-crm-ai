@@ -1,240 +1,175 @@
-import sqlite3
 import hashlib
-from pathlib import Path
+
+from dashboard.database.db import conectar
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "database" / "agente_sdr.db"
+def criptografar_senha(senha: str) -> str:
+    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
 
 
-def conectar():
-    return sqlite3.connect(DB_PATH)
-
-
-def criptografar_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
-
-
-def garantir_colunas():
+def criar_ou_atualizar_empresa(
+    nome: str,
+    slug: str,
+    tipo: str,
+    parceiro_nome: str,
+    plano: str,
+    nicho: str,
+) -> int:
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS empresas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            tipo TEXT DEFAULT 'cliente',
-            parceiro_nome TEXT,
-            status TEXT DEFAULT 'ativa',
-            status_financeiro TEXT DEFAULT 'em_dia',
-            valor_mensal REAL DEFAULT 0,
-            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO empresas (
+                    nome,
+                    slug,
+                    tipo,
+                    parceiro_nome,
+                    plano,
+                    nicho,
+                    status,
+                    status_financeiro,
+                    valor_mensal,
+                    bloqueio_automatico
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s,
+                    'ativa', 'em_dia', 0, TRUE
+                )
+                ON CONFLICT (slug)
+                DO UPDATE SET
+                    nome = EXCLUDED.nome,
+                    tipo = EXCLUDED.tipo,
+                    parceiro_nome = EXCLUDED.parceiro_nome,
+                    plano = EXCLUDED.plano,
+                    nicho = EXCLUDED.nicho,
+                    status = 'ativa',
+                    status_financeiro = 'em_dia'
+                RETURNING id
+                """,
+                (nome, slug, tipo, parceiro_nome, plano, nicho),
+            )
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER,
-            empresa TEXT,
-            usuario TEXT NOT NULL UNIQUE,
-            senha TEXT NOT NULL,
-            nivel TEXT DEFAULT 'usuario'
-        )
-    """)
-
-    cursor.execute("PRAGMA table_info(empresas)")
-    colunas_empresas = [col[1] for col in cursor.fetchall()]
-
-    if "tipo" not in colunas_empresas:
-        cursor.execute("ALTER TABLE empresas ADD COLUMN tipo TEXT DEFAULT 'cliente'")
-
-    if "parceiro_nome" not in colunas_empresas:
-        cursor.execute("ALTER TABLE empresas ADD COLUMN parceiro_nome TEXT")
-
-    if "status" not in colunas_empresas:
-        cursor.execute("ALTER TABLE empresas ADD COLUMN status TEXT DEFAULT 'ativa'")
-
-    if "status_financeiro" not in colunas_empresas:
-        cursor.execute("ALTER TABLE empresas ADD COLUMN status_financeiro TEXT DEFAULT 'em_dia'")
-
-    if "valor_mensal" not in colunas_empresas:
-        cursor.execute("ALTER TABLE empresas ADD COLUMN valor_mensal REAL DEFAULT 0")
-
-    cursor.execute("PRAGMA table_info(usuarios)")
-    colunas_usuarios = [col[1] for col in cursor.fetchall()]
-
-    if "empresa_id" not in colunas_usuarios:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
-
-    if "empresa" not in colunas_usuarios:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN empresa TEXT")
-
-    if "nivel" not in colunas_usuarios:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN nivel TEXT DEFAULT 'usuario'")
-
-    conn.commit()
-    conn.close()
-
-
-def criar_empresa(nome, tipo, parceiro_nome=None, valor_mensal=0):
-    conn = conectar()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id
-        FROM empresas
-        WHERE nome = ?
-    """, (nome,))
-
-    empresa = cursor.fetchone()
-
-    if empresa:
-        empresa_id = empresa[0]
-
-        cursor.execute("""
-            UPDATE empresas
-            SET tipo = ?,
-                parceiro_nome = ?,
-                status = 'ativa',
-                status_financeiro = 'em_dia',
-                valor_mensal = ?
-            WHERE id = ?
-        """, (
-            tipo,
-            parceiro_nome,
-            valor_mensal,
-            empresa_id
-        ))
+            empresa_id = int(cursor.fetchone()[0])
 
         conn.commit()
-        conn.close()
         return empresa_id
 
-    cursor.execute("""
-        INSERT INTO empresas (
-            nome,
-            tipo,
-            parceiro_nome,
-            status,
-            status_financeiro,
-            valor_mensal
-        )
-        VALUES (?, ?, ?, 'ativa', 'em_dia', ?)
-    """, (
-        nome,
-        tipo,
-        parceiro_nome,
-        valor_mensal
-    ))
+    except Exception:
+        conn.rollback()
+        raise
 
-    conn.commit()
-    empresa_id = cursor.lastrowid
-    conn.close()
-
-    return empresa_id
-
-
-def criar_usuario(usuario, senha, empresa, nivel):
-    conn = conectar()
-    cursor = conn.cursor()
-
-    senha_criptografada = criptografar_senha(senha)
-
-    cursor.execute("""
-        SELECT id
-        FROM empresas
-        WHERE nome = ?
-    """, (empresa,))
-
-    empresa_row = cursor.fetchone()
-
-    if not empresa_row:
+    finally:
         conn.close()
-        raise Exception(f"Empresa não encontrada: {empresa}")
 
-    empresa_id = empresa_row[0]
 
-    cursor.execute("""
-        SELECT id
-        FROM usuarios
-        WHERE usuario = ?
-    """, (usuario,))
+def criar_ou_atualizar_usuario(
+    empresa_id: int,
+    empresa_nome: str,
+    usuario: str,
+    email: str,
+    senha: str,
+    nivel: str,
+) -> None:
+    senha_hash = criptografar_senha(senha)
+    conn = conectar()
 
-    existente = cursor.fetchone()
-
-    if existente:
-        cursor.execute("""
-            UPDATE usuarios
-            SET senha = ?,
-                empresa = ?,
-                empresa_id = ?,
-                nivel = ?
-            WHERE usuario = ?
-        """, (
-            senha_criptografada,
-            empresa,
-            empresa_id,
-            nivel,
-            usuario
-        ))
-
-    else:
-        cursor.execute("""
-            INSERT INTO usuarios (
-                empresa_id,
-                empresa,
-                usuario,
-                senha,
-                nivel
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO usuarios (
+                    empresa_id,
+                    empresa,
+                    usuario,
+                    nome,
+                    email,
+                    senha,
+                    senha_hash,
+                    nivel,
+                    status
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, 'ativo'
+                )
+                ON CONFLICT (LOWER(usuario))
+                WHERE usuario IS NOT NULL
+                DO UPDATE SET
+                    empresa_id = EXCLUDED.empresa_id,
+                    empresa = EXCLUDED.empresa,
+                    nome = EXCLUDED.nome,
+                    email = EXCLUDED.email,
+                    senha = EXCLUDED.senha,
+                    senha_hash = EXCLUDED.senha_hash,
+                    nivel = EXCLUDED.nivel,
+                    status = 'ativo',
+                    atualizado_em = CURRENT_TIMESTAMP
+                """,
+                (
+                    empresa_id,
+                    empresa_nome,
+                    usuario,
+                    usuario,
+                    email,
+                    senha_hash,
+                    senha_hash,
+                    nivel,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            empresa_id,
-            empresa,
-            usuario,
-            senha_criptografada,
-            nivel
-        ))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
-def main():
-    garantir_colunas()
-
-    criar_empresa(
+def main() -> None:
+    orion_id = criar_ou_atualizar_empresa(
         nome="Orion Systems",
+        slug="orion-systems",
         tipo="master",
-        parceiro_nome=None,
-        valor_mensal=0
+        parceiro_nome="Orion",
+        plano="Premium",
+        nicho="Tecnologia e automação",
     )
 
-    criar_empresa(
+    forway_id = criar_ou_atualizar_empresa(
         nome="Forway",
-        tipo="parceiro_cliente",
+        slug="forway",
+        tipo="parceiro",
         parceiro_nome="Forway",
-        valor_mensal=0
+        plano="Premium",
+        nicho="Agência de marketing",
     )
 
-    criar_usuario(
+    criar_ou_atualizar_usuario(
+        empresa_id=orion_id,
+        empresa_nome="Orion Systems",
         usuario="orion",
+        email="orion@orion.local",
         senha="123456",
-        empresa="Orion Systems",
-        nivel="orion_admin"
+        nivel="orion_admin",
     )
 
-    criar_usuario(
+    criar_ou_atualizar_usuario(
+        empresa_id=forway_id,
+        empresa_nome="Forway",
         usuario="luciano",
+        email="luciano@forway.local",
         senha="123456",
-        empresa="Forway",
-        nivel="parceiro_admin"
+        nivel="parceiro_admin",
     )
 
-    print("Parceiro Forway criado/atualizado com sucesso.")
+    print("Orion Systems e Forway criadas/atualizadas com sucesso.")
     print("Login Orion: orion / 123456")
     print("Login Forway: luciano / 123456")
+    print("Altere as senhas padrão após o primeiro acesso.")
 
 
 if __name__ == "__main__":

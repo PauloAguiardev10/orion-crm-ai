@@ -19,29 +19,29 @@ def empresa_bloqueada():
     ]:
         return False
 
+    conn = None
+
     try:
 
         conn = conectar()
 
-        cursor = conn.cursor()
+        with conn.cursor() as cursor:
 
-        cursor.execute("""
-            SELECT
+            cursor.execute("""
+                SELECT
 
-                status,
-                status_financeiro,
-                bloqueio_automatico
+                    status,
+                    status_financeiro,
+                    bloqueio_automatico
 
-            FROM empresas
+                FROM empresas
 
-            WHERE id = ?
-        """, (
-            empresa_id,
-        ))
+                WHERE id = %s
+            """, (
+                empresa_id,
+            ))
 
-        resultado = cursor.fetchone()
-
-        conn.close()
+            resultado = cursor.fetchone()
 
         if not resultado:
             return False
@@ -66,6 +66,11 @@ def empresa_bloqueada():
 
     except Exception:
         return False
+
+    finally:
+
+        if conn:
+            conn.close()
 
     return False
 

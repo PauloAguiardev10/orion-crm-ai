@@ -31,56 +31,41 @@ FORMAS_PAGAMENTO = [
 def criar_tabela_pedidos():
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pedidos (
+    try:
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        with conn.cursor() as cursor:
 
-            empresa_id INTEGER DEFAULT 1,
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pedidos (
 
-            cliente TEXT,
+                    id SERIAL PRIMARY KEY,
 
-            produto TEXT,
+                    empresa_id INTEGER DEFAULT 1,
 
-            quantidade INTEGER DEFAULT 1,
+                    cliente VARCHAR(255),
 
-            valor_total REAL DEFAULT 0,
+                    produto VARCHAR(255),
 
-            status TEXT DEFAULT 'Pendente',
+                    quantidade INTEGER DEFAULT 1,
 
-            status_pagamento TEXT DEFAULT 'Pendente',
+                    valor_total NUMERIC(10,2) DEFAULT 0,
 
-            forma_pagamento TEXT DEFAULT 'Pix',
+                    status VARCHAR(50) DEFAULT 'Pendente',
 
-            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+                    status_pagamento VARCHAR(50) DEFAULT 'Pendente',
 
-    cursor.execute("PRAGMA table_info(pedidos)")
-    colunas = [col[1] for col in cursor.fetchall()]
+                    forma_pagamento VARCHAR(50) DEFAULT 'Pix',
 
-    if "status_pagamento" not in colunas:
-        cursor.execute("""
-            ALTER TABLE pedidos
-            ADD COLUMN status_pagamento TEXT DEFAULT 'Pendente'
-        """)
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
-    if "forma_pagamento" not in colunas:
-        cursor.execute("""
-            ALTER TABLE pedidos
-            ADD COLUMN forma_pagamento TEXT DEFAULT 'Pix'
-        """)
+                )
+            """)
 
-    if "status" not in colunas:
-        cursor.execute("""
-            ALTER TABLE pedidos
-            ADD COLUMN status TEXT DEFAULT 'Pendente'
-        """)
+        conn.commit()
 
-    conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
 
 def listar_pedidos(empresa_id=1):
@@ -89,16 +74,19 @@ def listar_pedidos(empresa_id=1):
 
     conn = conectar()
 
-    pedidos = pd.read_sql_query("""
-        SELECT *
-        FROM pedidos
-        WHERE empresa_id = ?
-        ORDER BY id DESC
-    """, conn, params=(empresa_id,))
+    try:
 
-    conn.close()
+        pedidos = pd.read_sql_query("""
+            SELECT *
+            FROM pedidos
+            WHERE empresa_id = %s
+            ORDER BY id DESC
+        """, conn, params=(empresa_id,))
 
-    return pedidos
+        return pedidos
+
+    finally:
+        conn.close()
 
 
 def carregar_pedidos(empresa_id=1):
@@ -119,36 +107,46 @@ def cadastrar_pedido(
     criar_tabela_pedidos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO pedidos (
+    try:
 
-            empresa_id,
-            cliente,
-            produto,
-            quantidade,
-            valor_total,
-            status,
-            status_pagamento,
-            forma_pagamento
+        with conn.cursor() as cursor:
 
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
+            cursor.execute("""
+                INSERT INTO pedidos (
 
-        empresa_id,
-        cliente,
-        produto,
-        quantidade,
-        valor_total,
-        status,
-        status_pagamento,
-        forma_pagamento
-    ))
+                    empresa_id,
+                    cliente,
+                    produto,
+                    quantidade,
+                    valor_total,
+                    status,
+                    status_pagamento,
+                    forma_pagamento
 
-    conn.commit()
-    conn.close()
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+
+                empresa_id,
+                cliente,
+                produto,
+                quantidade,
+                valor_total,
+                status,
+                status_pagamento,
+                forma_pagamento
+
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def salvar_pedido(
@@ -188,36 +186,46 @@ def atualizar_pedido(
     criar_tabela_pedidos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE pedidos
+    try:
 
-        SET
+        with conn.cursor() as cursor:
 
-            cliente = ?,
-            produto = ?,
-            quantidade = ?,
-            valor_total = ?,
-            status = ?,
-            status_pagamento = ?,
-            forma_pagamento = ?
+            cursor.execute("""
+                UPDATE pedidos
 
-        WHERE id = ?
-    """, (
+                SET
 
-        cliente,
-        produto,
-        quantidade,
-        valor_total,
-        status,
-        status_pagamento,
-        forma_pagamento,
-        int(pedido_id)
-    ))
+                    cliente = %s,
+                    produto = %s,
+                    quantidade = %s,
+                    valor_total = %s,
+                    status = %s,
+                    status_pagamento = %s,
+                    forma_pagamento = %s
 
-    conn.commit()
-    conn.close()
+                WHERE id = %s
+            """, (
+
+                cliente,
+                produto,
+                quantidade,
+                valor_total,
+                status,
+                status_pagamento,
+                forma_pagamento,
+                int(pedido_id)
+
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def excluir_pedido(pedido_id):
@@ -225,14 +233,23 @@ def excluir_pedido(pedido_id):
     criar_tabela_pedidos()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM pedidos
-        WHERE id = ?
-    """, (
-        int(pedido_id),
-    ))
+    try:
 
-    conn.commit()
-    conn.close()
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                DELETE FROM pedidos
+                WHERE id = %s
+            """, (
+                int(pedido_id),
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

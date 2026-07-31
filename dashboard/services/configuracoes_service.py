@@ -4,261 +4,370 @@ from database.db import conectar
 
 
 def garantir_tabelas_config():
+
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS especialistas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER DEFAULT 1,
-            nome TEXT NOT NULL
-        )
-    """)
+    try:
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS servicos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER DEFAULT 1,
-            nome TEXT NOT NULL
-        )
-    """)
+        with conn.cursor() as cursor:
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS especialista_servicos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER DEFAULT 1,
-            especialista_id INTEGER NOT NULL,
-            servico_id INTEGER NOT NULL
-        )
-    """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS especialistas (
 
-    for tabela in ["especialistas", "servicos", "especialista_servicos"]:
-        cursor.execute(f"PRAGMA table_info({tabela})")
-        colunas = [col[1] for col in cursor.fetchall()]
+                    id SERIAL PRIMARY KEY,
 
-        if "empresa_id" not in colunas:
-            cursor.execute(f"""
-                ALTER TABLE {tabela}
-                ADD COLUMN empresa_id INTEGER DEFAULT 1
+                    empresa_id INTEGER DEFAULT 1,
+
+                    nome VARCHAR(255) NOT NULL
+
+                )
             """)
 
-    conn.commit()
-    conn.close()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS servicos (
+
+                    id SERIAL PRIMARY KEY,
+
+                    empresa_id INTEGER DEFAULT 1,
+
+                    nome VARCHAR(255) NOT NULL
+
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS especialista_servicos (
+
+                    id SERIAL PRIMARY KEY,
+
+                    empresa_id INTEGER DEFAULT 1,
+
+                    especialista_id INTEGER NOT NULL,
+
+                    servico_id INTEGER NOT NULL
+
+                )
+            """)
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 def limpar_especialistas_duplicados(empresa_id=1):
+
     garantir_tabelas_config()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT nome
-        FROM especialistas
-        WHERE empresa_id = ?
-        GROUP BY LOWER(TRIM(nome))
-        HAVING COUNT(*) > 1
-    """, (empresa_id,))
+    try:
 
-    nomes_duplicados = cursor.fetchall()
+        with conn.cursor() as cursor:
 
-    for item in nomes_duplicados:
-        nome = item["nome"] if hasattr(item, "keys") else item[0]
-
-        cursor.execute("""
-            SELECT id
-            FROM especialistas
-            WHERE empresa_id = ?
-            AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
-            ORDER BY id ASC
-        """, (empresa_id, nome))
-
-        ids = [
-            linha["id"] if hasattr(linha, "keys") else linha[0]
-            for linha in cursor.fetchall()
-        ]
-
-        if not ids:
-            continue
-
-        id_principal = ids[0]
-        ids_duplicados = ids[1:]
-
-        for id_dup in ids_duplicados:
             cursor.execute("""
-                UPDATE especialista_servicos
-                SET especialista_id = ?
-                WHERE especialista_id = ?
-                AND empresa_id = ?
+                SELECT MIN(nome) AS nome
+                FROM especialistas
+                WHERE empresa_id = %s
+                GROUP BY LOWER(TRIM(nome))
+                HAVING COUNT(*) > 1
             """, (
-                id_principal,
-                id_dup,
+                empresa_id,
+            ))
+
+            nomes_duplicados = cursor.fetchall()
+
+            for item in nomes_duplicados:
+
+                nome = item[0]
+
+                cursor.execute("""
+                    SELECT id
+                    FROM especialistas
+                    WHERE empresa_id = %s
+                    AND LOWER(TRIM(nome)) = LOWER(TRIM(%s))
+                    ORDER BY id ASC
+                """, (
+                    empresa_id,
+                    nome
+                ))
+
+                ids = [
+                    linha[0]
+                    for linha in cursor.fetchall()
+                ]
+
+                if not ids:
+                    continue
+
+                id_principal = ids[0]
+                ids_duplicados = ids[1:]
+
+                for id_duplicado in ids_duplicados:
+
+                    cursor.execute("""
+                        UPDATE especialista_servicos
+
+                        SET especialista_id = %s
+
+                        WHERE especialista_id = %s
+                        AND empresa_id = %s
+                    """, (
+                        id_principal,
+                        id_duplicado,
+                        empresa_id
+                    ))
+
+                    cursor.execute("""
+                        DELETE FROM especialistas
+
+                        WHERE id = %s
+                        AND empresa_id = %s
+                    """, (
+                        id_duplicado,
+                        empresa_id
+                    ))
+
+            cursor.execute("""
+                DELETE FROM especialista_servicos
+
+                WHERE id NOT IN (
+
+                    SELECT MIN(id)
+
+                    FROM especialista_servicos
+
+                    WHERE empresa_id = %s
+
+                    GROUP BY
+                        empresa_id,
+                        especialista_id,
+                        servico_id
+
+                )
+
+                AND empresa_id = %s
+            """, (
+                empresa_id,
                 empresa_id
             ))
 
-            cursor.execute("""
-                DELETE FROM especialistas
-                WHERE id = ?
-                AND empresa_id = ?
-            """, (
-                id_dup,
-                empresa_id
-            ))
+        conn.commit()
 
-    cursor.execute("""
-        DELETE FROM especialista_servicos
-        WHERE id NOT IN (
-            SELECT MIN(id)
-            FROM especialista_servicos
-            WHERE empresa_id = ?
-            GROUP BY empresa_id, especialista_id, servico_id
-        )
-        AND empresa_id = ?
-    """, (
-        empresa_id,
-        empresa_id
-    ))
+    except Exception:
+        conn.rollback()
+        raise
 
-    conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
 
 def carregar_servicos(empresa_id=1):
+
     garantir_tabelas_config()
 
     conn = conectar()
 
-    servicos = pd.read_sql_query("""
-        SELECT *
-        FROM servicos
-        WHERE empresa_id = ?
-        ORDER BY id
-    """, conn, params=(empresa_id,))
+    try:
 
-    conn.close()
-    return servicos
+        servicos = pd.read_sql_query("""
+            SELECT *
+            FROM servicos
+            WHERE empresa_id = %s
+            ORDER BY id
+        """, conn, params=(empresa_id,))
+
+        return servicos
+
+    finally:
+        conn.close()
 
 
 def carregar_especialistas(empresa_id=1):
+
     garantir_tabelas_config()
     limpar_especialistas_duplicados(empresa_id)
 
     conn = conectar()
 
-    especialistas = pd.read_sql_query("""
-        SELECT
-            especialistas.id,
-            especialistas.empresa_id,
-            especialistas.nome,
-            GROUP_CONCAT(servicos.nome, ', ') AS especialidades
-        FROM especialistas
-        LEFT JOIN especialista_servicos
-            ON especialista_servicos.especialista_id = especialistas.id
-            AND especialista_servicos.empresa_id = especialistas.empresa_id
-        LEFT JOIN servicos
-            ON servicos.id = especialista_servicos.servico_id
-            AND servicos.empresa_id = especialistas.empresa_id
-        WHERE especialistas.empresa_id = ?
-        GROUP BY especialistas.id, especialistas.empresa_id, especialistas.nome
-        ORDER BY especialistas.id
-    """, conn, params=(empresa_id,))
+    try:
 
-    conn.close()
-    return especialistas
+        especialistas = pd.read_sql_query("""
+            SELECT
 
+                especialistas.id,
 
-def carregar_ids_servicos_especialista(nome, empresa_id=1):
-    garantir_tabelas_config()
+                especialistas.empresa_id,
 
-    conn = conectar()
-    cursor = conn.cursor()
+                especialistas.nome,
 
-    cursor.execute("""
-        SELECT id
-        FROM especialistas
-        WHERE empresa_id = ?
-        AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
-        ORDER BY id ASC
-        LIMIT 1
-    """, (
-        empresa_id,
-        nome.strip()
-    ))
+                STRING_AGG(
+                    DISTINCT servicos.nome,
+                    ', '
+                    ORDER BY servicos.nome
+                ) AS especialidades
 
-    especialista = cursor.fetchone()
+            FROM especialistas
 
-    if not especialista:
+            LEFT JOIN especialista_servicos
+
+                ON especialista_servicos.especialista_id =
+                   especialistas.id
+
+                AND especialista_servicos.empresa_id =
+                    especialistas.empresa_id
+
+            LEFT JOIN servicos
+
+                ON servicos.id =
+                   especialista_servicos.servico_id
+
+                AND servicos.empresa_id =
+                    especialistas.empresa_id
+
+            WHERE especialistas.empresa_id = %s
+
+            GROUP BY
+
+                especialistas.id,
+
+                especialistas.empresa_id,
+
+                especialistas.nome
+
+            ORDER BY especialistas.id
+        """, conn, params=(empresa_id,))
+
+        return especialistas
+
+    finally:
         conn.close()
-        return []
-
-    especialista_id = (
-        especialista["id"]
-        if hasattr(especialista, "keys")
-        else especialista[0]
-    )
-
-    cursor.execute("""
-        SELECT servico_id
-        FROM especialista_servicos
-        WHERE empresa_id = ?
-        AND especialista_id = ?
-    """, (
-        empresa_id,
-        especialista_id
-    ))
-
-    ids = [
-        linha["servico_id"] if hasattr(linha, "keys") else linha[0]
-        for linha in cursor.fetchall()
-    ]
-
-    conn.close()
-    return ids
 
 
-def cadastrar_servico(nome, empresa_id=1):
-    if not nome.strip():
-        return False
+def carregar_ids_servicos_especialista(
+    nome,
+    empresa_id=1
+):
 
     garantir_tabelas_config()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT id
-        FROM servicos
-        WHERE empresa_id = ?
-        AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
-    """, (
-        empresa_id,
-        nome.strip()
-    ))
+    try:
 
-    existente = cursor.fetchone()
+        with conn.cursor() as cursor:
 
-    if existente:
+            cursor.execute("""
+                SELECT id
+                FROM especialistas
+
+                WHERE empresa_id = %s
+
+                AND LOWER(TRIM(nome)) =
+                    LOWER(TRIM(%s))
+
+                ORDER BY id ASC
+
+                LIMIT 1
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+            especialista = cursor.fetchone()
+
+            if not especialista:
+                return []
+
+            especialista_id = especialista[0]
+
+            cursor.execute("""
+                SELECT servico_id
+                FROM especialista_servicos
+
+                WHERE empresa_id = %s
+
+                AND especialista_id = %s
+            """, (
+                empresa_id,
+                especialista_id
+            ))
+
+            ids = [
+                linha[0]
+                for linha in cursor.fetchall()
+            ]
+
+            return ids
+
+    finally:
         conn.close()
+        def cadastrar_servico(nome, empresa_id=1):
+
+            if not nome.strip():
+                return False
+
+    garantir_tabelas_config()
+
+    conn = conectar()
+
+    try:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                SELECT id
+                FROM servicos
+
+                WHERE empresa_id = %s
+
+                AND LOWER(TRIM(nome)) =
+                    LOWER(TRIM(%s))
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+            existente = cursor.fetchone()
+
+            if existente:
+                return True
+
+            cursor.execute("""
+                INSERT INTO servicos (
+
+                    empresa_id,
+                    nome
+
+                )
+                VALUES (%s, %s)
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+        conn.commit()
+
         return True
 
-    cursor.execute("""
-        INSERT INTO servicos (
-            empresa_id,
-            nome
-        )
-        VALUES (?, ?)
-    """, (
-        empresa_id,
-        nome.strip()
-    ))
+    except Exception:
+        conn.rollback()
+        raise
 
-    conn.commit()
-    conn.close()
-
-    return True
+    finally:
+        conn.close()
 
 
-def cadastrar_especialista(nome, servicos_ids, empresa_id=1):
+def cadastrar_especialista(
+    nome,
+    servicos_ids,
+    empresa_id=1
+):
+
     if not nome.strip():
         return False
 
@@ -267,158 +376,220 @@ def cadastrar_especialista(nome, servicos_ids, empresa_id=1):
     nome = nome.strip()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT id
-        FROM especialistas
-        WHERE empresa_id = ?
-        AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
-        ORDER BY id ASC
-        LIMIT 1
-    """, (
-        empresa_id,
-        nome
-    ))
+    try:
 
-    especialista = cursor.fetchone()
+        with conn.cursor() as cursor:
 
-    if especialista:
-        especialista_id = (
-            especialista["id"]
-            if hasattr(especialista, "keys")
-            else especialista[0]
-        )
+            cursor.execute("""
+                SELECT id
+                FROM especialistas
 
-        cursor.execute("""
-            UPDATE especialistas
-            SET nome = ?
-            WHERE id = ?
-            AND empresa_id = ?
-        """, (
-            nome,
-            especialista_id,
-            empresa_id
-        ))
+                WHERE empresa_id = %s
 
-    else:
-        cursor.execute("""
-            INSERT INTO especialistas (
+                AND LOWER(TRIM(nome)) =
+                    LOWER(TRIM(%s))
+
+                ORDER BY id ASC
+
+                LIMIT 1
+            """, (
                 empresa_id,
                 nome
-            )
-            VALUES (?, ?)
-        """, (
-            empresa_id,
-            nome
-        ))
+            ))
+
+            especialista = cursor.fetchone()
+
+            if especialista:
+
+                especialista_id = especialista[0]
+
+                cursor.execute("""
+                    UPDATE especialistas
+
+                    SET nome = %s
+
+                    WHERE id = %s
+
+                    AND empresa_id = %s
+                """, (
+                    nome,
+                    especialista_id,
+                    empresa_id
+                ))
+
+            else:
+
+                cursor.execute("""
+                    INSERT INTO especialistas (
+
+                        empresa_id,
+                        nome
+
+                    )
+                    VALUES (%s, %s)
+
+                    RETURNING id
+                """, (
+                    empresa_id,
+                    nome
+                ))
+
+                especialista_id = cursor.fetchone()[0]
+
+            cursor.execute("""
+                DELETE FROM especialista_servicos
+
+                WHERE empresa_id = %s
+
+                AND especialista_id = %s
+            """, (
+                empresa_id,
+                especialista_id
+            ))
+
+            for servico_id in servicos_ids:
+
+                cursor.execute("""
+                    INSERT INTO especialista_servicos (
+
+                        empresa_id,
+                        especialista_id,
+                        servico_id
+
+                    )
+                    VALUES (%s, %s, %s)
+                """, (
+                    empresa_id,
+                    especialista_id,
+                    int(servico_id)
+                ))
 
         conn.commit()
-        especialista_id = cursor.lastrowid
 
-    cursor.execute("""
-        DELETE FROM especialista_servicos
-        WHERE empresa_id = ?
-        AND especialista_id = ?
-    """, (
-        empresa_id,
-        especialista_id
-    ))
+    except Exception:
+        conn.rollback()
+        raise
 
-    for servico_id in servicos_ids:
-        cursor.execute("""
-            INSERT INTO especialista_servicos (
-                empresa_id,
-                especialista_id,
-                servico_id
-            )
-            VALUES (?, ?, ?)
-        """, (
-            empresa_id,
-            especialista_id,
-            int(servico_id)
-        ))
-
-    conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
     limpar_especialistas_duplicados(empresa_id)
 
     return True
 
 
-def excluir_especialista_por_nome(nome, empresa_id=1):
-    garantir_tabelas_config()
-
-    conn = conectar()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id
-        FROM especialistas
-        WHERE empresa_id = ?
-        AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
-    """, (
-        empresa_id,
-        nome.strip()
-    ))
-
-    especialistas = cursor.fetchall()
-
-    ids = [
-        linha["id"] if hasattr(linha, "keys") else linha[0]
-        for linha in especialistas
-    ]
-
-    for especialista_id in ids:
-        cursor.execute("""
-            DELETE FROM especialista_servicos
-            WHERE empresa_id = ?
-            AND especialista_id = ?
-        """, (
-            empresa_id,
-            especialista_id
-        ))
-
-        cursor.execute("""
-            DELETE FROM especialistas
-            WHERE empresa_id = ?
-            AND id = ?
-        """, (
-            empresa_id,
-            especialista_id
-        ))
-
-    conn.commit()
-    conn.close()
-
-    return True
-def excluir_servico(servico_id, empresa_id=1):
+def excluir_especialista_por_nome(
+    nome,
+    empresa_id=1
+):
 
     garantir_tabelas_config()
 
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        DELETE FROM especialista_servicos
-        WHERE servico_id = ?
-        AND empresa_id = ?
-    """, (
-        int(servico_id),
-        empresa_id
-    ))
+    try:
 
-    cursor.execute("""
-        DELETE FROM servicos
-        WHERE id = ?
-        AND empresa_id = ?
-    """, (
-        int(servico_id),
-        empresa_id
-    ))
+        with conn.cursor() as cursor:
 
-    conn.commit()
-    conn.close()
+            cursor.execute("""
+                SELECT id
+                FROM especialistas
 
-    return True
+                WHERE empresa_id = %s
+
+                AND LOWER(TRIM(nome)) =
+                    LOWER(TRIM(%s))
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+            especialistas = cursor.fetchall()
+
+            ids = [
+                linha[0]
+                for linha in especialistas
+            ]
+
+            for especialista_id in ids:
+
+                cursor.execute("""
+                    DELETE FROM especialista_servicos
+
+                    WHERE empresa_id = %s
+
+                    AND especialista_id = %s
+                """, (
+                    empresa_id,
+                    especialista_id
+                ))
+
+                cursor.execute("""
+                    DELETE FROM especialistas
+
+                    WHERE empresa_id = %s
+
+                    AND id = %s
+                """, (
+                    empresa_id,
+                    especialista_id
+                ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+def excluir_servico(
+    servico_id,
+    empresa_id=1
+):
+
+    garantir_tabelas_config()
+
+    conn = conectar()
+
+    try:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                DELETE FROM especialista_servicos
+
+                WHERE servico_id = %s
+
+                AND empresa_id = %s
+            """, (
+                int(servico_id),
+                empresa_id
+            ))
+
+            cursor.execute("""
+                DELETE FROM servicos
+
+                WHERE id = %s
+
+                AND empresa_id = %s
+            """, (
+                int(servico_id),
+                empresa_id
+            ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

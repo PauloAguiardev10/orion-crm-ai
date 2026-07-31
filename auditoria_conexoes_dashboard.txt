@@ -1,0 +1,81 @@
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\configurar_logo.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\configurar_logo.py:3:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\criar_dados_demo.py:12:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\configuracoes.py:34:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:7:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:48:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:97:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:139:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:192:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\empresas.py:225:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\integracoes.py:42:"Quando o gestor liberar os acessos, conectaremos os canais reais ao CRM SDR."
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:12:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\app_pages\visao_geral.py:56:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\components\sidebar.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\components\sidebar.py:8:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\database\db.py:3:import psycopg2
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\database\db.py:6:def conectar():
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\database\db.py:7:return psycopg2.connect(
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:8:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:53:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:80:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:125:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:4:from psycopg2.extras import RealDictCursor
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:24:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:25:cursor = conn.cursor(cursor_factory=RealDictCursor)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:126:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:127:cursor = conn.cursor(cursor_factory=RealDictCursor)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:186:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:187:cursor = conn.cursor(cursor_factory=RealDictCursor)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:230:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:231:cursor = conn.cursor(cursor_factory=RealDictCursor)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:274:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:275:cursor = conn.cursor(cursor_factory=RealDictCursor)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:7:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:52:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:129:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:146:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:173:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:225:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:269:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:353:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:400:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:15:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:60:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:80:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:37:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:170:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:1:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:8:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:84:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:103:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:129:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:33:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:90:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:121:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:190:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:227:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:18:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:50:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:79:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:119:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:152:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:4:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:12:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:33:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:63:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:134:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\bloqueio.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\bloqueio.py:24:conn = conectar()
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\permissoes.py:3:from database.db import conectar
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\utils\permissoes.py:8:conn = conectar()

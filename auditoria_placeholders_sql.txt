@@ -1,0 +1,110 @@
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:58:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:90:VALUES (?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:134:nome_agente = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:136:tom = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:138:nicho = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:140:objetivo = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:142:ia_pode_vender = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:144:ia_envia_pix = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:146:ia_envia_link = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:148:whatsapp = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:150:instagram = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:152:facebook = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\agente_service.py:154:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:37:VALUES (%s, %s, %s, %s, %s)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:53:WHERE slug = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:78:VALUES (%s, %s, %s, %s, %s, %s)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:95:empresa_id = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:96:nivel = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:97:status = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:99:WHERE email = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:139:LOWER(usuarios.email) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:140:OR LOWER(usuarios.nome) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:142:AND usuarios.senha_hash = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:162:WHERE id = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:199:LOWER(usuarios.email) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:200:OR LOWER(usuarios.nome) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:243:LOWER(usuarios.email) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:244:OR LOWER(usuarios.nome) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:287:LOWER(usuarios.email) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\auth_service.py:288:OR LOWER(usuarios.nome) = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:58:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:71:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:72:AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:90:SET especialista_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:91:WHERE especialista_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:92:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:101:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:102:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:113:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:116:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:134:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:161:WHERE especialistas.empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:179:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:180:AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:203:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:204:AND especialista_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:231:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:232:AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:249:VALUES (?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:275:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:276:AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:295:SET nome = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:296:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:297:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:310:VALUES (?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:321:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:322:AND especialista_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:335:VALUES (?, ?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:359:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:360:AND LOWER(TRIM(nome)) = LOWER(TRIM(?))
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:376:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:377:AND especialista_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:385:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:386:AND id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:405:WHERE servico_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:406:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:414:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\configuracoes_service.py:415:AND empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\empresas_service.py:138:VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:84:WHERE leads.empresa_id = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:178:status = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:179:responsavel = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:180:valor_negocio = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:181:mensalidade = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:182:motivo_perda = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:183:observacao_comercial = %s,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\leads_service.py:185:WHERE id = %s
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:69:VALUES (?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:116:WHERE empresa_modulos.empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:135:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\modulos_service.py:149:VALUES (?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:95:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:137:VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:198:cliente = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:199:produto = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:200:quantidade = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:201:valor_total = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:202:status = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:203:status_pagamento = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:204:forma_pagamento = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:206:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\pedidos_service.py:232:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:55:WHERE empresa_id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:93:VALUES (?, ?, ?, ?, ?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:127:nome = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:128:categoria = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:129:descricao = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:130:preco = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:131:ativo = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:133:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\produtos_service.py:157:WHERE id = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:71:WHERE usuario = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:79:SET empresa_id = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:80:empresa = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:81:senha = ?,
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:82:nivel = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:83:WHERE usuario = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:100:VALUES (?, ?, ?, ?, ?)
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:139:SET senha = ?
+C:\Users\paulo\AppData\Local\ZapTec\agente-sdr-forway\dashboard\services\usuarios_service.py:140:WHERE usuario = ?

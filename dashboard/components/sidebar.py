@@ -4,30 +4,41 @@ from database.db import conectar
 
 
 def obter_logo_empresa(empresa_id):
+    conn = None
+
     try:
         conn = conectar()
-        cursor = conn.cursor()
 
-        cursor.execute("PRAGMA table_info(empresas)")
-        colunas = [col[1] for col in cursor.fetchall()]
+        with conn.cursor() as cursor:
 
-        if "logo_path" not in colunas:
-            cursor.execute("ALTER TABLE empresas ADD COLUMN logo_path TEXT")
-            conn.commit()
+            cursor.execute("""
+                ALTER TABLE empresas
+                ADD COLUMN IF NOT EXISTS logo_path TEXT
+            """)
 
-        cursor.execute(
-            "SELECT logo_path FROM empresas WHERE id = ?",
-            (empresa_id,)
-        )
+            cursor.execute(
+                """
+                SELECT logo_path
+                FROM empresas
+                WHERE id = %s
+                """,
+                (empresa_id,)
+            )
 
-        resultado = cursor.fetchone()
-        conn.close()
+            resultado = cursor.fetchone()
+
+        conn.commit()
 
         if resultado and resultado[0]:
             return resultado[0]
 
     except Exception:
-        pass
+        if conn:
+            conn.rollback()
+
+    finally:
+        if conn:
+            conn.close()
 
     return "assets/logo_orion.png"
 
@@ -75,7 +86,9 @@ def render_sidebar():
 
         st.markdown("---")
         st.success("🟢 Agente IA Online")
-        st.caption("WhatsApp • Instagram Direct • Facebook Messenger")
+        st.caption(
+            "WhatsApp • Instagram Direct • Facebook Messenger"
+        )
 
         st.markdown("---")
 

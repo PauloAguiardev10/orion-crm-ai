@@ -1,6 +1,6 @@
-from database.db import conectar
-
 import pandas as pd
+
+from database.db import conectar
 
 
 PLANOS = [
@@ -11,46 +11,48 @@ PLANOS = [
 
 
 def criar_tabela_empresas():
-
     conn = conectar()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS empresas (
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS empresas (
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id SERIAL PRIMARY KEY,
 
-            nome TEXT UNIQUE NOT NULL,
+                    nome VARCHAR(255) UNIQUE NOT NULL,
 
-            plano TEXT DEFAULT 'Lite',
+                    plano VARCHAR(50) DEFAULT 'Lite',
 
-            nicho TEXT,
+                    nicho VARCHAR(255),
 
-            nome_agente TEXT DEFAULT 'Sofia',
+                    nome_agente VARCHAR(100) DEFAULT 'Sofia',
 
-            status TEXT DEFAULT 'ativa',
+                    status VARCHAR(30) DEFAULT 'ativa',
 
-            whatsapp BOOLEAN DEFAULT 1,
+                    whatsapp BOOLEAN DEFAULT TRUE,
 
-            instagram BOOLEAN DEFAULT 0,
+                    instagram BOOLEAN DEFAULT FALSE,
 
-            facebook BOOLEAN DEFAULT 0,
+                    facebook BOOLEAN DEFAULT FALSE,
 
-            crm BOOLEAN DEFAULT 0,
+                    crm BOOLEAN DEFAULT FALSE,
 
-            funil BOOLEAN DEFAULT 0,
+                    funil BOOLEAN DEFAULT FALSE,
 
-            analytics BOOLEAN DEFAULT 0,
+                    analytics BOOLEAN DEFAULT FALSE,
 
-            vendas_ia BOOLEAN DEFAULT 0,
+                    vendas_ia BOOLEAN DEFAULT FALSE,
 
-            criado_em TEXT DEFAULT CURRENT_TIMESTAMP
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
-        )
-    """)
+                )
+            """)
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+
+    finally:
+        conn.close()
 
 
 def listar_empresas():
@@ -59,15 +61,17 @@ def listar_empresas():
 
     conn = conectar()
 
-    empresas = pd.read_sql_query("""
-        SELECT *
-        FROM empresas
-        ORDER BY id DESC
-    """, conn)
+    try:
+        empresas = pd.read_sql_query("""
+            SELECT *
+            FROM empresas
+            ORDER BY id DESC
+        """, conn)
 
-    conn.close()
+        return empresas
 
-    return empresas
+    finally:
+        conn.close()
 
 
 def criar_empresa(
@@ -77,12 +81,7 @@ def criar_empresa(
     nome_agente
 ):
 
-    conn = conectar()
-    cursor = conn.cursor()
-
-    # =========================
-    # MÓDULOS AUTOMÁTICOS
-    # =========================
+    criar_tabela_empresas()
 
     whatsapp = True
 
@@ -95,65 +94,65 @@ def criar_empresa(
 
     vendas_ia = False
 
-    # =========================
-    # PRO
-    # =========================
-
     if plano in ["Pro", "Premium"]:
-
         crm = True
         funil = True
         analytics = True
 
-    # =========================
-    # PREMIUM
-    # =========================
-
     if plano == "Premium":
-
         instagram = True
         facebook = True
-
         vendas_ia = True
 
-    cursor.execute("""
-        INSERT INTO empresas (
+    conn = conectar()
 
-            nome,
-            plano,
-            nicho,
-            nome_agente,
+    try:
+        with conn.cursor() as cursor:
 
-            whatsapp,
-            instagram,
-            facebook,
+            cursor.execute("""
+                INSERT INTO empresas (
 
-            crm,
-            funil,
-            analytics,
+                    nome,
+                    plano,
+                    nicho,
+                    nome_agente,
 
-            vendas_ia
+                    whatsapp,
+                    instagram,
+                    facebook,
 
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
+                    crm,
+                    funil,
+                    analytics,
 
-        nome,
-        plano,
-        nicho,
-        nome_agente,
+                    vendas_ia
 
-        whatsapp,
-        instagram,
-        facebook,
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
 
-        crm,
-        funil,
-        analytics,
+                nome,
+                plano,
+                nicho,
+                nome_agente,
 
-        vendas_ia
+                whatsapp,
+                instagram,
+                facebook,
 
-    ))
+                crm,
+                funil,
+                analytics,
 
-    conn.commit()
-    conn.close()
+                vendas_ia
+
+            ))
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

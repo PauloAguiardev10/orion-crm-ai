@@ -4,24 +4,32 @@ from database.db import conectar
 
 
 def obter_plano_empresa(empresa_id):
+    conn = None
+
     try:
         conn = conectar()
-        cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT plano
-            FROM empresas
-            WHERE id = ?
-        """, (empresa_id,))
+        with conn.cursor() as cursor:
 
-        resultado = cursor.fetchone()
-        conn.close()
+            cursor.execute("""
+                SELECT plano
+                FROM empresas
+                WHERE id = %s
+            """, (
+                empresa_id,
+            ))
+
+            resultado = cursor.fetchone()
 
         if resultado:
             return resultado[0]
 
     except Exception:
         pass
+
+    finally:
+        if conn:
+            conn.close()
 
     return "Lite"
 
