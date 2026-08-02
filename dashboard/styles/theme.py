@@ -10,12 +10,34 @@ def carregar_tema():
     }
 
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 2.5rem !important;
+        padding-bottom: 2rem;
+
     }
 
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #020617, #0f172a);
         border-right: 1px solid #1e293b;
+    }
+
+    /*
+    Os títulos nativos criados com st.title() dentro das páginas são
+    ocultados. O app.py renderiza um único título dinâmico e confiável.
+    */
+    [data-testid="stAppViewContainer"] h1 {
+        display: none !important;
+    }
+
+    .orion-page-title {
+        color: #FFFFFF;
+        font-size: 2.55rem;
+        line-height: 1.35;
+        font-weight: 800;
+        margin: 0.5rem 0 1.4rem 0;
+        padding-top: 0.4rem;
+        padding-bottom: 0.2rem;
+        letter-spacing: -0.02em;
+        overflow: visible;
     }
 
     .hero {

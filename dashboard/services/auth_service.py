@@ -3,7 +3,9 @@ import hashlib
 from database.db import conectar
 from psycopg2.extras import RealDictCursor
 
+
 EMAIL_ADMIN_PADRAO = "admin@forway.local"
+USUARIO_ADMIN_PADRAO = "admin"
 NOME_ADMIN_PADRAO = "admin"
 SENHA_ADMIN_PADRAO = "123456"
 
@@ -12,99 +14,197 @@ def criptografar_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode("utf-8")).hexdigest()
 
 
-def garantir_tabelas_auth():
+def garantir_tabelas_auth() -> None:
     """
-    A estrutura das tabelas já existe no PostgreSQL.
+    Garante que a empresa Forway e o administrador padrão existam.
 
-    Esta função garante apenas:
-    - que a empresa Forway exista;
-    - que exista um administrador padrão para o primeiro acesso.
+    Esta função não cria tabelas. A estrutura do PostgreSQL deve ser
+    criada pelos scripts de migração do projeto.
     """
-
     conn = conectar()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        cursor.execute(
-            """
-            INSERT INTO empresas (
-                nome,
-                slug,
-                plano,
-                nicho,
-                status
-            )
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (slug) DO NOTHING
-            """,
-            (
-                "Forway",
-                "forway",
-                "Premium",
-                "Agência de marketing",
-                "ativa",
-            ),
-        )
-
-        cursor.execute(
-            """
-            SELECT id
-            FROM empresas
-            WHERE slug = %s
-            LIMIT 1
-            """,
-            ("forway",),
-        )
-
-        empresa = cursor.fetchone()
-
-        if not empresa:
-            raise RuntimeError(
-                "Não foi possível localizar a empresa Forway."
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT id
+                FROM empresas
+                WHERE slug = %s
+                   OR LOWER(nome) = LOWER(%s)
+                ORDER BY id
+                LIMIT 1
+                """,
+                (
+                    "forway",
+                    "Forway",
+                ),
             )
 
-        empresa_id = empresa["id"]
+            empresa = cursor.fetchone()
 
-        cursor.execute(
-            """
-            INSERT INTO usuarios (
-                empresa_id,
-                nome,
-                email,
-                senha_hash,
-                nivel,
-                status
+            if empresa:
+                empresa_id = int(empresa["id"])
+
+                cursor.execute(
+                    """
+                    UPDATE empresas
+                    SET
+                        nome = %s,
+                        slug = %s,
+                        tipo = %s,
+                        parceiro_nome = %s,
+                        plano = %s,
+                        nicho = %s,
+                        status = %s,
+                        status_financeiro = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        "Forway",
+                        "forway",
+                        "parceiro",
+                        "Forway",
+                        "Premium",
+                        "Agência de marketing",
+                        "ativa",
+                        "em_dia",
+                        empresa_id,
+                    ),
+                )
+
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO empresas (
+                        nome,
+                        slug,
+                        tipo,
+                        parceiro_nome,
+                        plano,
+                        nicho,
+                        status,
+                        status_financeiro,
+                        valor_mensal,
+                        bloqueio_automatico
+                    )
+                    VALUES (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        "Forway",
+                        "forway",
+                        "parceiro",
+                        "Forway",
+                        "Premium",
+                        "Agência de marketing",
+                        "ativa",
+                        "em_dia",
+                        0,
+                        True,
+                    ),
+                )
+
+                empresa_id = int(cursor.fetchone()["id"])
+
+            senha_hash = criptografar_senha(SENHA_ADMIN_PADRAO)
+
+            cursor.execute(
+                """
+                SELECT id
+                FROM usuarios
+                WHERE LOWER(COALESCE(email, '')) = %s
+                   OR LOWER(COALESCE(usuario, '')) = %s
+                ORDER BY id
+                LIMIT 1
+                """,
+                (
+                    EMAIL_ADMIN_PADRAO.lower(),
+                    USUARIO_ADMIN_PADRAO.lower(),
+                ),
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (email) DO NOTHING
-            """,
-            (
-                empresa_id,
-                NOME_ADMIN_PADRAO,
-                EMAIL_ADMIN_PADRAO,
-                criptografar_senha(SENHA_ADMIN_PADRAO),
-                "orion_admin",
-                "ativo",
-            ),
-        )
 
-        cursor.execute(
-            """
-            UPDATE usuarios
-            SET
-                empresa_id = %s,
-                nivel = %s,
-                status = %s,
-                atualizado_em = CURRENT_TIMESTAMP
-            WHERE email = %s
-            """,
-            (
-                empresa_id,
-                "orion_admin",
-                "ativo",
-                EMAIL_ADMIN_PADRAO,
-            ),
-        )
+            usuario_existente = cursor.fetchone()
+
+            if usuario_existente:
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET
+                        empresa_id = %s,
+                        empresa = %s,
+                        usuario = %s,
+                        nome = %s,
+                        email = %s,
+                        senha = %s,
+                        senha_hash = %s,
+                        nivel = %s,
+                        status = %s,
+                        atualizado_em = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    """,
+                    (
+                        empresa_id,
+                        "Forway",
+                        USUARIO_ADMIN_PADRAO,
+                        NOME_ADMIN_PADRAO,
+                        EMAIL_ADMIN_PADRAO,
+                        senha_hash,
+                        senha_hash,
+                        "parceiro_admin",
+                        "ativo",
+                        int(usuario_existente["id"]),
+                    ),
+                )
+
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO usuarios (
+                        empresa_id,
+                        empresa,
+                        usuario,
+                        nome,
+                        email,
+                        senha,
+                        senha_hash,
+                        nivel,
+                        status
+                    )
+                    VALUES (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s
+                    )
+                    """,
+                    (
+                        empresa_id,
+                        "Forway",
+                        USUARIO_ADMIN_PADRAO,
+                        NOME_ADMIN_PADRAO,
+                        EMAIL_ADMIN_PADRAO,
+                        senha_hash,
+                        senha_hash,
+                        "parceiro_admin",
+                        "ativo",
+                    ),
+                )
 
         conn.commit()
 
@@ -113,8 +213,52 @@ def garantir_tabelas_auth():
         raise
 
     finally:
-        cursor.close()
         conn.close()
+
+
+def _buscar_usuario_por_login(
+    cursor,
+    login: str,
+    senha_hash: str | None = None,
+):
+    filtros_senha = ""
+    parametros = [
+        login,
+        login,
+        login,
+    ]
+
+    if senha_hash is not None:
+        filtros_senha = "AND usuarios.senha_hash = %s"
+        parametros.append(senha_hash)
+
+    cursor.execute(
+        f"""
+        SELECT
+            usuarios.id,
+            usuarios.empresa_id,
+            usuarios.nivel,
+            empresas.nome AS empresa_nome
+        FROM usuarios
+
+        INNER JOIN empresas
+            ON empresas.id = usuarios.empresa_id
+
+        WHERE (
+            LOWER(COALESCE(usuarios.email, '')) = %s
+            OR LOWER(COALESCE(usuarios.nome, '')) = %s
+            OR LOWER(COALESCE(usuarios.usuario, '')) = %s
+        )
+          {filtros_senha}
+          AND usuarios.status = 'ativo'
+          AND empresas.status = 'ativa'
+
+        LIMIT 1
+        """,
+        tuple(parametros),
+    )
+
+    return cursor.fetchone()
 
 
 def validar_login(usuario: str, senha: str) -> bool:
@@ -124,57 +268,37 @@ def validar_login(usuario: str, senha: str) -> bool:
     senha_hash = criptografar_senha(senha)
 
     conn = conectar()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        cursor.execute(
-            """
-            SELECT usuarios.id
-            FROM usuarios
-
-            INNER JOIN empresas
-                ON empresas.id = usuarios.empresa_id
-
-            WHERE (
-                LOWER(usuarios.email) = %s
-                OR LOWER(usuarios.nome) = %s
-            )
-              AND usuarios.senha_hash = %s
-              AND usuarios.status = 'ativo'
-              AND empresas.status = 'ativa'
-
-            LIMIT 1
-            """,
-            (
-                login,
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            resultado = _buscar_usuario_por_login(
+                cursor,
                 login,
                 senha_hash,
-            ),
-        )
+            )
 
-        resultado = cursor.fetchone()
+            if not resultado:
+                return False
 
-        if resultado:
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET ultimo_login_em = CURRENT_TIMESTAMP
+                SET
+                    ultimo_login_em = CURRENT_TIMESTAMP,
+                    atualizado_em = CURRENT_TIMESTAMP
                 WHERE id = %s
                 """,
-                (resultado["id"],),
+                (int(resultado["id"]),),
             )
 
-            conn.commit()
-            return True
-
-        return False
+        conn.commit()
+        return True
 
     except Exception:
         conn.rollback()
         raise
 
     finally:
-        cursor.close()
         conn.close()
 
 
@@ -182,43 +306,21 @@ def obter_empresa_usuario(usuario: str):
     garantir_tabelas_auth()
 
     login = usuario.strip().lower()
-
     conn = conectar()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        cursor.execute(
-            """
-            SELECT empresas.nome
-            FROM usuarios
-
-            INNER JOIN empresas
-                ON empresas.id = usuarios.empresa_id
-
-            WHERE (
-                LOWER(usuarios.email) = %s
-                OR LOWER(usuarios.nome) = %s
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            resultado = _buscar_usuario_por_login(
+                cursor,
+                login,
             )
-              AND usuarios.status = 'ativo'
-              AND empresas.status = 'ativa'
 
-            LIMIT 1
-            """,
-            (
-                login,
-                login,
-            ),
-        )
+            if resultado:
+                return resultado["empresa_nome"]
 
-        resultado = cursor.fetchone()
-
-        if resultado:
-            return resultado["nome"]
-
-        return None
+            return None
 
     finally:
-        cursor.close()
         conn.close()
 
 
@@ -226,43 +328,21 @@ def obter_empresa_id_usuario(usuario: str):
     garantir_tabelas_auth()
 
     login = usuario.strip().lower()
-
     conn = conectar()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        cursor.execute(
-            """
-            SELECT empresas.id
-            FROM usuarios
-
-            INNER JOIN empresas
-                ON empresas.id = usuarios.empresa_id
-
-            WHERE (
-                LOWER(usuarios.email) = %s
-                OR LOWER(usuarios.nome) = %s
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            resultado = _buscar_usuario_por_login(
+                cursor,
+                login,
             )
-              AND usuarios.status = 'ativo'
-              AND empresas.status = 'ativa'
 
-            LIMIT 1
-            """,
-            (
-                login,
-                login,
-            ),
-        )
+            if resultado:
+                return int(resultado["empresa_id"])
 
-        resultado = cursor.fetchone()
-
-        if resultado:
-            return resultado["id"]
-
-        return None
+            return None
 
     finally:
-        cursor.close()
         conn.close()
 
 
@@ -270,41 +350,19 @@ def obter_nivel_usuario(usuario: str):
     garantir_tabelas_auth()
 
     login = usuario.strip().lower()
-
     conn = conectar()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        cursor.execute(
-            """
-            SELECT usuarios.nivel
-            FROM usuarios
-
-            INNER JOIN empresas
-                ON empresas.id = usuarios.empresa_id
-
-            WHERE (
-                LOWER(usuarios.email) = %s
-                OR LOWER(usuarios.nome) = %s
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            resultado = _buscar_usuario_por_login(
+                cursor,
+                login,
             )
-              AND usuarios.status = 'ativo'
-              AND empresas.status = 'ativa'
 
-            LIMIT 1
-            """,
-            (
-                login,
-                login,
-            ),
-        )
+            if resultado:
+                return resultado["nivel"]
 
-        resultado = cursor.fetchone()
-
-        if resultado:
-            return resultado["nivel"]
-
-        return "usuario"
+            return "usuario"
 
     finally:
-        cursor.close()
         conn.close()

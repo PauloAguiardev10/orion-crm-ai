@@ -361,6 +361,58 @@ def carregar_ids_servicos_especialista(
     finally:
         conn.close()
 
+def cadastrar_servico(nome, empresa_id=1):
+
+    if not nome or not nome.strip():
+        return False
+
+    garantir_tabelas_config()
+
+    conn = conectar()
+
+    try:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                SELECT id
+                FROM servicos
+
+                WHERE empresa_id = %s
+
+                AND LOWER(TRIM(nome)) =
+                    LOWER(TRIM(%s))
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+            existente = cursor.fetchone()
+
+            if existente:
+                return True
+
+            cursor.execute("""
+                INSERT INTO servicos (
+                    empresa_id,
+                    nome
+                )
+                VALUES (%s, %s)
+            """, (
+                empresa_id,
+                nome.strip()
+            ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 def cadastrar_especialista(
     nome,

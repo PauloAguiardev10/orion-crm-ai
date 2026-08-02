@@ -37,7 +37,7 @@ def criar_ou_atualizar_empresa(
                     %s, %s, %s, %s, %s, %s,
                     'ativa', 'em_dia', 0, TRUE
                 )
-                ON CONFLICT (slug)
+                ON CONFLICT (slug) WHERE slug IS NOT NULL
                 DO UPDATE SET
                     nome = EXCLUDED.nome,
                     tipo = EXCLUDED.tipo,

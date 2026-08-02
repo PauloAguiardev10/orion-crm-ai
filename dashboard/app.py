@@ -54,6 +54,55 @@ if "empresa_id" not in st.session_state:
 if "nivel" not in st.session_state:
     st.session_state.nivel = None
 
+if "empresa_login_id" not in st.session_state:
+    st.session_state.empresa_login_id = None
+
+if "empresa_login_nome" not in st.session_state:
+    st.session_state.empresa_login_nome = None
+
+if "empresa_ativa_id" not in st.session_state:
+    st.session_state.empresa_ativa_id = None
+
+if "empresa_ativa_nome" not in st.session_state:
+    st.session_state.empresa_ativa_nome = None
+
+
+TITULOS_PAGINAS = {
+    "📈 Leads": "📋 Leads",
+    "🛒 Produtos": "🛒 Produtos",
+    "🧾 Pedidos": "🧾 Pedidos / Vendas",
+    "💬 Conversas": "💬 Conversas",
+    "👨‍💼 Especialistas": "👨‍💼 Painel Especialistas",
+    "🔥 Funil Comercial": "🔥 Funil Comercial",
+    "📊 Serviços e Canais": "📊 Serviços e Canais",
+    "📌 Resultados": "📌 Resultados Comerciais",
+    "🔌 Integrações": "🔌 Integrações",
+    "⚙️ Configurações": "⚙️ Configurações Operacionais",
+    "🏢 Empresas": "🏢 Empresas",
+}
+
+
+def render_titulo_pagina(pagina):
+    """
+    Renderiza o título fora das páginas individuais.
+
+    Isso evita que o Streamlit reutilize visualmente o primeiro st.title()
+    mostrado durante a navegação.
+    """
+    titulo = TITULOS_PAGINAS.get(pagina)
+
+    if not titulo:
+        return
+
+    st.markdown(
+        f"""
+        <div class="orion-page-title">
+            {titulo}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def tela_login():
     st.markdown(
@@ -193,6 +242,11 @@ def tela_login():
                 st.session_state.empresa_id = empresa_id
                 st.session_state.nivel = nivel
 
+                st.session_state.empresa_login_id = empresa_id
+                st.session_state.empresa_login_nome = empresa
+                st.session_state.empresa_ativa_id = empresa_id
+                st.session_state.empresa_ativa_nome = empresa
+
                 st.rerun()
 
             else:
@@ -218,8 +272,15 @@ leads = carregar_leads(
 with st.sidebar:
     st.markdown("---")
 
-    st.caption(f"Empresa: {st.session_state.empresa}")
-    st.caption(f"ID Empresa: {st.session_state.empresa_id}")
+    st.caption(
+        f"Conta: {st.session_state.get('empresa_login_nome')}"
+    )
+    st.caption(
+        f"Empresa ativa: {st.session_state.get('empresa_ativa_nome')}"
+    )
+    st.caption(
+        f"ID ativo: {st.session_state.get('empresa_ativa_id')}"
+    )
     st.caption(f"Usuário: {st.session_state.usuario}")
     st.caption(f"Nível: {st.session_state.nivel}")
 
@@ -229,8 +290,17 @@ with st.sidebar:
         st.session_state.empresa = None
         st.session_state.empresa_id = None
         st.session_state.nivel = None
+        st.session_state.empresa_login_id = None
+        st.session_state.empresa_login_nome = None
+        st.session_state.empresa_ativa_id = None
+        st.session_state.empresa_ativa_nome = None
 
         st.rerun()
+
+
+# A Visão Geral já possui um cabeçalho próprio.
+if pagina != "🏠 Visão Geral":
+    render_titulo_pagina(pagina)
 
 
 if pagina == "🏠 Visão Geral":

@@ -1,11 +1,11 @@
-
-import streamlit as st
-import pandas as pd
-
+import re
+import unicodedata
 from datetime import datetime, timedelta
 
-from database.db import conectar
+import pandas as pd
+import streamlit as st
 
+from database.db import conectar
 from services.usuarios_service import criar_admin_empresa
 
 
@@ -46,53 +46,148 @@ def limpar_formulario_nova_empresa():
 
 def garantir_colunas_empresas():
     """
-    PostgreSQL já possui toda a estrutura criada pelas migrations.
-    Esta função foi mantida apenas para compatibilidade com o restante
-    do sistema.
+    A estrutura PostgreSQL já é criada pelos scripts de migração.
+    A função é mantida por compatibilidade com chamadas antigas.
     """
     return
 
 
-def listar_empresas():
+def gerar_slug(texto):
+    texto_normalizado = unicodedata.normalize("NFKD", texto)
+    texto_sem_acentos = "".join(
+        caractere
+        for caractere in texto_normalizado
+        if not unicodedata.combining(caractere)
+    )
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", texto_sem_acentos)
+    return slug.strip("-").lower()
 
-    nivel = st.session_state.get("nivel")
-    empresa_logada = st.session_state.get("empresa")
+
+def gerar_slug_unico(cursor, nome):
+    slug_base = gerar_slug(nome) or "empresa"
+    slug = slug_base
+    contador = 2
+
+    while True:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM empresas
+            WHERE slug = %s
+            LIMIT 1
+            """,
+            (slug,),
+        )
+
+        if not cursor.fetchone():
+            return slug
+
+        slug = f"{slug_base}-{contador}"
+        contador += 1
+
+
+def obter_empresa_logada():
+    empresa_id = st.session_state.get("empresa_id")
+
+    if not empresa_id:
+        return None
 
     conn = conectar()
 
     try:
-
-        if nivel == "parceiro_admin":
-
-            empresas = pd.read_sql_query(
+        with conn.cursor() as cursor:
+            cursor.execute(
                 """
-                SELECT *
+                SELECT
+                    id,
+                    nome,
+                    tipo,
+                    parceiro_id
                 FROM empresas
-                WHERE parceiro_nome = %s
-                  AND nome <> 'Orion Systems'
-                ORDER BY id DESC
+                WHERE id = %s
                 """,
-                conn,
-                params=(empresa_logada,),
+                (int(empresa_id),),
             )
 
-        else:
+            resultado = cursor.fetchone()
 
-            empresas = pd.read_sql_query(
-                """
-                SELECT *
-                FROM empresas
-                ORDER BY id DESC
-                """,
-                conn,
-            )
+        if not resultado:
+            return None
 
-        return empresas
+        return {
+            "id": int(resultado[0]),
+            "nome": resultado[1],
+            "tipo": resultado[2],
+            "parceiro_id": resultado[3],
+        }
 
     finally:
         conn.close()
 
-    
+
+def listar_parceiros():
+    conn = conectar()
+
+    try:
+        return pd.read_sql_query(
+            """
+            SELECT
+                id,
+                nome
+            FROM empresas
+            WHERE tipo = 'parceiro'
+              AND status = 'ativa'
+            ORDER BY nome
+            """,
+            conn,
+        )
+
+    finally:
+        conn.close()
+
+
+def listar_empresas():
+    nivel = st.session_state.get("nivel")
+    empresa_id_logada = st.session_state.get(
+        "empresa_login_id",
+        st.session_state.get("empresa_id"),
+    )
+
+    conn = conectar()
+
+    try:
+        if nivel == "parceiro_admin":
+            if not empresa_id_logada:
+                return pd.DataFrame()
+
+            return pd.read_sql_query(
+                """
+                SELECT
+                    empresa.*
+                FROM empresas AS empresa
+                WHERE empresa.tipo = 'cliente'
+                  AND empresa.parceiro_id = %s
+                ORDER BY empresa.id DESC
+                """,
+                conn,
+                params=(int(empresa_id_logada),),
+            )
+
+        return pd.read_sql_query(
+            """
+            SELECT
+                empresa.*,
+                parceiro.nome AS parceiro_vinculado
+            FROM empresas AS empresa
+            LEFT JOIN empresas AS parceiro
+                ON parceiro.id = empresa.parceiro_id
+            ORDER BY empresa.id DESC
+            """,
+            conn,
+        )
+
+    finally:
+        conn.close()
 
 
 def calcular_valor_mensal(plano, servicos):
@@ -109,43 +204,45 @@ def criar_empresa(
     plano,
     status,
     logo_path,
+    parceiro_id,
     parceiro_nome,
     data_adesao,
     data_vencimento,
     servicos,
 ):
-
     conn = conectar()
 
     try:
-
         valor_mensal = calcular_valor_mensal(
             plano,
             servicos,
         )
 
         with conn.cursor() as cursor:
+            slug = gerar_slug_unico(cursor, nome.strip())
 
             cursor.execute(
                 """
                 INSERT INTO empresas (
-
                     nome,
+                    slug,
+                    tipo,
                     plano,
                     status,
                     valor_mensal,
                     logo_path,
+                    parceiro_id,
                     parceiro_nome,
                     data_adesao,
                     data_vencimento,
                     status_financeiro,
                     bloqueio_automatico,
                     servicos
-
                 )
-
                 VALUES (
-
+                    %s,
+                    %s,
+                    'cliente',
                     %s,
                     %s,
                     %s,
@@ -154,46 +251,37 @@ def criar_empresa(
                     %s,
                     %s,
                     %s,
-                    %s,
-                    %s,
+                    'em_dia',
+                    TRUE,
                     %s
-
                 )
-
                 RETURNING id
                 """,
-
                 (
-
                     nome.strip(),
+                    slug,
                     plano,
                     status,
                     valor_mensal,
                     logo_path.strip(),
+                    int(parceiro_id),
                     parceiro_nome,
                     data_adesao,
                     data_vencimento,
-                    "em_dia",
-                    True,
                     ",".join(servicos),
-
-                )
-
+                ),
             )
 
-            empresa_id = cursor.fetchone()[0]
+            empresa_id = int(cursor.fetchone()[0])
 
         conn.commit()
-
         return empresa_id
 
     except Exception:
-
         conn.rollback()
         raise
 
     finally:
-
         conn.close()
 
 
@@ -203,109 +291,122 @@ def atualizar_empresa(
     status,
     valor_mensal,
     logo_path,
+    parceiro_id,
     parceiro_nome,
     data_vencimento,
     status_financeiro,
     bloqueio_automatico,
     servicos,
 ):
-
     conn = conectar()
 
     try:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 UPDATE empresas
-
                 SET
-
                     plano = %s,
                     status = %s,
                     valor_mensal = %s,
                     logo_path = %s,
+                    parceiro_id = %s,
                     parceiro_nome = %s,
                     data_vencimento = %s,
                     status_financeiro = %s,
                     bloqueio_automatico = %s,
                     servicos = %s
-
                 WHERE id = %s
+                  AND tipo = 'cliente'
                 """,
-
                 (
-
                     plano,
                     status,
                     valor_mensal,
                     logo_path.strip(),
+                    int(parceiro_id),
                     parceiro_nome,
                     data_vencimento,
                     status_financeiro,
                     bool(bloqueio_automatico),
                     ",".join(servicos),
                     int(empresa_id),
-
-                )
-
+                ),
             )
+
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    "A empresa cliente não foi encontrada ou não pode ser alterada."
+                )
 
         conn.commit()
 
     except Exception:
-
         conn.rollback()
         raise
 
     finally:
-
         conn.close()
 
 
 def excluir_empresa(empresa_id):
-
     conn = conectar()
 
     try:
-
         with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT tipo
+                FROM empresas
+                WHERE id = %s
+                """,
+                (int(empresa_id),),
+            )
+
+            empresa = cursor.fetchone()
+
+            if not empresa:
+                raise RuntimeError("Empresa não encontrada.")
+
+            if empresa[0] != "cliente":
+                raise RuntimeError(
+                    "Somente empresas clientes podem ser excluídas por esta tela."
+                )
 
             cursor.execute(
                 """
                 DELETE FROM usuarios
                 WHERE empresa_id = %s
                 """,
-                (
-                    int(empresa_id),
-                ),
+                (int(empresa_id),),
             )
 
             cursor.execute(
                 """
                 DELETE FROM empresas
                 WHERE id = %s
+                  AND tipo = 'cliente'
                 """,
-                (
-                    int(empresa_id),
-                ),
+                (int(empresa_id),),
             )
 
         conn.commit()
 
     except Exception:
-
         conn.rollback()
         raise
 
     finally:
-
         conn.close()
 
 
 def formatar_moeda(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return (
+        f"R$ {valor:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
 
 
 def obter_servicos_por_plano(plano):
@@ -338,13 +439,21 @@ def converter_labels_para_servicos(labels):
 def render_empresas():
     nivel = st.session_state.get("nivel")
     empresa_logada = st.session_state.get("empresa")
+    empresa_id_logada = st.session_state.get(
+        "empresa_login_id",
+        st.session_state.get("empresa_id"),
+    )
     reset_key = st.session_state.get("reset_nova_empresa", 0)
 
     st.title("🏢 Empresas")
 
     if nivel == "parceiro_admin":
-        st.info(f"Painel parceiro: {empresa_logada}. Você visualiza apenas clientes vinculados à sua operação.")
+        st.info(
+            f"Painel parceiro: {empresa_logada}. "
+            "Você visualiza apenas os clientes vinculados à sua operação."
+        )
 
+    parceiros = listar_parceiros()
     empresas = listar_empresas()
 
     st.markdown("## 📋 Empresas cadastradas")
@@ -359,8 +468,13 @@ def render_empresas():
         )
 
     st.markdown("---")
-
     st.markdown("## ➕ Nova empresa")
+
+    if nivel == "orion_admin" and parceiros.empty:
+        st.warning(
+            "Cadastre ao menos uma empresa do tipo parceiro antes de criar clientes."
+        )
+        return
 
     c1, c2 = st.columns(2)
 
@@ -382,7 +496,9 @@ def render_empresas():
         )
 
         if nivel == "parceiro_admin":
+            parceiro_id = int(empresa_id_logada)
             parceiro_nome = empresa_logada
+
             st.text_input(
                 "Parceiro responsável",
                 value=parceiro_nome,
@@ -390,11 +506,18 @@ def render_empresas():
                 key=f"nova_empresa_parceiro_{reset_key}",
             )
         else:
+            opcoes_parceiros = {
+                row["nome"]: int(row["id"])
+                for _, row in parceiros.iterrows()
+            }
+
             parceiro_nome = st.selectbox(
                 "Parceiro responsável",
-                ["Forway", "Orion"],
+                list(opcoes_parceiros.keys()),
                 key=f"nova_empresa_parceiro_select_{reset_key}",
             )
+
+            parceiro_id = opcoes_parceiros[parceiro_nome]
 
     with c2:
         senha_admin = st.text_input(
@@ -442,13 +565,23 @@ def render_empresas():
     )
 
     data_adesao = datetime.now().strftime("%Y-%m-%d")
-    data_vencimento = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    data_vencimento_nova = (
+        datetime.now() + timedelta(days=30)
+    ).strftime("%Y-%m-%d")
 
-    st.info(f"Adesão: {data_adesao} | Vencimento: {data_vencimento}")
+    st.info(
+        f"Adesão: {data_adesao} | "
+        f"Vencimento: {data_vencimento_nova}"
+    )
 
     if st.button("Cadastrar empresa", use_container_width=True):
-        if not nome.strip() or not usuario_admin.strip() or not senha_admin.strip():
+        if (
+            not nome.strip()
+            or not usuario_admin.strip()
+            or not senha_admin.strip()
+        ):
             st.warning("Preencha todos os campos obrigatórios.")
+
         else:
             try:
                 empresa_id = criar_empresa(
@@ -456,9 +589,10 @@ def render_empresas():
                     plano,
                     status,
                     logo_path,
+                    parceiro_id,
                     parceiro_nome,
                     data_adesao,
-                    data_vencimento,
+                    data_vencimento_nova,
                     servicos,
                 )
 
@@ -469,28 +603,35 @@ def render_empresas():
                     senha_admin,
                 )
 
-                st.success("Empresa cadastrada com admin criado.")
+                st.success(
+                    f"Empresa cadastrada e vinculada a {parceiro_nome}."
+                )
 
                 limpar_formulario_nova_empresa()
-
                 st.rerun()
 
             except Exception as erro:
                 st.error(f"Erro ao cadastrar empresa: {erro}")
 
     st.markdown("---")
-
     st.markdown("## ⚙️ Gerenciar empresa")
 
     empresas = listar_empresas()
 
-    if empresas.empty:
-        st.info("Nenhuma empresa disponível para gerenciamento.")
+    if nivel == "orion_admin":
+        empresas_gerenciaveis = empresas[
+            empresas["tipo"] == "cliente"
+        ].copy()
+    else:
+        empresas_gerenciaveis = empresas.copy()
+
+    if empresas_gerenciaveis.empty:
+        st.info("Nenhuma empresa cliente disponível para gerenciamento.")
         return
 
     opcoes = {
-        f"{row['id']} - {row['nome']}": row["id"]
-        for _, row in empresas.iterrows()
+        f"{row['id']} - {row['nome']}": int(row["id"])
+        for _, row in empresas_gerenciaveis.iterrows()
     }
 
     selecionada = st.selectbox(
@@ -499,34 +640,43 @@ def render_empresas():
         key="empresa_gerenciar",
     )
 
-    empresa_id = int(opcoes[selecionada])
+    empresa_id = opcoes[selecionada]
 
-    empresa = empresas[
-        empresas["id"] == empresa_id
+    empresa = empresas_gerenciaveis[
+        empresas_gerenciaveis["id"] == empresa_id
     ].iloc[0]
 
     novo_plano = st.selectbox(
         "Plano atualizado",
         ["Lite", "Pro", "Premium"],
-        index=["Lite", "Pro", "Premium"].index(empresa["plano"])
-        if empresa["plano"] in ["Lite", "Pro", "Premium"]
-        else 0,
+        index=(
+            ["Lite", "Pro", "Premium"].index(empresa["plano"])
+            if empresa["plano"] in ["Lite", "Pro", "Premium"]
+            else 0
+        ),
     )
 
     novo_status = st.selectbox(
         "Status atualizado",
         ["ativa", "suspensa"],
-        index=["ativa", "suspensa"].index(empresa["status"])
-        if empresa["status"] in ["ativa", "suspensa"]
-        else 0,
+        index=(
+            ["ativa", "suspensa"].index(empresa["status"])
+            if empresa["status"] in ["ativa", "suspensa"]
+            else 0
+        ),
     )
 
     status_financeiro = st.selectbox(
         "Status financeiro",
         ["em_dia", "vencido", "inadimplente"],
-        index=["em_dia", "vencido", "inadimplente"].index(empresa["status_financeiro"])
-        if empresa["status_financeiro"] in ["em_dia", "vencido", "inadimplente"]
-        else 0,
+        index=(
+            ["em_dia", "vencido", "inadimplente"].index(
+                empresa["status_financeiro"]
+            )
+            if empresa["status_financeiro"]
+            in ["em_dia", "vencido", "inadimplente"]
+            else 0
+        ),
     )
 
     novo_logo_path = st.text_input(
@@ -535,20 +685,53 @@ def render_empresas():
     )
 
     if nivel == "parceiro_admin":
+        novo_parceiro_id = int(empresa_id_logada)
         novo_parceiro_nome = empresa_logada
-        st.text_input("Parceiro", value=novo_parceiro_nome, disabled=True)
-    else:
-        novo_parceiro_nome = st.selectbox(
+
+        st.text_input(
             "Parceiro",
-            ["Forway", "Orion"],
-            index=["Forway", "Orion"].index(empresa["parceiro_nome"])
-            if empresa["parceiro_nome"] in ["Forway", "Orion"]
-            else 0,
+            value=novo_parceiro_nome,
+            disabled=True,
+        )
+    else:
+        opcoes_parceiros_edicao = {
+            row["nome"]: int(row["id"])
+            for _, row in parceiros.iterrows()
+        }
+
+        parceiro_atual = empresa.get("parceiro_vinculado")
+
+        if (
+            parceiro_atual not in opcoes_parceiros_edicao
+            and empresa.get("parceiro_nome")
+            in opcoes_parceiros_edicao
+        ):
+            parceiro_atual = empresa.get("parceiro_nome")
+
+        nomes_parceiros = list(opcoes_parceiros_edicao.keys())
+        indice_parceiro = (
+            nomes_parceiros.index(parceiro_atual)
+            if parceiro_atual in nomes_parceiros
+            else 0
         )
 
-    data_vencimento = st.text_input(
+        novo_parceiro_nome = st.selectbox(
+            "Parceiro",
+            nomes_parceiros,
+            index=indice_parceiro,
+        )
+
+        novo_parceiro_id = opcoes_parceiros_edicao[
+            novo_parceiro_nome
+        ]
+
+    data_vencimento_edicao = st.text_input(
         "Vencimento",
-        value=empresa["data_vencimento"] if empresa["data_vencimento"] else "",
+        value=(
+            str(empresa["data_vencimento"])
+            if empresa["data_vencimento"]
+            else ""
+        ),
     )
 
     bloqueio_automatico = st.checkbox(
@@ -565,7 +748,9 @@ def render_empresas():
             if item.strip()
         ]
 
-    servicos_disponiveis_edicao = obter_servicos_por_plano(novo_plano)
+    servicos_disponiveis_edicao = obter_servicos_por_plano(
+        novo_plano
+    )
 
     if novo_plano == "Premium":
         servicos_ativos = []
@@ -589,7 +774,9 @@ def render_empresas():
             key="servicos_editar_empresa",
         )
 
-        servicos_ativos = converter_labels_para_servicos(servicos_labels_ativos)
+        servicos_ativos = converter_labels_para_servicos(
+            servicos_labels_ativos
+        )
 
     valor_total = calcular_valor_mensal(
         novo_plano,
@@ -605,31 +792,41 @@ def render_empresas():
 
     with b1:
         if st.button("Salvar alterações", use_container_width=True):
-            atualizar_empresa(
-                empresa_id,
-                novo_plano,
-                novo_status,
-                valor_total,
-                novo_logo_path,
-                novo_parceiro_nome,
-                data_vencimento,
-                status_financeiro,
-                bloqueio_automatico,
-                servicos_ativos,
-            )
+            try:
+                atualizar_empresa(
+                    empresa_id,
+                    novo_plano,
+                    novo_status,
+                    valor_total,
+                    novo_logo_path,
+                    novo_parceiro_id,
+                    novo_parceiro_nome,
+                    data_vencimento_edicao,
+                    status_financeiro,
+                    bloqueio_automatico,
+                    servicos_ativos,
+                )
 
-            st.success("Empresa atualizada.")
-            st.rerun()
+                st.success("Empresa atualizada.")
+                st.rerun()
+
+            except Exception as erro:
+                st.error(f"Erro ao atualizar empresa: {erro}")
 
     with b2:
         if nivel == "orion_admin":
-            if st.button("Excluir empresa", use_container_width=True):
-                if empresa["nome"] == "Orion Systems":
-                    st.error("Orion Systems não pode ser excluída.")
-                else:
+            if st.button(
+                "Excluir empresa",
+                use_container_width=True,
+            ):
+                try:
                     excluir_empresa(empresa_id)
                     st.warning("Empresa excluída.")
                     st.rerun()
-        else:
-            st.caption("Exclusão de empresa disponível apenas para Orion Admin.")
 
+                except Exception as erro:
+                    st.error(f"Erro ao excluir empresa: {erro}")
+        else:
+            st.caption(
+                "Exclusão de empresa disponível apenas para Orion Admin."
+            )
