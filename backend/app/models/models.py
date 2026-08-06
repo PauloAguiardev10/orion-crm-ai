@@ -16,49 +16,24 @@ from app.database.database import Base
 class Cliente(Base):
     __tablename__ = "clientes"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
+    # A chave estrangeira existe no PostgreSQL.
+    # Mantemos Integer no ORM porque a tabela empresas não é mapeada
+    # neste módulo e o banco já garante a integridade referencial.
     empresa_id = Column(
         Integer,
-        ForeignKey("empresas.id", ondelete="CASCADE"),
         nullable=False,
         server_default="1",
         index=True,
     )
 
-    nome = Column(
-        String(150),
-        nullable=True,
-    )
-
-    empresa_cliente = Column(
-        String(150),
-        nullable=True,
-    )
-
-    segmento = Column(
-        String(120),
-        nullable=True,
-    )
-
-    telefone = Column(
-        String(80),
-        nullable=True,
-    )
-
-    email = Column(
-        String(150),
-        nullable=True,
-    )
-
-    canal_origem = Column(
-        String(80),
-        nullable=True,
-    )
+    nome = Column(String(150), nullable=True)
+    empresa_cliente = Column(String(150), nullable=True)
+    segmento = Column(String(120), nullable=True)
+    telefone = Column(String(80), nullable=True)
+    email = Column(String(150), nullable=True)
+    canal_origem = Column(String(80), nullable=True)
 
     status = Column(
         String(30),
@@ -79,30 +54,18 @@ class Cliente(Base):
         onupdate=func.now(),
     )
 
-    # Campos mantidos para compatibilidade com a lógica atual da Sofia.
-    empresa = Column(
-        String(150),
-        nullable=True,
-    )
-
-    canal = Column(
-        String(80),
-        nullable=True,
-    )
+    empresa = Column(String(150), nullable=True)
+    canal = Column(String(80), nullable=True)
 
 
 class Conversa(Base):
     __tablename__ = "conversas"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
+    # FK garantida pelo PostgreSQL.
     empresa_id = Column(
         Integer,
-        ForeignKey("empresas.id", ondelete="CASCADE"),
         nullable=False,
         server_default="1",
         index=True,
@@ -121,10 +84,7 @@ class Conversa(Base):
         index=True,
     )
 
-    canal = Column(
-        String(80),
-        nullable=False,
-    )
+    canal = Column(String(80), nullable=False)
 
     etapa = Column(
         String(80),
@@ -144,35 +104,13 @@ class Conversa(Base):
         server_default="false",
     )
 
-    objetivo = Column(
-        Text,
-        nullable=True,
-    )
+    objetivo = Column(Text, nullable=True)
+    servico_interesse = Column(String(150), nullable=True)
+    historico = Column(Text, nullable=True)
 
-    servico_interesse = Column(
-        String(150),
-        nullable=True,
-    )
-
-    historico = Column(
-        Text,
-        nullable=True,
-    )
-
-    ultima_mensagem_cliente_em = Column(
-        DateTime,
-        nullable=True,
-    )
-
-    ultima_mensagem_agente_em = Column(
-        DateTime,
-        nullable=True,
-    )
-
-    ultima_mensagem_humano_em = Column(
-        DateTime,
-        nullable=True,
-    )
+    ultima_mensagem_cliente_em = Column(DateTime, nullable=True)
+    ultima_mensagem_agente_em = Column(DateTime, nullable=True)
+    ultima_mensagem_humano_em = Column(DateTime, nullable=True)
 
     lembrete_20min_enviado = Column(
         Boolean,
@@ -193,45 +131,21 @@ class Conversa(Base):
         onupdate=func.now(),
     )
 
-    # Campos utilizados pela Sofia durante a qualificação.
-    nome = Column(
-        String(150),
-        nullable=True,
-    )
-
-    empresa = Column(
-        String(150),
-        nullable=True,
-    )
-
-    segmento = Column(
-        String(120),
-        nullable=True,
-    )
-
-    telefone = Column(
-        String(80),
-        nullable=True,
-    )
-
-    servico = Column(
-        String(150),
-        nullable=True,
-    )
+    nome = Column(String(150), nullable=True)
+    empresa = Column(String(150), nullable=True)
+    segmento = Column(String(120), nullable=True)
+    telefone = Column(String(80), nullable=True)
+    servico = Column(String(150), nullable=True)
 
 
 class Lead(Base):
     __tablename__ = "leads"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
+    # FK garantida pelo PostgreSQL.
     empresa_id = Column(
         Integer,
-        ForeignKey("empresas.id", ondelete="CASCADE"),
         nullable=False,
         server_default="1",
         index=True,
@@ -251,27 +165,16 @@ class Lead(Base):
         index=True,
     )
 
+    # A FK para especialistas continua sendo validada pelo PostgreSQL.
     especialista_id = Column(
         Integer,
-        ForeignKey("especialistas.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
 
-    produto = Column(
-        String(150),
-        nullable=True,
-    )
-
-    temperatura = Column(
-        String(30),
-        nullable=True,
-    )
-
-    prioridade = Column(
-        String(30),
-        nullable=True,
-    )
+    produto = Column(String(150), nullable=True)
+    temperatura = Column(String(30), nullable=True)
+    prioridade = Column(String(30), nullable=True)
 
     score = Column(
         Integer,
@@ -279,20 +182,9 @@ class Lead(Base):
         server_default="0",
     )
 
-    origem = Column(
-        String(80),
-        nullable=True,
-    )
-
-    observacoes = Column(
-        Text,
-        nullable=True,
-    )
-
-    resumo_vendedor = Column(
-        Text,
-        nullable=True,
-    )
+    origem = Column(String(80), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    resumo_vendedor = Column(Text, nullable=True)
 
     status = Column(
         String(80),
@@ -318,15 +210,8 @@ class Lead(Base):
         server_default="0",
     )
 
-    motivo_perda = Column(
-        Text,
-        nullable=True,
-    )
-
-    observacao_comercial = Column(
-        Text,
-        nullable=True,
-    )
+    motivo_perda = Column(Text, nullable=True)
+    observacao_comercial = Column(Text, nullable=True)
 
     criado_em = Column(
         DateTime,
