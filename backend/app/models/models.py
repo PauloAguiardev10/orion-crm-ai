@@ -1,12 +1,13 @@
-from datetime import datetime
-
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
+    func,
 )
 
 from app.database.database import Base
@@ -21,41 +22,72 @@ class Cliente(Base):
         index=True,
     )
 
-    nome = Column(
-        String(150),
-        nullable=True,
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="CASCADE"),
+        nullable=False,
+        server_default="1",
         index=True,
     )
 
-    empresa = Column(
+    nome = Column(
         String(150),
         nullable=True,
-        index=True,
+    )
+
+    empresa_cliente = Column(
+        String(150),
+        nullable=True,
     )
 
     segmento = Column(
         String(120),
         nullable=True,
-        index=True,
     )
 
     telefone = Column(
-        String(30),
+        String(80),
         nullable=True,
-        index=True,
     )
 
-    canal = Column(
+    email = Column(
+        String(150),
+        nullable=True,
+    )
+
+    canal_origem = Column(
+        String(80),
+        nullable=True,
+    )
+
+    status = Column(
         String(30),
         nullable=True,
-        index=True,
+        server_default="ativo",
     )
 
     criado_em = Column(
         DateTime,
-        default=datetime.utcnow,
-        nullable=False,
-        index=True,
+        nullable=True,
+        server_default=func.now(),
+    )
+
+    atualizado_em = Column(
+        DateTime,
+        nullable=True,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Campos mantidos para compatibilidade com a lógica atual da Sofia.
+    empresa = Column(
+        String(150),
+        nullable=True,
+    )
+
+    canal = Column(
+        String(80),
+        nullable=True,
     )
 
 
@@ -68,47 +100,48 @@ class Conversa(Base):
         index=True,
     )
 
-    identificador = Column(
-        String(150),
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="CASCADE"),
         nullable=False,
+        server_default="1",
         index=True,
     )
 
-    nome = Column(
-        String(150),
+    cliente_id = Column(
+        Integer,
+        ForeignKey("clientes.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
 
-    empresa = Column(
-        String(150),
-        nullable=True,
-        index=True,
-    )
-
-    segmento = Column(
-        String(120),
-        nullable=True,
-        index=True,
-    )
-
-    telefone = Column(
-        String(30),
-        nullable=True,
+    identificador = Column(
+        String(180),
+        nullable=False,
         index=True,
     )
 
     canal = Column(
-        String(30),
+        String(80),
         nullable=False,
-        index=True,
     )
 
     etapa = Column(
-        String(50),
-        default="inicio",
-        nullable=False,
-        index=True,
+        String(80),
+        nullable=True,
+        server_default="inicio",
+    )
+
+    status_atendimento = Column(
+        String(80),
+        nullable=True,
+        server_default="em_atendimento_ia",
+    )
+
+    humano_assumiu = Column(
+        Boolean,
+        nullable=True,
+        server_default="false",
     )
 
     objetivo = Column(
@@ -116,10 +149,9 @@ class Conversa(Base):
         nullable=True,
     )
 
-    servico = Column(
+    servico_interesse = Column(
         String(150),
         nullable=True,
-        index=True,
     )
 
     historico = Column(
@@ -127,11 +159,64 @@ class Conversa(Base):
         nullable=True,
     )
 
+    ultima_mensagem_cliente_em = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    ultima_mensagem_agente_em = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    ultima_mensagem_humano_em = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    lembrete_20min_enviado = Column(
+        Boolean,
+        nullable=True,
+        server_default="false",
+    )
+
     criado_em = Column(
         DateTime,
-        default=datetime.utcnow,
-        nullable=False,
-        index=True,
+        nullable=True,
+        server_default=func.now(),
+    )
+
+    atualizado_em = Column(
+        DateTime,
+        nullable=True,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Campos utilizados pela Sofia durante a qualificação.
+    nome = Column(
+        String(150),
+        nullable=True,
+    )
+
+    empresa = Column(
+        String(150),
+        nullable=True,
+    )
+
+    segmento = Column(
+        String(120),
+        nullable=True,
+    )
+
+    telefone = Column(
+        String(80),
+        nullable=True,
+    )
+
+    servico = Column(
+        String(150),
+        nullable=True,
     )
 
 
@@ -144,12 +229,31 @@ class Lead(Base):
         index=True,
     )
 
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="CASCADE"),
+        nullable=False,
+        server_default="1",
+        index=True,
+    )
+
     cliente_id = Column(
         Integer,
-        ForeignKey(
-            "clientes.id",
-            ondelete="SET NULL",
-        ),
+        ForeignKey("clientes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    conversa_id = Column(
+        Integer,
+        ForeignKey("conversas.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    especialista_id = Column(
+        Integer,
+        ForeignKey("especialistas.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -157,32 +261,27 @@ class Lead(Base):
     produto = Column(
         String(150),
         nullable=True,
-        index=True,
     )
 
     temperatura = Column(
         String(30),
         nullable=True,
-        index=True,
     )
 
     prioridade = Column(
         String(30),
         nullable=True,
-        index=True,
     )
 
     score = Column(
         Integer,
-        default=0,
-        nullable=False,
-        index=True,
+        nullable=True,
+        server_default="0",
     )
 
     origem = Column(
-        String(50),
+        String(80),
         nullable=True,
-        index=True,
     )
 
     observacoes = Column(
@@ -196,15 +295,48 @@ class Lead(Base):
     )
 
     status = Column(
-        String(50),
-        default="Aguardando atendimento",
-        nullable=False,
-        index=True,
+        String(80),
+        nullable=True,
+        server_default="Aguardando atendimento",
+    )
+
+    responsavel = Column(
+        String(150),
+        nullable=True,
+        server_default="Não atribuído",
+    )
+
+    valor_negocio = Column(
+        Numeric,
+        nullable=True,
+        server_default="0",
+    )
+
+    mensalidade = Column(
+        Numeric,
+        nullable=True,
+        server_default="0",
+    )
+
+    motivo_perda = Column(
+        Text,
+        nullable=True,
+    )
+
+    observacao_comercial = Column(
+        Text,
+        nullable=True,
     )
 
     criado_em = Column(
         DateTime,
-        default=datetime.utcnow,
-        nullable=False,
-        index=True,
+        nullable=True,
+        server_default=func.now(),
+    )
+
+    atualizado_em = Column(
+        DateTime,
+        nullable=True,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

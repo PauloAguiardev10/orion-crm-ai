@@ -1,25 +1,59 @@
-import traceback
-import time
+import json
+import os
 import random
+import time
+import traceback
 
+import requests
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
-from app.database.database import SessionLocal, engine
-from app.models.models import Base, Cliente, Conversa, Lead
 
 from app.agents.sdr_agent import (
     conduzir_conversa,
-    gerar_resumo_vendedor
+    gerar_resumo_vendedor,
 )
+from app.database.database import SessionLocal, engine
+from app.models.models import Base, Cliente, Conversa, Lead
+
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Agente SDR Forway")
 
 
+def carregar_mapa_sessoes() -> dict[str, int]:
+    """
+    Carrega o vínculo entre sessão WAHA e empresa.
+
+    Exemplo no ambiente:
+    WAHA_SESSION_EMPRESA_MAP={"default": 1, "nike": 3}
+
+    Enquanto essa variável não existir, a sessão default continua
+    vinculada à empresa 1 (Forway), preservando o funcionamento atual.
+    """
+    valor = os.getenv(
+        "WAHA_SESSION_EMPRESA_MAP",
+        '{"default": 1}',
+    )
+
+    try:
+        mapa = json.loads(valor)
+
+        return {
+            str(sessao): int(empresa_id)
+            for sessao, empresa_id in mapa.items()
+        }
+
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {"default": 1}
+
+
+SESSAO_EMPRESA = carregar_mapa_sessoes()
+
+
 class MensagemRequest(BaseModel):
+    empresa_id: int = Field(default=1, ge=1)
     nome: str | None = None
     telefone: str | None = None
     canal: str
@@ -27,26 +61,52 @@ class MensagemRequest(BaseModel):
     mensagem: str
 
 
+def obter_empresa_id_por_sessao(sessao: str) -> int | None:
+    return SESSAO_EMPRESA.get(sessao)
+
+
+def obter_sessao_waha(payload: dict, mensagem: dict) -> str:
+    sessao = (
+        payload.get("session")
+        or mensagem.get("session")
+        or mensagem.get("_data", {}).get("session")
+        or "default"
+    )
+
+    if isinstance(sessao, dict):
+        sessao = (
+            sessao.get("name")
+            or sessao.get("id")
+            or "default"
+        )
+
+    return str(sessao)
+
+
 @app.post("/mensagem")
 def receber_mensagem(dados: MensagemRequest):
-
     db: Session = SessionLocal()
 
     try:
-
-        conversa = db.query(Conversa).filter(
-            Conversa.identificador == dados.identificador
-        ).first()
+        conversa = (
+            db.query(Conversa)
+            .filter(
+                Conversa.empresa_id == dados.empresa_id,
+                Conversa.identificador == dados.identificador,
+            )
+            .order_by(Conversa.id.desc())
+            .first()
+        )
 
         if not conversa:
-
             conversa = Conversa(
+                empresa_id=dados.empresa_id,
                 identificador=dados.identificador,
                 canal=dados.canal,
                 nome=dados.nome,
                 telefone=dados.telefone,
                 etapa="inicio",
-                historico=""
+                historico="",
             )
 
             db.add(conversa)
@@ -55,7 +115,7 @@ def receber_mensagem(dados: MensagemRequest):
 
         resposta, analise = conduzir_conversa(
             conversa,
-            dados.mensagem
+            dados.mensagem,
         )
 
         db.commit()
@@ -63,42 +123,56 @@ def receber_mensagem(dados: MensagemRequest):
         resumo = None
         lead_id = None
 
-        if conversa.etapa in ["encaminhar", "aguardando_humano"]:
-
+        if conversa.etapa in [
+            "encaminhar",
+            "aguardando_humano",
+        ]:
             lead_existente = None
 
             if conversa.telefone:
                 lead_existente = (
                     db.query(Lead)
-                    .join(Cliente, Cliente.id == Lead.cliente_id)
+                    .join(
+                        Cliente,
+                        Cliente.id == Lead.cliente_id,
+                    )
                     .filter(
+                        Lead.empresa_id == dados.empresa_id,
+                        Cliente.empresa_id == dados.empresa_id,
                         Cliente.telefone == conversa.telefone,
                         Cliente.canal == conversa.canal,
                     )
+                    .order_by(Lead.id.desc())
                     .first()
                 )
 
             if not lead_existente:
-
                 cliente = Cliente(
+                    empresa_id=dados.empresa_id,
                     nome=conversa.nome,
                     empresa=conversa.empresa,
+                    empresa_cliente=conversa.empresa,
                     segmento=conversa.segmento,
                     telefone=conversa.telefone,
-                    canal=conversa.canal
+                    canal=conversa.canal,
+                    canal_origem=conversa.canal,
                 )
 
                 db.add(cliente)
                 db.commit()
                 db.refresh(cliente)
 
+                conversa.cliente_id = cliente.id
+
                 resumo = gerar_resumo_vendedor(
                     conversa,
-                    analise
+                    analise,
                 )
 
                 lead = Lead(
+                    empresa_id=dados.empresa_id,
                     cliente_id=cliente.id,
+                    conversa_id=conversa.id,
                     produto=conversa.servico,
                     temperatura=analise["temperatura"],
                     prioridade=analise["prioridade"],
@@ -106,7 +180,7 @@ def receber_mensagem(dados: MensagemRequest):
                     origem=conversa.canal,
                     observacoes=conversa.objetivo,
                     resumo_vendedor=resumo,
-                    status="Aguardando atendimento"
+                    status="Aguardando atendimento",
                 )
 
                 db.add(lead)
@@ -116,11 +190,15 @@ def receber_mensagem(dados: MensagemRequest):
                 lead_id = lead.id
 
             else:
-
                 resumo = lead_existente.resumo_vendedor
                 lead_id = lead_existente.id
 
+                if not conversa.cliente_id:
+                    conversa.cliente_id = lead_existente.cliente_id
+                    db.commit()
+
         return {
+            "empresa_id": dados.empresa_id,
             "canal": conversa.canal,
             "etapa_atual": conversa.etapa,
             "resposta_agente": resposta,
@@ -130,52 +208,91 @@ def receber_mensagem(dados: MensagemRequest):
             "score": analise["score"],
             "status": (
                 "encaminhado"
-                if conversa.etapa in ["encaminhar", "aguardando_humano"]
+                if conversa.etapa in [
+                    "encaminhar",
+                    "aguardando_humano",
+                ]
                 else "em_atendimento"
             ),
             "resumo_vendedor": resumo,
-            "lead_id": lead_id
+            "lead_id": lead_id,
         }
 
     except Exception as erro:
+        db.rollback()
         traceback.print_exc()
 
         return {
             "erro": str(erro),
-            "tipo": type(erro).__name__
+            "tipo": type(erro).__name__,
         }
 
     finally:
         db.close()
+
+
 @app.post("/webhook/waha")
 async def webhook_waha(payload: dict):
-    import requests
-
     evento = payload.get("event")
     mensagem = payload.get("payload", {})
 
     if evento != "message":
-        return {"status": "ignorado", "motivo": "evento_diferente_de_message"}
+        return {
+            "status": "ignorado",
+            "motivo": "evento_diferente_de_message",
+        }
 
     if mensagem.get("fromMe") is True:
-        return {"status": "ignorado", "motivo": "mensagem_enviada_pelo_proprio_numero"}
+        return {
+            "status": "ignorado",
+            "motivo": "mensagem_enviada_pelo_proprio_numero",
+        }
 
     texto = mensagem.get("body")
     chat_id = mensagem.get("from")
     nome = mensagem.get("_data", {}).get("notifyName")
 
+    sessao = obter_sessao_waha(
+        payload,
+        mensagem,
+    )
+
+    empresa_id = obter_empresa_id_por_sessao(
+        sessao,
+    )
+
+    if empresa_id is None:
+        return {
+            "status": "ignorado",
+            "motivo": "sessao_sem_empresa_vinculada",
+            "sessao": sessao,
+        }
+
     if not texto or not chat_id:
-        return {"status": "ignorado", "motivo": "sem_texto_ou_chat_id"}
+        return {
+            "status": "ignorado",
+            "motivo": "sem_texto_ou_chat_id",
+        }
 
     dados = MensagemRequest(
+        empresa_id=empresa_id,
         nome=nome,
         telefone=chat_id,
         canal="whatsapp",
         identificador=chat_id,
-        mensagem=texto
+        mensagem=texto,
     )
 
     resultado = receber_mensagem(dados)
+
+    if resultado.get("erro"):
+        return {
+            "status": "erro",
+            "empresa_id": empresa_id,
+            "sessao": sessao,
+            **resultado,
+        }
+
     resposta = resultado.get("resposta_agente")
 
     if resposta:
@@ -188,20 +305,25 @@ async def webhook_waha(payload: dict):
         else:
             delay = random.uniform(7, 12)
 
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Key": os.getenv(
+                "WAHA_API_KEY",
+                "orionsystems",
+            ),
+        }
+
         try:
             requests.post(
                 "http://localhost:3000/api/startTyping",
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Api-Key": "orionsystems"
-                },
+                headers=headers,
                 json={
-                    "session": "default",
-                    "chatId": chat_id
+                    "session": sessao,
+                    "chatId": chat_id,
                 },
-                timeout=10
+                timeout=10,
             )
-        except Exception:
+        except requests.RequestException:
             pass
 
         time.sleep(delay)
@@ -209,36 +331,34 @@ async def webhook_waha(payload: dict):
         try:
             requests.post(
                 "http://localhost:3000/api/stopTyping",
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Api-Key": "orionsystems"
-                },
+                headers=headers,
                 json={
-                    "session": "default",
-                    "chatId": chat_id
+                    "session": sessao,
+                    "chatId": chat_id,
                 },
-                timeout=10
+                timeout=10,
             )
-        except Exception:
+        except requests.RequestException:
             pass
 
-        requests.post(
+        envio = requests.post(
             "http://localhost:3000/api/sendText",
-            headers={
-                "Content-Type": "application/json",
-                "X-Api-Key": "orionsystems"
-            },
+            headers=headers,
             json={
-                "session": "default",
+                "session": sessao,
                 "chatId": chat_id,
-                "text": resposta
+                "text": resposta,
             },
-            timeout=15
+            timeout=15,
         )
+
+        envio.raise_for_status()
 
     return {
         "status": "processado",
+        "empresa_id": empresa_id,
+        "sessao": sessao,
         "chat_id": chat_id,
         "mensagem": texto,
-        "resposta": resposta
+        "resposta": resposta,
     }
