@@ -6,78 +6,167 @@ from services.empresa_contexto_service import listar_empresas_permitidas
 
 def obter_logo_empresa(empresa_id):
     conn = None
+
     try:
         conn = conectar()
+
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT logo_path FROM empresas WHERE id = %s",
+                """
+                SELECT logo_path
+                FROM empresas
+                WHERE id = %s
+                """,
                 (int(empresa_id),),
             )
+
             resultado = cursor.fetchone()
+
         if resultado and resultado[0]:
             return resultado[0]
+
     except Exception:
         pass
+
     finally:
         if conn:
             conn.close()
+
     return "assets/logo_orion.png"
 
 
 def inicializar_contexto_empresa():
     if "empresa_login_id" not in st.session_state:
-        st.session_state.empresa_login_id = st.session_state.get("empresa_id")
+        st.session_state.empresa_login_id = st.session_state.get(
+            "empresa_id"
+        )
+
     if "empresa_login_nome" not in st.session_state:
-        st.session_state.empresa_login_nome = st.session_state.get("empresa")
+        st.session_state.empresa_login_nome = st.session_state.get(
+            "empresa"
+        )
+
     if "empresa_ativa_id" not in st.session_state:
-        st.session_state.empresa_ativa_id = st.session_state.get("empresa_id")
+        st.session_state.empresa_ativa_id = st.session_state.get(
+            "empresa_id"
+        )
+
     if "empresa_ativa_nome" not in st.session_state:
-        st.session_state.empresa_ativa_nome = st.session_state.get("empresa")
+        st.session_state.empresa_ativa_nome = st.session_state.get(
+            "empresa"
+        )
 
 
-def aplicar_empresa_ativa(empresa_id, empresa_nome):
+def aplicar_empresa_ativa(
+    empresa_id,
+    empresa_nome,
+):
     st.session_state.empresa_ativa_id = int(empresa_id)
     st.session_state.empresa_ativa_nome = empresa_nome
+
+    # Mantemos compatibilidade com as telas atuais.
     st.session_state.empresa_id = int(empresa_id)
     st.session_state.empresa = empresa_nome
 
 
 def render_seletor_empresa():
-    nivel = st.session_state.get("nivel", "usuario")
-    empresa_login_id = st.session_state.get("empresa_login_id")
+    """
+    Renderiza o seletor de contexto multiempresa.
 
-    if nivel not in ["orion_admin", "parceiro_admin"] or not empresa_login_id:
+    IMPORTANTE:
+    Esta função não é mais exibida diretamente na sidebar.
+    Ela é utilizada na tela Visão Geral.
+    """
+
+    nivel = st.session_state.get(
+        "nivel",
+        "usuario",
+    )
+
+    empresa_login_id = st.session_state.get(
+        "empresa_login_id"
+    )
+
+    if (
+        nivel not in [
+            "orion_admin",
+            "parceiro_admin",
+        ]
+        or not empresa_login_id
+    ):
         return
 
-    empresas = listar_empresas_permitidas(nivel, int(empresa_login_id))
+    empresas = listar_empresas_permitidas(
+        nivel,
+        int(empresa_login_id),
+    )
+
     if empresas.empty:
-        st.info("Nenhuma empresa disponível.")
+        st.info(
+            "Nenhuma empresa disponível."
+        )
         return
 
     opcoes = {}
+
     for _, row in empresas.iterrows():
+
         empresa_id = int(row["id"])
         nome = str(row["nome"])
-        tipo = str(row["tipo"] or "cliente")
-        if empresa_id == int(empresa_login_id):
-            label = f"🏢 {nome} — painel principal"
-        elif tipo == "cliente":
-            label = f"👤 {nome}"
-        elif tipo == "parceiro":
-            label = f"🤝 {nome}"
-        else:
-            label = f"🏢 {nome}"
-        opcoes[label] = {"id": empresa_id, "nome": nome}
+        tipo = str(
+            row["tipo"]
+            or "cliente"
+        )
 
-    labels = list(opcoes.keys())
-    empresa_ativa_id = int(st.session_state.get("empresa_ativa_id", empresa_login_id))
+        if empresa_id == int(empresa_login_id):
+
+            label = (
+                f"🏢 {nome} — painel principal"
+            )
+
+        elif tipo == "cliente":
+
+            label = f"👤 {nome}"
+
+        elif tipo == "parceiro":
+
+            label = f"🤝 {nome}"
+
+        else:
+
+            label = f"🏢 {nome}"
+
+        opcoes[label] = {
+            "id": empresa_id,
+            "nome": nome,
+        }
+
+    labels = list(
+        opcoes.keys()
+    )
+
+    empresa_ativa_id = int(
+        st.session_state.get(
+            "empresa_ativa_id",
+            empresa_login_id,
+        )
+    )
+
     indice = 0
+
     for i, label in enumerate(labels):
-        if int(opcoes[label]["id"]) == empresa_ativa_id:
+
+        if (
+            int(opcoes[label]["id"])
+            == empresa_ativa_id
+        ):
             indice = i
             break
 
-    st.markdown("#### Empresa ativa")
+    st.markdown(
+        "#### 🏢 Empresa ativa"
+    )
+
     selecionada = st.selectbox(
         "Selecionar empresa ativa",
         labels,
@@ -86,42 +175,105 @@ def render_seletor_empresa():
         label_visibility="collapsed",
     )
 
-    contexto = opcoes[selecionada]
-    if int(contexto["id"]) != empresa_ativa_id:
-        aplicar_empresa_ativa(contexto["id"], contexto["nome"])
+    contexto = opcoes[
+        selecionada
+    ]
+
+    if (
+        int(contexto["id"])
+        != empresa_ativa_id
+    ):
+        aplicar_empresa_ativa(
+            contexto["id"],
+            contexto["nome"],
+        )
+
         st.rerun()
 
-    st.caption(f"Contexto atual: {st.session_state.get('empresa_ativa_nome')}")
+    st.caption(
+        "Contexto atual: "
+        f"{st.session_state.get('empresa_ativa_nome')}"
+    )
 
 
 def render_sidebar():
     inicializar_contexto_empresa()
 
-    nivel = st.session_state.get("nivel", "usuario")
-    empresa_login_nome = st.session_state.get("empresa_login_nome", "")
-    empresa_ativa_id = st.session_state.get("empresa_ativa_id")
+    nivel = st.session_state.get(
+        "nivel",
+        "usuario",
+    )
+
+    empresa_login_nome = (
+        st.session_state.get(
+            "empresa_login_nome",
+            "",
+        )
+    )
+
+    empresa_ativa_id = (
+        st.session_state.get(
+            "empresa_ativa_id"
+        )
+    )
 
     with st.sidebar:
-        st.markdown("<br>", unsafe_allow_html=True)
 
-        if nivel == "parceiro_admin" and empresa_login_nome == "Forway":
-            logo_path = "assets/logo_forway.png"
-            titulo_crm = "FORWAY CRM"
+        st.markdown(
+            "<br>",
+            unsafe_allow_html=True,
+        )
+
+        # =========================================
+        # IDENTIDADE VISUAL
+        # =========================================
+
+        if (
+            nivel == "parceiro_admin"
+            and empresa_login_nome == "Forway"
+        ):
+
+            logo_path = (
+                "assets/logo_forway.png"
+            )
+
+            titulo_crm = (
+                "FORWAY CRM"
+            )
+
         else:
-            logo_path = obter_logo_empresa(empresa_ativa_id)
-            titulo_crm = "ORION SYSTEMS CRM"
+
+            logo_path = obter_logo_empresa(
+                empresa_ativa_id
+            )
+
+            titulo_crm = (
+                "ORION SYSTEMS CRM"
+            )
 
         try:
-            st.image(logo_path, width=180)
+
+            st.image(
+                logo_path,
+                width=180,
+            )
+
         except Exception:
-            st.markdown(f"## {titulo_crm}")
 
-        st.markdown(f"### {titulo_crm}")
+            st.markdown(
+                f"## {titulo_crm}"
+            )
 
-        if nivel in ["orion_admin", "parceiro_admin"]:
-            st.markdown("---")
-            render_seletor_empresa()
-            st.markdown("---")
+        st.markdown(
+            f"### {titulo_crm}"
+        )
+
+        # =========================================
+        # MENU
+        # =========================================
+        # O seletor de empresa NÃO fica mais aqui.
+        # Ele será mostrado dentro da Visão Geral.
+        # =========================================
 
         menu = [
             "🏠 Visão Geral",
@@ -136,20 +288,48 @@ def render_sidebar():
             "🔌 Integrações",
             "⚙️ Configurações",
         ]
-        if nivel in ["orion_admin", "parceiro_admin"]:
-            menu.append("🏢 Empresas")
 
-        pagina = st.radio("Menu", menu, key="menu_principal")
+        if nivel in [
+            "orion_admin",
+            "parceiro_admin",
+        ]:
+            menu.append(
+                "🏢 Empresas"
+            )
+
+        pagina = st.radio(
+            "Menu",
+            menu,
+            key="menu_principal",
+        )
 
         st.markdown("---")
-        st.success("🟢 Agente IA Online")
-        st.caption("WhatsApp • Instagram Direct • Facebook Messenger")
+
+        st.success(
+            "🟢 Agente IA Online"
+        )
+
+        st.caption(
+            "WhatsApp • Instagram Direct • Facebook Messenger"
+        )
+
         st.markdown("---")
 
         try:
-            st.image("assets/logo_orion.png", width=130)
-        except Exception:
-            st.markdown("**ORION SYSTEMS**")
 
-        st.caption("Powered by Orion Systems")
+            st.image(
+                "assets/logo_orion.png",
+                width=130,
+            )
+
+        except Exception:
+
+            st.markdown(
+                "**ORION SYSTEMS**"
+            )
+
+        st.caption(
+            "Powered by Orion Systems"
+        )
+
         return pagina
