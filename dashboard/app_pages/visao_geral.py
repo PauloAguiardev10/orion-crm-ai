@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 
+from textwrap import dedent
+
 from database.db import conectar
 
 from components.graficos import (
@@ -80,137 +82,139 @@ def formatar_moeda(valor):
 
 def aplicar_css():
     st.markdown(
-        """
-        <style>
+        dedent(
+            """
+            <style>
 
-        .top-card {
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(15,23,42,.96),
-                    rgba(2,6,23,.96)
-                );
+            .top-card {
+                background:
+                    linear-gradient(
+                        135deg,
+                        rgba(15,23,42,.96),
+                        rgba(2,6,23,.96)
+                    );
 
-            border:
-                1px solid
-                rgba(0,229,255,.20);
+                border:
+                    1px solid
+                    rgba(0,229,255,.20);
 
-            border-radius: 22px;
+                border-radius: 22px;
 
-            padding:
-                28px 32px;
+                padding:
+                    28px 32px;
 
-            margin-bottom: 20px;
+                margin-bottom: 20px;
 
-            box-shadow:
-                0 0 30px
-                rgba(0,229,255,.05);
-        }
+                box-shadow:
+                    0 0 30px
+                    rgba(0,229,255,.05);
+            }
 
-        .top-title {
-            font-size: 42px;
-            font-weight: 900;
-            color: #FFFFFF;
-            margin-bottom: 6px;
-        }
+            .top-title {
+                font-size: 42px;
+                font-weight: 900;
+                color: #FFFFFF;
+                margin-bottom: 6px;
+            }
 
-        .top-subtitle {
-            color: #94A3B8;
-            font-size: 15px;
-        }
+            .top-subtitle {
+                color: #94A3B8;
+                font-size: 15px;
+            }
 
-        .metric-card {
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(15,23,42,.96),
-                    rgba(30,41,59,.82)
-                );
+            .metric-card {
+                background:
+                    linear-gradient(
+                        135deg,
+                        rgba(15,23,42,.96),
+                        rgba(30,41,59,.82)
+                    );
 
-            border:
-                1px solid
-                rgba(0,229,255,.16);
+                border:
+                    1px solid
+                    rgba(0,229,255,.16);
 
-            border-radius: 18px;
+                border-radius: 18px;
 
-            padding:
-                18px 20px;
+                padding:
+                    18px 20px;
 
-            min-height: 105px;
+                min-height: 105px;
 
-            box-shadow:
-                0 0 18px
-                rgba(0,229,255,.04);
-        }
+                box-shadow:
+                    0 0 18px
+                    rgba(0,229,255,.04);
+            }
 
-        .metric-label {
-            color: #94A3B8;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
+            .metric-label {
+                color: #94A3B8;
+                font-size: 13px;
+                margin-bottom: 8px;
+            }
 
-        .metric-value {
-            color: #FFFFFF;
-            font-size: 30px;
-            font-weight: 800;
-        }
+            .metric-value {
+                color: #FFFFFF;
+                font-size: 30px;
+                font-weight: 800;
+            }
 
-        .section-title {
-            font-size: 30px;
-            font-weight: 850;
-            margin-top: 28px;
-            margin-bottom: 16px;
-            color: #FFFFFF;
-        }
+            .section-title {
+                font-size: 30px;
+                font-weight: 850;
+                margin-top: 28px;
+                margin-bottom: 16px;
+                color: #FFFFFF;
+            }
 
-        .diagnostico-card {
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(30,41,59,.95),
-                    rgba(2,6,23,.96)
-                );
+            .diagnostico-card {
+                background:
+                    linear-gradient(
+                        135deg,
+                        rgba(30,41,59,.95),
+                        rgba(2,6,23,.96)
+                    );
 
-            border-left:
-                5px solid #06B6D4;
+                border-left:
+                    5px solid #06B6D4;
 
-            border-radius: 16px;
+                border-radius: 16px;
 
-            padding: 22px;
+                padding: 22px;
 
-            color: #E2E8F0;
+                color: #E2E8F0;
 
-            margin-top: 12px;
+                margin-top: 12px;
 
-            line-height: 1.7;
-        }
+                line-height: 1.7;
+            }
 
-        .empresa-contexto-card {
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(15,23,42,.96),
-                    rgba(30,41,59,.78)
-                );
+            .empresa-contexto-card {
+                background:
+                    linear-gradient(
+                        135deg,
+                        rgba(15,23,42,.96),
+                        rgba(30,41,59,.78)
+                    );
 
-            border:
-                1px solid
-                rgba(0,229,255,.14);
+                border:
+                    1px solid
+                    rgba(0,229,255,.14);
 
-            border-radius: 18px;
+                border-radius: 18px;
 
-            padding:
-                16px 20px;
+                padding:
+                    16px 20px;
 
-            margin-bottom: 22px;
+                margin-bottom: 22px;
 
-            box-shadow:
-                0 0 16px
-                rgba(0,229,255,.03);
-        }
+                box-shadow:
+                    0 0 16px
+                    rgba(0,229,255,.03);
+            }
 
-        </style>
-        """,
+            </style>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -220,19 +224,14 @@ def card(
     value,
 ):
     st.markdown(
-        f"""
-        <div class="metric-card">
-
-            <div class="metric-label">
-                {label}
+        dedent(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">{label}</div>
+                <div class="metric-value">{value}</div>
             </div>
-
-            <div class="metric-value">
-                {value}
-            </div>
-
-        </div>
-        """,
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -242,19 +241,14 @@ def topo(
     subtitulo,
 ):
     st.markdown(
-        f"""
-        <div class="top-card">
-
-            <div class="top-title">
-                {titulo}
+        dedent(
+            f"""
+            <div class="top-card">
+                <div class="top-title">{titulo}</div>
+                <div class="top-subtitle">{subtitulo}</div>
             </div>
-
-            <div class="top-subtitle">
-                {subtitulo}
-            </div>
-
-        </div>
-        """,
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -451,9 +445,6 @@ def render_empresa_ativa():
     # =========================================
     # SELETOR DE EMPRESA ATIVA
     # =========================================
-    # Agora fica dentro da Visão Geral.
-    # Não ocupa mais espaço na sidebar.
-    # =========================================
 
     render_seletor_empresa()
 
@@ -543,23 +534,26 @@ def render_empresa_ativa():
     # =========================================
 
     st.markdown(
-        """
-        <div class="section-title">
-            🔎 Diagnóstico Comercial
-        </div>
-        """,
+        dedent(
+            """
+            <div class="section-title">
+                🔎 Diagnóstico Comercial
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
     if leads.empty:
 
         st.markdown(
-            """
-            <div class="diagnostico-card">
-                Ainda não existem dados suficientes
-                para diagnóstico desta empresa.
-            </div>
-            """,
+            dedent(
+                """
+                <div class="diagnostico-card">
+                    Ainda não existem dados suficientes para diagnóstico desta empresa.
+                </div>
+                """
+            ),
             unsafe_allow_html=True,
         )
 
@@ -594,11 +588,13 @@ def render_empresa_ativa():
         )
 
         st.markdown(
-            f"""
-            <div class="diagnostico-card">
-                {texto}
-            </div>
-            """,
+            dedent(
+                f"""
+                <div class="diagnostico-card">
+                    {texto}
+                </div>
+                """
+            ),
             unsafe_allow_html=True,
         )
 
@@ -607,11 +603,13 @@ def render_empresa_ativa():
     # =========================================
 
     st.markdown(
-        """
-        <div class="section-title">
-            📊 Analytics Comercial
-        </div>
-        """,
+        dedent(
+            """
+            <div class="section-title">
+                📊 Analytics Comercial
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
@@ -624,11 +622,13 @@ def render_empresa_ativa():
     # =========================================
 
     st.markdown(
-        """
-        <div class="section-title">
-            📈 Últimas Leads
-        </div>
-        """,
+        dedent(
+            """
+            <div class="section-title">
+                📈 Últimas Leads
+            </div>
+            """
+        ),
         unsafe_allow_html=True,
     )
 
