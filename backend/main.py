@@ -83,6 +83,106 @@ def obter_sessao_waha(payload: dict, mensagem: dict) -> str:
     return str(sessao)
 
 
+def obter_telefone_real_waha(
+    chat_id: str,
+    sessao: str,
+) -> str:
+    """
+    Mantém o chat_id técnico para comunicação com o WAHA,
+    mas tenta obter o telefone real para salvar no CRM.
+
+    Exemplos:
+
+    5585999999999@c.us
+        -> 5585999999999
+
+    87668906008657@lid
+        -> +55 85 8891-7676
+    """
+
+    if not chat_id:
+        return chat_id
+
+    # Formato tradicional do WhatsApp.
+    if chat_id.endswith("@c.us"):
+        return chat_id.replace("@c.us", "")
+
+    # Se não for LID, preserva o valor original.
+    if not chat_id.endswith("@lid"):
+        return chat_id
+
+    headers = {
+        "X-Api-Key": os.getenv(
+            "WAHA_API_KEY",
+            "orionsystems",
+        ),
+    }
+
+    try:
+        resposta = requests.get(
+            f"http://localhost:3000/api/{sessao}/chats",
+            headers=headers,
+            params={
+                "limit": 100,
+                "offset": 0,
+            },
+            timeout=10,
+        )
+
+        resposta.raise_for_status()
+
+        chats = resposta.json()
+
+        if not isinstance(chats, list):
+            return chat_id
+
+        for chat in chats:
+            if not isinstance(chat, dict):
+                continue
+
+            chat_info = chat.get("id")
+            identificador = None
+
+            if isinstance(chat_info, dict):
+                identificador = chat_info.get("_serialized")
+
+                if (
+                    not identificador
+                    and chat_info.get("user")
+                    and chat_info.get("server")
+                ):
+                    identificador = (
+                        f"{chat_info.get('user')}"
+                        f"@{chat_info.get('server')}"
+                    )
+
+            elif isinstance(chat_info, str):
+                identificador = chat_info
+
+            if identificador != chat_id:
+                continue
+
+            telefone = (
+                chat.get("number")
+                or chat.get("phone")
+                or chat.get("name")
+            )
+
+            if telefone:
+                return str(telefone).strip()
+
+    except (
+        requests.RequestException,
+        ValueError,
+        TypeError,
+    ):
+        pass
+
+    # Nunca impede o atendimento caso o WAHA
+    # não consiga resolver o telefone.
+    return chat_id
+
+
 @app.post("/mensagem")
 def receber_mensagem(dados: MensagemRequest):
     db: Session = SessionLocal()
@@ -274,10 +374,15 @@ async def webhook_waha(payload: dict):
             "motivo": "sem_texto_ou_chat_id",
         }
 
+    telefone_real = obter_telefone_real_waha(
+        chat_id,
+        sessao,
+    )
+
     dados = MensagemRequest(
         empresa_id=empresa_id,
         nome=nome,
-        telefone=chat_id,
+        telefone=telefone_real,
         canal="whatsapp",
         identificador=chat_id,
         mensagem=texto,
