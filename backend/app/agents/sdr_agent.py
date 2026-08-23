@@ -172,13 +172,27 @@ def detectar_intencao_cliente(mensagem: str):
         "nao sei qual servico", "quero conhecer",
         "serviços da forway", "servicos da forway",
         "gostaria de saber os serviços", "gostaria de saber os servicos",
-        "queria saber informações", "queria saber informacoes"
+        "queria saber informações", "queria saber informacoes",
         "gostaria de saber sobre os serviços",
         "gostaria de saber sobre os servicos",
+        "gostaria de saber mais sobre seus serviços",
+        "gostaria de saber mais sobre seus servicos",
+        "gostaria de saber sobre seus serviços",
+        "gostaria de saber sobre seus servicos",
+        "quero saber sobre seus serviços",
+        "quero saber sobre seus servicos",
+        "quero saber mais sobre seus serviços",
+        "quero saber mais sobre seus servicos",
+        "seus serviços",
+        "seus servicos",
         "serviços de vocês",
         "servicos de voces",
         "saber sobre os serviços",
         "saber sobre os servicos",
+        "saber mais sobre os serviços",
+        "saber mais sobre os servicos",
+        "saber mais sobre seus serviços",
+        "saber mais sobre seus servicos",
     ]):
         return "conhecer_servicos"
 
@@ -693,21 +707,6 @@ def conduzir_conversa(conversa, mensagem: str):
         if nova_intencao == "conhecer_servicos":
             conversa.etapa = "coletar_nome"
             resposta = resposta_servicos_forway()
-            conversa.historico += f"\nAgente: {resposta}"
-            return resposta, analise
-
-        if nova_intencao in [
-            "orcamento", "reuniao", "estrutura_completa", "trafego",
-            "automacao", "social_media", "web_design", "design"
-        ]:
-            if conversa.servico is None and analise["produto"] != "não identificado":
-                conversa.servico = analise["produto"]
-
-            conversa.etapa = "coletar_nome"
-            resposta = (
-                f"{resposta_base_por_servico(conversa, nova_intencao)}\n\n"
-                "Para eu organizar melhor seu atendimento, como posso te chamar?"
-            )
             conversa.historico += f"\nAgente: {resposta}"
             return resposta, analise
 
