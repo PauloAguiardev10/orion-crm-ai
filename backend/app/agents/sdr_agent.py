@@ -696,6 +696,21 @@ def conduzir_conversa(conversa, mensagem: str):
             conversa.historico += f"\nAgente: {resposta}"
             return resposta, analise
 
+        if nova_intencao in [
+            "orcamento", "reuniao", "estrutura_completa", "trafego",
+            "automacao", "social_media", "web_design", "design"
+        ]:
+            if conversa.servico is None and analise["produto"] != "não identificado":
+                conversa.servico = analise["produto"]
+
+            conversa.etapa = "coletar_nome"
+            resposta = (
+                f"{resposta_base_por_servico(conversa, nova_intencao)}\n\n"
+                "Para eu organizar melhor seu atendimento, como posso te chamar?"
+            )
+            conversa.historico += f"\nAgente: {resposta}"
+            return resposta, analise
+
         if not parece_nome(texto):
             resposta = (
                 "Desculpa 😊\n\n"
