@@ -96,8 +96,8 @@ def obter_telefone_real_waha(
     5585999999999@c.us
         -> 5585999999999
 
-    87668906008657@lid
-        -> +55 85 8891-7676
+    62354452656201@lid
+        -> 558599558799
     """
 
     if not chat_id:
@@ -111,6 +111,8 @@ def obter_telefone_real_waha(
     if not chat_id.endswith("@lid"):
         return chat_id
 
+    lid_numero = chat_id.replace("@lid", "")
+
     headers = {
         "X-Api-Key": os.getenv(
             "WAHA_API_KEY",
@@ -120,56 +122,53 @@ def obter_telefone_real_waha(
 
     try:
         resposta = requests.get(
-            f"http://localhost:3000/api/{sessao}/chats",
+            "http://localhost:3000/api/contacts/all",
             headers=headers,
             params={
-                "limit": 100,
-                "offset": 0,
+                "session": sessao,
             },
             timeout=10,
         )
 
         resposta.raise_for_status()
 
-        chats = resposta.json()
+        contatos = resposta.json()
 
-        if not isinstance(chats, list):
+        if not isinstance(contatos, list):
             return chat_id
 
-        for chat in chats:
-            if not isinstance(chat, dict):
+        for contato in contatos:
+            if not isinstance(contato, dict):
                 continue
 
-            chat_info = chat.get("id")
-            identificador = None
+            numero = str(
+                contato.get("number") or ""
+            ).strip()
 
-            if isinstance(chat_info, dict):
-                identificador = chat_info.get("_serialized")
+            if numero != lid_numero:
+                continue
 
-                if (
-                    not identificador
-                    and chat_info.get("user")
-                    and chat_info.get("server")
-                ):
-                    identificador = (
-                        f"{chat_info.get('user')}"
-                        f"@{chat_info.get('server')}"
+            contato_id = contato.get("id")
+
+            if isinstance(contato_id, dict):
+                contato_id = (
+                    contato_id.get("_serialized")
+                    or (
+                        f"{contato_id.get('user')}@{contato_id.get('server')}"
+                        if contato_id.get("user")
+                        and contato_id.get("server")
+                        else None
                     )
+                )
 
-            elif isinstance(chat_info, str):
-                identificador = chat_info
+            if (
+                isinstance(contato_id, str)
+                and contato_id.endswith("@c.us")
+            ):
+                telefone_real = contato_id.replace("@c.us", "").strip()
 
-            if identificador != chat_id:
-                continue
-
-            telefone = (
-                chat.get("number")
-                or chat.get("phone")
-                or chat.get("name")
-            )
-
-            if telefone:
-                return str(telefone).strip()
+                if telefone_real:
+                    return telefone_real
 
     except (
         requests.RequestException,
