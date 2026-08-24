@@ -541,7 +541,63 @@ def conduzir_conversa(conversa, mensagem: str):
             "contratacao", "objetivo_comercial"
         ]:
             conversa.etapa = "coletar_nome"
-            resposta = resposta_inicial_por_servico(intencao, texto)
+
+            # Se a Sofia já respondeu uma saudação nesta conversa,
+            # não cumprimenta novamente ao identificar o serviço.
+            if "Agente:" in (conversa.historico or ""):
+                if intencao == "trafego":
+                    resposta = (
+                        "Posso te ajudar com tráfego pago sim.\n\n"
+                        "Antes de te encaminhar para o especialista, me fala seu nome?"
+                    )
+                elif intencao == "orcamento":
+                    resposta = (
+                        "Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\n"
+                        "Me fala seu nome?"
+                    )
+                elif intencao == "reuniao":
+                    resposta = (
+                        "Antes de te passar para o Luciano, vou pegar um contexto rápido para ele já continuar com mais clareza.\n\n"
+                        "Qual é o seu nome?"
+                    )
+                elif intencao == "automacao":
+                    resposta = (
+                        "Automação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\n\n"
+                        "Me fala seu nome para eu entender seu cenário?"
+                    )
+                elif intencao == "social_media":
+                    resposta = (
+                        "A Forway trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\n\n"
+                        "Como posso te chamar?"
+                    )
+                elif intencao == "web_design":
+                    resposta = (
+                        "Um site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\n\n"
+                        "Me fala seu nome?"
+                    )
+                elif intencao == "design":
+                    resposta = (
+                        "Design e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\n\n"
+                        "Como posso te chamar?"
+                    )
+                elif intencao == "estrutura_completa":
+                    resposta = (
+                        "Quando a empresa busca uma estrutura mais completa, o ideal é olhar tráfego, conteúdo, atendimento e presença digital juntos.\n\n"
+                        "Me fala seu nome para eu organizar melhor seu atendimento?"
+                    )
+                elif intencao == "contratacao":
+                    resposta = (
+                        "Perfeito 😊\n\n"
+                        "Para eu organizar seu atendimento e o Luciano já continuar com o contexto certo, como posso te chamar?"
+                    )
+                else:
+                    resposta = (
+                        "Entendi 😊\n\n"
+                        "Esse é exatamente o tipo de objetivo que vale analisar com mais contexto.\n\n"
+                        "Para eu organizar melhor seu atendimento, como posso te chamar?"
+                    )
+            else:
+                resposta = resposta_inicial_por_servico(intencao, texto)
 
         else:
             conversa.etapa = "coletar_nome"
@@ -687,4 +743,4 @@ def conduzir_conversa(conversa, mensagem: str):
 
     conversa.historico += f"\nAgente: {resposta}"
 
-    return resposta, analise
+    return resposta, analise 
