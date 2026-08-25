@@ -482,8 +482,10 @@ def conduzir_conversa(conversa, mensagem: str):
 
     intencao = detectar_intencao_cliente(texto)
 
+    # Considera os sinais comerciais acumulados durante toda a conversa.
     texto_para_analise = f"""
-    {texto}
+    {conversa.historico or ''}
+    Cliente: {texto}
     {conversa.objetivo or ''}
     {conversa.servico or ''}
     """
@@ -606,7 +608,11 @@ def conduzir_conversa(conversa, mensagem: str):
     elif conversa.etapa == "entender_objetivo_inicial":
 
         conversa.objetivo = texto
-        analise = analisar_mensagem(f"{conversa.objetivo or ''}\n{conversa.segmento or ''}")
+        analise = analisar_mensagem(
+            f"{conversa.historico or ''}\nCliente: {texto}\n"
+            f"{conversa.objetivo or ''}\n{conversa.segmento or ''}\n"
+            f"{conversa.servico or ''}"
+        )
 
         if conversa.servico is None and analise["produto"] != "não identificado":
             conversa.servico = analise["produto"]
@@ -634,7 +640,8 @@ def conduzir_conversa(conversa, mensagem: str):
             "contratacao", "objetivo_comercial"
         ]:
             analise = analisar_mensagem(
-                f"{texto}\n{conversa.objetivo or ''}\n{conversa.servico or ''}"
+                f"{conversa.historico or ''}\nCliente: {texto}\n"
+                f"{conversa.objetivo or ''}\n{conversa.servico or ''}"
             )
             if analise["produto"] != "não identificado":
                 conversa.servico = analise["produto"]
@@ -701,7 +708,11 @@ def conduzir_conversa(conversa, mensagem: str):
 
         conversa.objetivo = texto
 
-        analise = analisar_mensagem(f"{conversa.objetivo or ''}\n{conversa.segmento or ''}")
+        analise = analisar_mensagem(
+            f"{conversa.historico or ''}\nCliente: {texto}\n"
+            f"{conversa.objetivo or ''}\n{conversa.segmento or ''}\n"
+            f"{conversa.servico or ''}"
+        )
 
         if (
             analise["produto"] == "Estrutura Completa"
@@ -742,5 +753,12 @@ def conduzir_conversa(conversa, mensagem: str):
         resposta = resposta_apos_encaminhamento(texto, conversa.nome)
 
     conversa.historico += f"\nAgente: {resposta}"
+
+    # Recalcula a qualificação final com o contexto acumulado.
+    analise = analisar_mensagem(
+        f"{conversa.historico or ''}\n"
+        f"{conversa.objetivo or ''}\n"
+        f"{conversa.servico or ''}"
+    )
 
     return resposta, analise 
