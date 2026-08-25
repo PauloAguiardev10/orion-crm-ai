@@ -1,4 +1,6 @@
 import hashlib
+import re
+import unicodedata
 
 import pandas as pd
 
@@ -7,6 +9,33 @@ from database.db import conectar
 
 def hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode()).hexdigest()
+
+
+def gerar_email_interno(usuario: str) -> str:
+    """
+    Gera um e-mail técnico para compatibilidade com o schema atual
+    da tabela usuarios, sem alterar a forma de login pelo campo usuario.
+    """
+    usuario = usuario.strip()
+
+    if "@" in usuario and "." in usuario.split("@")[-1]:
+        return usuario.lower()
+
+    texto = unicodedata.normalize("NFKD", usuario)
+    texto = "".join(
+        caractere
+        for caractere in texto
+        if not unicodedata.combining(caractere)
+    )
+
+    texto = texto.lower()
+    texto = re.sub(r"[^a-z0-9]+", ".", texto)
+    texto = texto.strip(".")
+
+    if not texto:
+        texto = "usuario"
+
+    return f"{texto}@orionsystems.local"
 
 
 def criar_tabela_usuarios() -> None:
@@ -19,10 +48,17 @@ def criar_tabela_usuarios() -> None:
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id SERIAL PRIMARY KEY,
                     empresa_id INTEGER,
-                    empresa VARCHAR(255) NOT NULL,
-                    usuario VARCHAR(150) UNIQUE NOT NULL,
-                    senha VARCHAR(255) NOT NULL,
-                    nivel VARCHAR(50) DEFAULT 'usuario'
+                    nome VARCHAR(150) NOT NULL,
+                    email VARCHAR(150) UNIQUE NOT NULL,
+                    senha_hash TEXT NOT NULL,
+                    nivel VARCHAR(50) DEFAULT 'usuario',
+                    status VARCHAR(30) DEFAULT 'ativo',
+                    ultimo_login_em TIMESTAMP,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    empresa VARCHAR(150),
+                    usuario VARCHAR(150),
+                    senha TEXT
                 )
                 """
             )
@@ -79,6 +115,8 @@ def criar_usuario(
 
     try:
         senha_hash = hash_senha(senha)
+        nome = usuario
+        email = gerar_email_interno(usuario)
 
         with conn.cursor() as cursor:
             cursor.execute(
@@ -86,8 +124,13 @@ def criar_usuario(
                 SELECT id
                 FROM usuarios
                 WHERE usuario = %s
+                   OR email = %s
+                LIMIT 1
                 """,
-                (usuario,),
+                (
+                    usuario,
+                    email,
+                ),
             )
 
             existente = cursor.fetchone()
@@ -99,34 +142,55 @@ def criar_usuario(
                     SET
                         empresa_id = %s,
                         empresa = %s,
+                        nome = %s,
+                        email = %s,
+                        usuario = %s,
                         senha = %s,
-                        nivel = %s
-                    WHERE usuario = %s
+                        senha_hash = %s,
+                        nivel = %s,
+                        status = 'ativo',
+                        atualizado_em = CURRENT_TIMESTAMP
+                    WHERE id = %s
                     """,
                     (
                         empresa_id,
                         empresa,
+                        nome,
+                        email,
+                        usuario,
+                        senha_hash,
                         senha_hash,
                         nivel,
-                        usuario,
+                        existente[0],
                     ),
                 )
+
             else:
                 cursor.execute(
                     """
                     INSERT INTO usuarios (
                         empresa_id,
                         empresa,
+                        nome,
+                        email,
                         usuario,
                         senha,
-                        nivel
+                        senha_hash,
+                        nivel,
+                        status
                     )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, 'ativo'
+                    )
                     """,
                     (
                         empresa_id,
                         empresa,
+                        nome,
+                        email,
                         usuario,
+                        senha_hash,
                         senha_hash,
                         nivel,
                     ),
@@ -167,15 +231,21 @@ def alterar_senha(usuario, nova_senha):
     conn = conectar()
 
     try:
+        senha_hash = hash_senha(nova_senha)
+
         with conn.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET senha = %s
+                SET
+                    senha = %s,
+                    senha_hash = %s,
+                    atualizado_em = CURRENT_TIMESTAMP
                 WHERE usuario = %s
                 """,
                 (
-                    hash_senha(nova_senha),
+                    senha_hash,
+                    senha_hash,
                     usuario,
                 ),
             )

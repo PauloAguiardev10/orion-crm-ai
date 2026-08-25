@@ -270,6 +270,7 @@ def render_configuracoes():
             nova_senha,
             st.session_state.empresa,
             nivel,
+            empresa_id,
         ):
             st.success("Usuário criado com sucesso.")
             limpar_formularios()
