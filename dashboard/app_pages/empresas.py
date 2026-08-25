@@ -447,6 +447,111 @@ def render_empresas():
 
     st.title("🏢 Empresas")
 
+    st.markdown(
+        """
+        <style>
+        /* ORION UI — EMPRESAS */
+        [data-testid="stDataFrame"] {
+            border: 1px solid rgba(34,211,238,.28);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 0 28px rgba(34,211,238,.08);
+        }
+
+        [data-testid="stMetric"] {
+            background:
+                radial-gradient(circle at 12% 0%, rgba(34,211,238,.12), transparent 42%),
+                linear-gradient(145deg, rgba(15,23,42,.97), rgba(3,8,20,.96));
+            border: 1px solid rgba(34,211,238,.32);
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: 0 0 25px rgba(34,211,238,.09);
+        }
+
+        [data-testid="stTextInput"] input,
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stMultiSelect"] > div > div {
+            border-radius: 12px !important;
+        }
+
+        [data-testid="stTextInput"] input:focus,
+        [data-testid="stSelectbox"] > div > div:focus-within,
+        [data-testid="stMultiSelect"] > div > div:focus-within {
+            border-color: rgba(34,211,238,.70) !important;
+            box-shadow: 0 0 0 1px rgba(34,211,238,.16),
+                        0 0 18px rgba(34,211,238,.10) !important;
+        }
+
+        .orion-section-card {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 0% 0%, rgba(34,211,238,.09), transparent 38%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px solid rgba(34,211,238,.24);
+            border-radius: 18px;
+            padding: 15px 17px;
+            margin: 8px 0 16px 0;
+            box-shadow: 0 0 26px rgba(34,211,238,.065);
+        }
+
+        .orion-section-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 12px;
+            bottom: 12px;
+            width: 3px;
+            border-radius: 999px;
+            background: #22D3EE;
+            box-shadow: 0 0 12px rgba(34,211,238,.8);
+        }
+
+        .orion-section-title {
+            color: #FFFFFF;
+            font-size: 15px;
+            font-weight: 800;
+            margin-left: 5px;
+        }
+
+        .orion-section-subtitle {
+            color: #94A3B8;
+            font-size: 13px;
+            margin: 4px 0 0 5px;
+        }
+
+        .orion-empty-card {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(99,102,241,.09), transparent 45%),
+                linear-gradient(145deg, rgba(15,23,42,.95), rgba(3,8,20,.94));
+            border: 1px dashed rgba(99,102,241,.38);
+            border-radius: 18px;
+            padding: 24px 18px;
+            margin: 8px 0 14px 0;
+            text-align: center;
+            color: #CBD5E1;
+            box-shadow: 0 0 24px rgba(99,102,241,.06);
+        }
+
+        .orion-empty-card strong {
+            color: #FFFFFF;
+        }
+
+        div[data-testid="stButton"] > button {
+            border-radius: 12px;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34,211,238,.62);
+            box-shadow: 0 0 18px rgba(34,211,238,.12);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if nivel == "parceiro_admin":
         st.info(
             f"Painel parceiro: {empresa_logada}. "
@@ -457,9 +562,28 @@ def render_empresas():
     empresas = listar_empresas()
 
     st.markdown("## 📋 Empresas cadastradas")
+    st.markdown(
+        """
+        <div class="orion-section-card">
+            <div class="orion-section-title">Carteira de empresas</div>
+            <div class="orion-section-subtitle">
+                Visualize os clientes cadastrados e vinculados à operação.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if empresas.empty:
-        st.info("Nenhuma empresa cadastrada.")
+        st.markdown(
+            """
+            <div class="orion-empty-card">
+                <strong>Nenhuma empresa cadastrada ainda.</strong><br>
+                A estrutura permanece disponível e o primeiro cadastro pode ser feito abaixo.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         st.dataframe(
             empresas,
@@ -469,6 +593,17 @@ def render_empresas():
 
     st.markdown("---")
     st.markdown("## ➕ Nova empresa")
+    st.markdown(
+        """
+        <div class="orion-section-card">
+            <div class="orion-section-title">Cadastro de novo cliente</div>
+            <div class="orion-section-subtitle">
+                Configure acesso, plano, parceiro responsável e serviços contratados.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if nivel == "orion_admin" and parceiros.empty:
         st.warning(
@@ -615,6 +750,17 @@ def render_empresas():
 
     st.markdown("---")
     st.markdown("## ⚙️ Gerenciar empresa")
+    st.markdown(
+        """
+        <div class="orion-section-card">
+            <div class="orion-section-title">Gestão da empresa</div>
+            <div class="orion-section-subtitle">
+                Atualize plano, status financeiro, serviços e vínculo operacional.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     empresas = listar_empresas()
 
@@ -626,7 +772,15 @@ def render_empresas():
         empresas_gerenciaveis = empresas.copy()
 
     if empresas_gerenciaveis.empty:
-        st.info("Nenhuma empresa cliente disponível para gerenciamento.")
+        st.markdown(
+            """
+            <div class="orion-empty-card">
+                <strong>Nenhuma empresa disponível para gerenciamento.</strong><br>
+                Quando um cliente for cadastrado, os controles de edição aparecerão nesta área.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         return
 
     opcoes = {

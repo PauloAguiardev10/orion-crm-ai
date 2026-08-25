@@ -36,9 +36,139 @@ def render_produtos():
 
     st.title("🛒 Produtos")
 
+    st.markdown(
+        """
+        <style>
+        .produtos-section-card {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 0% 0%, rgba(34,211,238,.09), transparent 38%),
+                linear-gradient(145deg, rgba(15,23,42,.97), rgba(3,8,20,.96));
+            border: 1px solid rgba(34,211,238,.24);
+            border-radius: 18px;
+            padding: 16px 18px;
+            margin: 8px 0 16px 0;
+            box-shadow:
+                0 0 26px rgba(34,211,238,.065),
+                inset 0 1px 0 rgba(255,255,255,.02);
+        }
+
+        .produtos-section-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 13px;
+            bottom: 13px;
+            width: 3px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #67E8F9, #22D3EE, #3B82F6);
+            box-shadow: 0 0 12px rgba(34,211,238,.78);
+        }
+
+        .produtos-section-title {
+            color: #FFFFFF;
+            font-size: 15px;
+            font-weight: 850;
+            margin-left: 5px;
+            margin-bottom: 4px;
+        }
+
+        .produtos-section-subtitle {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-left: 5px;
+        }
+
+        .produtos-empty-card {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(99,102,241,.09), transparent 44%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px dashed rgba(99,102,241,.40);
+            border-radius: 18px;
+            padding: 28px 20px;
+            margin: 10px 0 18px 0;
+            text-align: center;
+            color: #CBD5E1;
+            box-shadow: 0 0 24px rgba(99,102,241,.06);
+        }
+
+        .produtos-empty-card strong {
+            color: #FFFFFF;
+        }
+
+        .produto-management-empty {
+            background:
+                radial-gradient(circle at 0% 0%, rgba(168,85,247,.08), transparent 40%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px solid rgba(168,85,247,.24);
+            border-left: 4px solid #A855F7;
+            border-radius: 18px;
+            padding: 22px 20px;
+            color: #CBD5E1;
+            box-shadow: 0 0 24px rgba(168,85,247,.06);
+            margin-bottom: 12px;
+        }
+
+        [data-testid="stDataFrame"] {
+            border: 1px solid rgba(34,211,238,.26);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow:
+                0 0 30px rgba(34,211,238,.07),
+                0 14px 34px rgba(0,0,0,.18);
+        }
+
+        [data-testid="stTextInput"] > div > div,
+        [data-testid="stNumberInput"] > div > div,
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stTextArea"] textarea {
+            border-radius: 12px !important;
+        }
+
+        [data-testid="stTextInput"] > div > div:focus-within,
+        [data-testid="stNumberInput"] > div > div:focus-within,
+        [data-testid="stSelectbox"] > div > div:focus-within,
+        [data-testid="stTextArea"] textarea:focus {
+            border-color: rgba(34,211,238,.68) !important;
+            box-shadow:
+                0 0 0 1px rgba(34,211,238,.15),
+                0 0 18px rgba(34,211,238,.09) !important;
+        }
+
+        div[data-testid="stButton"] > button {
+            border-radius: 12px !important;
+            transition:
+                transform .18s ease,
+                border-color .18s ease,
+                box-shadow .18s ease;
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34,211,238,.62) !important;
+            box-shadow: 0 0 18px rgba(34,211,238,.12) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     produtos = listar_produtos(empresa_id)
 
     st.markdown("## ➕ Cadastrar produto")
+
+    st.markdown(
+        """
+        <div class="produtos-section-card">
+            <div class="produtos-section-title">Novo produto</div>
+            <div class="produtos-section-subtitle">
+                Cadastre informações comerciais, preço, estoque e imagem do produto.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     c1, c2 = st.columns(2)
 
@@ -78,20 +208,67 @@ def render_produtos():
 
     st.markdown("## 📦 Produtos cadastrados")
 
+    st.markdown(
+        """
+        <div class="produtos-section-card">
+            <div class="produtos-section-title">Catálogo da empresa</div>
+            <div class="produtos-section-subtitle">
+                Consulte os produtos disponíveis, estoque, preço e situação atual.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if produtos.empty:
 
-        st.info("Nenhum produto cadastrado.")
-        return
+        st.markdown(
+            """
+            <div class="produtos-empty-card">
+                <strong>Nenhum produto cadastrado ainda.</strong><br>
+                O catálogo aparecerá aqui assim que o primeiro produto for criado.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    st.dataframe(
-        produtos,
-        use_container_width=True,
-        hide_index=True,
-    )
+    else:
+
+        st.dataframe(
+            produtos,
+            use_container_width=True,
+            hide_index=True,
+        )
 
     st.markdown("---")
 
     st.markdown("## ⚙️ Gerenciar produto")
+
+    st.markdown(
+        """
+        <div class="produtos-section-card">
+            <div class="produtos-section-title">Gestão do produto</div>
+            <div class="produtos-section-subtitle">
+                Atualize dados, estoque, status e informações comerciais do item selecionado.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if produtos.empty:
+
+        st.markdown(
+            """
+            <div class="produto-management-empty">
+                Nenhum produto disponível para edição no momento.<br>
+                Quando um produto for cadastrado, os controles de gerenciamento aparecerão nesta área.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        return
 
     produto_opcoes = {
 

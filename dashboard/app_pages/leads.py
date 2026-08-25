@@ -55,10 +55,6 @@ def render_leads(leads):
 
     st.title("📋 Leads")
 
-    if leads.empty:
-        st.info("Nenhuma lead encontrada.")
-        return
-
     leads = leads.copy()
 
     colunas_padrao = {
@@ -178,38 +174,168 @@ def render_leads(leads):
 
     st.markdown("---")
 
-    if leads_filtradas.empty:
-        st.warning("Nenhuma lead encontrada nos filtros.")
-        return
-
     st.markdown(
         """
         <style>
-        .lead-card {
-            background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.88));
-            border: 1px solid rgba(0,229,255,.16);
+        .leads-context-card {
+            background:
+                radial-gradient(circle at 0% 0%, rgba(34,211,238,.09), transparent 38%),
+                linear-gradient(145deg, rgba(15,23,42,.97), rgba(3,8,20,.96));
+            border: 1px solid rgba(34,211,238,.24);
             border-radius: 18px;
-            padding: 20px;
+            padding: 16px 18px;
+            margin: 8px 0 18px 0;
+            box-shadow: 0 0 26px rgba(34,211,238,.065);
+        }
+
+        .leads-context-title {
+            color: #FFFFFF;
+            font-size: 15px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .leads-context-subtitle {
+            color: #94A3B8;
+            font-size: 13px;
+        }
+
+        .leads-empty-card {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(99,102,241,.09), transparent 44%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px dashed rgba(99,102,241,.40);
+            border-radius: 18px;
+            padding: 28px 20px;
+            margin: 12px 0 18px 0;
+            text-align: center;
+            color: #CBD5E1;
+            box-shadow: 0 0 24px rgba(99,102,241,.06);
+        }
+
+        .leads-empty-card strong {
+            color: #FFFFFF;
+        }
+
+        .lead-card {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 0% 0%, rgba(34,211,238,.08), transparent 40%),
+                radial-gradient(circle at 100% 100%, rgba(168,85,247,.055), transparent 38%),
+                linear-gradient(145deg, rgba(15,23,42,.98), rgba(3,8,20,.96));
+            border: 1px solid rgba(34,211,238,.27);
+            border-radius: 18px;
+            padding: 20px 20px 20px 22px;
             margin-bottom: 16px;
-            box-shadow: 0 0 18px rgba(0,229,255,.04);
+            box-shadow:
+                0 0 28px rgba(34,211,238,.07),
+                0 12px 28px rgba(0,0,0,.16);
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+
+        .lead-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 14px;
+            bottom: 14px;
+            width: 3px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #67E8F9, #22D3EE, #6366F1);
+            box-shadow: 0 0 12px rgba(34,211,238,.78);
+        }
+
+        .lead-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(34,211,238,.48);
+            box-shadow:
+                0 0 36px rgba(34,211,238,.12),
+                0 14px 32px rgba(0,0,0,.20);
         }
 
         .lead-title {
             color: #FFFFFF;
             font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 8px;
+            font-weight: 850;
+            margin-bottom: 10px;
+            letter-spacing: -0.015em;
+            text-shadow: 0 0 18px rgba(34,211,238,.08);
         }
 
         .lead-line {
             color: #CBD5E1;
-            font-size: 15px;
-            margin-bottom: 5px;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stTextInput"] > div > div,
+        [data-testid="stNumberInput"] > div > div,
+        [data-testid="stTextArea"] textarea {
+            border-radius: 12px !important;
+        }
+
+        [data-testid="stSelectbox"] > div > div:focus-within,
+        [data-testid="stTextInput"] > div > div:focus-within,
+        [data-testid="stNumberInput"] > div > div:focus-within,
+        [data-testid="stTextArea"] textarea:focus {
+            border-color: rgba(34,211,238,.68) !important;
+            box-shadow:
+                0 0 0 1px rgba(34,211,238,.15),
+                0 0 18px rgba(34,211,238,.09) !important;
+        }
+
+        [data-testid="stExpander"] {
+            border-color: rgba(34,211,238,.20) !important;
+            box-shadow: 0 0 22px rgba(34,211,238,.045);
+        }
+
+        div[data-testid="stButton"] > button {
+            border-radius: 12px !important;
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34,211,238,.62) !important;
+            box-shadow: 0 0 18px rgba(34,211,238,.12) !important;
         }
         </style>
         """,
         unsafe_allow_html=True
     )
+
+    st.markdown(
+        """
+        <div class="leads-context-card">
+            <div class="leads-context-title">Gestão comercial de leads</div>
+            <div class="leads-context-subtitle">
+                Filtre oportunidades, acompanhe score e temperatura e atualize o andamento comercial.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if leads_filtradas.empty:
+        mensagem_vazia = (
+            "Nenhuma lead registrada ainda."
+            if leads.empty
+            else "Nenhuma lead encontrada com os filtros selecionados."
+        )
+
+        st.markdown(
+            f"""
+            <div class="leads-empty-card">
+                <strong>{mensagem_vazia}</strong><br>
+                A estrutura da gestão permanece disponível e será preenchida automaticamente quando houver oportunidades.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
 
     for _, lead in leads_filtradas.iterrows():
 

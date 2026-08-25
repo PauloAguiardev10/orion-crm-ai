@@ -63,6 +63,134 @@ def render_configuracoes():
 
     st.title("⚙️ Configurações Operacionais")
 
+    st.markdown(
+        """
+        <style>
+        .config-section-card {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 0% 0%, rgba(34,211,238,.09), transparent 38%),
+                linear-gradient(145deg, rgba(15,23,42,.97), rgba(3,8,20,.96));
+            border: 1px solid rgba(34,211,238,.24);
+            border-radius: 18px;
+            padding: 16px 18px;
+            margin: 8px 0 16px 0;
+            box-shadow:
+                0 0 26px rgba(34,211,238,.065),
+                inset 0 1px 0 rgba(255,255,255,.02);
+        }
+
+        .config-section-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 13px;
+            bottom: 13px;
+            width: 3px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #67E8F9, #22D3EE, #3B82F6);
+            box-shadow: 0 0 12px rgba(34,211,238,.78);
+        }
+
+        .config-section-title {
+            color: #FFFFFF;
+            font-size: 15px;
+            font-weight: 850;
+            margin-left: 5px;
+            margin-bottom: 4px;
+        }
+
+        .config-section-subtitle {
+            color: #94A3B8;
+            font-size: 13px;
+            margin-left: 5px;
+        }
+
+        .config-empty-card {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(99,102,241,.09), transparent 44%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px dashed rgba(99,102,241,.40);
+            border-radius: 18px;
+            padding: 24px 20px;
+            margin: 10px 0 16px 0;
+            color: #CBD5E1;
+            text-align: center;
+            box-shadow: 0 0 24px rgba(99,102,241,.06);
+        }
+
+        .config-empty-card strong {
+            color: #FFFFFF;
+        }
+
+        .config-info-card {
+            background:
+                radial-gradient(circle at 0% 0%, rgba(168,85,247,.08), transparent 40%),
+                linear-gradient(145deg, rgba(15,23,42,.96), rgba(3,8,20,.95));
+            border: 1px solid rgba(168,85,247,.24);
+            border-left: 4px solid #A855F7;
+            border-radius: 18px;
+            padding: 18px 20px;
+            color: #CBD5E1;
+            box-shadow: 0 0 24px rgba(168,85,247,.06);
+            margin: 8px 0 14px 0;
+        }
+
+        [data-testid="stDataFrame"] {
+            border: 1px solid rgba(34,211,238,.24);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow:
+                0 0 28px rgba(34,211,238,.055),
+                0 12px 30px rgba(0,0,0,.16);
+        }
+
+        [data-testid="stTextInput"] > div > div,
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stMultiSelect"] > div > div {
+            border-radius: 12px !important;
+        }
+
+        [data-testid="stTextInput"] > div > div:focus-within,
+        [data-testid="stSelectbox"] > div > div:focus-within,
+        [data-testid="stMultiSelect"] > div > div:focus-within {
+            border-color: rgba(34,211,238,.68) !important;
+            box-shadow:
+                0 0 0 1px rgba(34,211,238,.15),
+                0 0 18px rgba(34,211,238,.09) !important;
+        }
+
+        div[data-testid="stButton"] > button {
+            border-radius: 12px !important;
+            transition:
+                transform .18s ease,
+                border-color .18s ease,
+                box-shadow .18s ease;
+        }
+
+        div[data-testid="stButton"] > button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34,211,238,.62) !important;
+            box-shadow: 0 0 18px rgba(34,211,238,.12) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="config-section-card">
+            <div class="config-section-title">Gestão operacional da empresa</div>
+            <div class="config-section-subtitle">
+                Centralize usuários, acessos, especialidades e responsáveis comerciais.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown("## 👤 Usuários / Especialistas da Empresa")
 
     usuarios = listar_usuarios()
@@ -78,8 +206,30 @@ def render_configuracoes():
             use_container_width=True,
             hide_index=True,
         )
+    else:
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                <strong>Nenhum usuário cadastrado ainda.</strong><br>
+                A estrutura de gestão permanece disponível para o primeiro cadastro.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("### ➕ Criar funcionário")
+
+    st.markdown(
+        """
+        <div class="config-section-card">
+            <div class="config-section-title">Novo funcionário</div>
+            <div class="config-section-subtitle">
+                Crie um acesso para administrador da empresa ou usuário operacional.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     u1, u2 = st.columns(2)
 
@@ -168,7 +318,14 @@ def render_configuracoes():
                 st.rerun()
 
     else:
-        st.info("Nenhum usuário disponível para exclusão.")
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                Nenhum usuário disponível para exclusão.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("### 🔑 Alterar senha")
 
@@ -213,11 +370,30 @@ def render_configuracoes():
                 st.error("Não foi possível alterar a senha.")
 
     else:
-        st.info("Nenhum usuário disponível para alterar senha.")
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                Nenhum usuário disponível para alterar senha.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
 
     st.markdown("## 🧩 Serviços / Especialidades")
+
+    st.markdown(
+        """
+        <div class="config-section-card">
+            <div class="config-section-title">Serviços e especialidades</div>
+            <div class="config-section-subtitle">
+                Cadastre os serviços atendidos pela equipe e vincule-os aos especialistas.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     novo_servico = st.text_input(
         "Novo serviço ou especialidade",
@@ -280,15 +456,27 @@ def render_configuracoes():
                 st.rerun()
 
     else:
-        st.info("Nenhum serviço/especialidade cadastrado.")
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                Nenhum serviço ou especialidade cadastrado ainda.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
 
     st.markdown("## 👨‍💼 Especialistas / Atendentes")
 
-    st.info(
-        "Os especialistas são os próprios usuários cadastrados da empresa. "
-        "Selecione um funcionário e vincule as especialidades que ele atende."
+    st.markdown(
+        """
+        <div class="config-info-card">
+            Os especialistas são os próprios usuários cadastrados da empresa.
+            Selecione um funcionário e vincule as especialidades que ele atende.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     especialistas = carregar_especialistas(empresa_id)
@@ -300,7 +488,14 @@ def render_configuracoes():
 
     if not funcionarios:
 
-        st.warning("Cadastre um funcionário antes de vincular especialidades.")
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                <strong>Cadastre um funcionário antes de vincular especialidades.</strong>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     else:
 
@@ -355,8 +550,13 @@ def render_configuracoes():
                 st.rerun()
 
         else:
-            st.info(
-                "Selecione um funcionário para configurar as especialidades."
+            st.markdown(
+                """
+                <div class="config-empty-card">
+                    Selecione um funcionário para configurar as especialidades.
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
     if not especialistas.empty:
@@ -365,6 +565,15 @@ def render_configuracoes():
             especialistas,
             use_container_width=True,
             hide_index=True,
+        )
+    else:
+        st.markdown(
+            """
+            <div class="config-empty-card">
+                Nenhum especialista configurado ainda.
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
     st.markdown("---")
