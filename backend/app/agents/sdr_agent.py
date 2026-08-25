@@ -470,7 +470,18 @@ def resposta_base_por_servico(conversa, intencao):
     )
 
 
+
+def sincronizar_status_atendimento(conversa):
+    if conversa.humano_assumiu:
+        conversa.status_atendimento = "em_atendimento_humano"
+    elif conversa.etapa == "aguardando_humano":
+        conversa.status_atendimento = "aguardando_humano"
+    else:
+        conversa.status_atendimento = "em_atendimento_ia"
+
 def conduzir_conversa(conversa, mensagem: str):
+    sincronizar_status_atendimento(conversa)
+
     texto = mensagem.strip()
     canal = conversa.canal.lower()
 
@@ -760,5 +771,7 @@ def conduzir_conversa(conversa, mensagem: str):
         f"{conversa.objetivo or ''}\n"
         f"{conversa.servico or ''}"
     )
+
+    sincronizar_status_atendimento(conversa)
 
     return resposta, analise 
