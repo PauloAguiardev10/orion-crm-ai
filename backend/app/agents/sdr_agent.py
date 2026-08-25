@@ -139,6 +139,35 @@ def detectar_interacao_social(mensagem: str):
     return None
 
 
+def objetivo_amplo_para_estrutura(texto: str) -> bool:
+    return contem_termo(
+        texto,
+        [
+            "vender mais",
+            "aumentar vendas",
+            "aumentar minhas vendas",
+            "aumentar as vendas",
+            "gerar mais vendas",
+            "gerar vendas",
+            "mais clientes",
+            "conseguir mais clientes",
+            "captar clientes",
+            "gerar leads",
+            "mais leads",
+            "mais contatos",
+            "receber mais contatos",
+            "gerar contatos",
+            "fortalecer minha marca",
+            "fortalecer a marca",
+            "fortalecer presença",
+            "fortalecer a presença",
+            "melhorar minha presença digital",
+            "presença digital",
+            "presenca digital",
+        ],
+    )
+
+
 def detectar_intencao_cliente(mensagem: str):
     texto = mensagem.lower().strip()
 
@@ -458,12 +487,6 @@ def resposta_base_por_servico(conversa, intencao):
             "A identidade visual influencia muito na percepção de profissionalismo e confiança da empresa."
         )
 
-    if conversa.servico == "Estrutura Completa":
-        return (
-            "Entendi.\n\n"
-            "Nesse caso faz sentido olhar presença digital, anúncios, conteúdo e atendimento de forma integrada."
-        )
-
     return (
         "Entendi.\n\n"
         "Já deu para ter uma boa noção do que você busca."
@@ -546,7 +569,22 @@ def conduzir_conversa(conversa, mensagem: str):
 
         elif intencao == "saudacao":
             conversa.etapa = "inicio"
-            resposta = resposta_inicial_por_servico("saudacao", texto)
+
+            ja_se_apresentou = (
+                "Sou a Sofia, da Forway."
+                in (conversa.historico or "")
+            )
+
+            if ja_se_apresentou:
+                resposta = (
+                    f"{saudacao_personalizada(texto)}\n\n"
+                    "Como posso ajudar você hoje?"
+                )
+            else:
+                resposta = resposta_inicial_por_servico(
+                    "saudacao",
+                    texto,
+                )
 
         elif intencao in [
             "orcamento", "reuniao", "estrutura_completa", "trafego",
@@ -621,11 +659,20 @@ def conduzir_conversa(conversa, mensagem: str):
         conversa.objetivo = texto
         analise = analisar_mensagem(
             f"{conversa.historico or ''}\nCliente: {texto}\n"
-            f"{conversa.objetivo or ''}\n{conversa.segmento or ''}\n"
+            f"{conversa.objetivo or ''}\n"
             f"{conversa.servico or ''}"
         )
 
-        if conversa.servico is None and analise["produto"] != "não identificado":
+        if (
+            conversa.servico is None
+            and objetivo_amplo_para_estrutura(conversa.objetivo or "")
+        ):
+            conversa.servico = "Estrutura Completa"
+
+        elif (
+            conversa.servico is None
+            and analise["produto"] != "não identificado"
+        ):
             conversa.servico = analise["produto"]
 
         conversa.etapa = "coletar_nome"
@@ -721,11 +768,17 @@ def conduzir_conversa(conversa, mensagem: str):
 
         analise = analisar_mensagem(
             f"{conversa.historico or ''}\nCliente: {texto}\n"
-            f"{conversa.objetivo or ''}\n{conversa.segmento or ''}\n"
+            f"{conversa.objetivo or ''}\n"
             f"{conversa.servico or ''}"
         )
 
         if (
+            conversa.servico is None
+            and objetivo_amplo_para_estrutura(conversa.objetivo or "")
+        ):
+            conversa.servico = "Estrutura Completa"
+
+        elif (
             analise["produto"] == "Estrutura Completa"
             or (
                 conversa.servico is None
