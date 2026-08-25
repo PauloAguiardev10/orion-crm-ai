@@ -351,6 +351,12 @@ async def webhook_waha(payload: dict):
     chat_id = mensagem.get("from")
     nome = mensagem.get("_data", {}).get("notifyName")
 
+    if chat_id == "status@broadcast":
+        return {
+            "status": "ignorado",
+            "motivo": "status_broadcast",
+        }
+
     sessao = obter_sessao_waha(
         payload,
         mensagem,
