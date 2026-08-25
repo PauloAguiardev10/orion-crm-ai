@@ -204,16 +204,16 @@ def render_sidebar():
         "usuario",
     )
 
+    empresa_login_id = (
+        st.session_state.get(
+            "empresa_login_id"
+        )
+    )
+
     empresa_login_nome = (
         st.session_state.get(
             "empresa_login_nome",
             "",
-        )
-    )
-
-    empresa_ativa_id = (
-        st.session_state.get(
-            "empresa_ativa_id"
         )
     )
 
@@ -227,10 +227,16 @@ def render_sidebar():
         # =========================================
         # IDENTIDADE VISUAL
         # =========================================
+        # A marca exibida pertence à empresa em que
+        # o usuário fez login, independentemente do
+        # nível de acesso do funcionário.
+        # =========================================
 
         if (
-            nivel == "parceiro_admin"
-            and empresa_login_nome == "Forway"
+            str(empresa_login_nome)
+            .strip()
+            .lower()
+            == "forway"
         ):
 
             logo_path = (
@@ -241,14 +247,37 @@ def render_sidebar():
                 "FORWAY CRM"
             )
 
-        else:
+        elif (
+            str(empresa_login_nome)
+            .strip()
+            .lower()
+            == "orion systems"
+        ):
 
-            logo_path = obter_logo_empresa(
-                empresa_ativa_id
+            logo_path = (
+                "assets/logo_orion.png"
             )
 
             titulo_crm = (
                 "ORION SYSTEMS CRM"
+            )
+
+        else:
+
+            logo_path = obter_logo_empresa(
+                empresa_login_id
+            )
+
+            nome_marca = (
+                str(empresa_login_nome)
+                .strip()
+                .upper()
+            )
+
+            titulo_crm = (
+                f"{nome_marca} CRM"
+                if nome_marca
+                else "ORION SYSTEMS CRM"
             )
 
         try:
