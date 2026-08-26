@@ -363,7 +363,7 @@ def analisar_mensagem(mensagem: str):
         score += 1
 
     if produto == "Estrutura Completa":
-        score += 3
+        score += 5
 
     if contem_termo(texto, ["urgente","urgência","urgencia","o quanto antes","ainda hoje","essa semana","esta semana","preciso começar logo","preciso comecar logo","quero começar logo","quero comecar logo","imediatamente"]):
         score += 2
