@@ -195,6 +195,26 @@ def atualizar_lead(
             ),
         )
 
+        # Quando o Luciano/especialista marca a lead como
+        # "Em atendimento", sincroniza a conversa para
+        # indicar que o atendimento humano foi assumido.
+        if novo_status == "Em atendimento":
+            cursor.execute(
+                """
+                UPDATE conversas
+                SET
+                    humano_assumiu = TRUE,
+                    status_atendimento = 'em_atendimento_humano',
+                    atualizado_em = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT conversa_id
+                    FROM leads
+                    WHERE id = %s
+                )
+                """,
+                (int(lead_id),),
+            )
+
         conn.commit()
 
     except Exception:

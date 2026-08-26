@@ -212,6 +212,24 @@ def receber_mensagem(dados: MensagemRequest):
             db.commit()
             db.refresh(conversa)
 
+        # Se o especialista já assumiu esta conversa no CRM,
+        # a Sofia permanece em silêncio e não executa o fluxo da IA.
+        if conversa.humano_assumiu is True:
+            return {
+                "empresa_id": dados.empresa_id,
+                "canal": conversa.canal,
+                "etapa_atual": conversa.etapa,
+                "resposta_agente": None,
+                "produto_identificado": conversa.servico,
+                "temperatura": None,
+                "prioridade": None,
+                "score": None,
+                "status": "em_atendimento_humano",
+                "resumo_vendedor": None,
+                "lead_id": None,
+                "humano_assumiu": True,
+            }
+
         resposta, analise = conduzir_conversa(
             conversa,
             dados.mensagem,
