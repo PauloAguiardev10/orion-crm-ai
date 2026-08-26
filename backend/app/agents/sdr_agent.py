@@ -89,15 +89,15 @@ def parece_nome(texto: str):
 def resposta_nome_nao_identificado():
     return resposta_aleatoria([
         (
-            "Acho que não peguei seu nome direitinho 😅\\n\\n"
+            "Acho que não peguei seu nome direitinho 😅\n\n"
             "Como você prefere que eu te chame?"
         ),
         (
-            "Desculpa, acho que entendi outra coisa 😊\\n\\n"
+            "Desculpa, acho que entendi outra coisa 😊\n\n"
             "Me fala só seu nome para eu continuar?"
         ),
         (
-            "Só para eu não registrar errado 😊\\n\\n"
+            "Só para eu não registrar errado 😊\n\n"
             "Qual é o seu nome?"
         ),
     ])
