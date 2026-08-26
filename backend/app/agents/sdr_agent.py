@@ -528,10 +528,13 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
 def comentario_segmento(segmento: str):
     texto = segmento.lower()
 
+def comentario_segmento(segmento: str):
+    texto = segmento.lower()
+
     if "moda" in texto or "roupa" in texto:
         return (
             "Que legal 😊\n\n"
-            "Moda feminina é um segmento onde tráfego, presença digital e fortalecimento de marca costumam fazer bastante diferença."
+            "Moda é um segmento onde uma boa presença digital e um posicionamento bem trabalhado podem ajudar bastante a atrair clientes e fortalecer a marca."
         )
 
     return (
