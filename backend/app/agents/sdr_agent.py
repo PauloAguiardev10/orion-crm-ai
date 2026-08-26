@@ -19,29 +19,72 @@ def resposta_aleatoria(lista):
 
 
 def parece_nome(texto: str):
-    texto = texto.lower().strip()
+    texto = texto.strip()
 
-    palavras_bloqueadas = [
+    if not texto:
+        return False
+
+    texto_lower = texto.lower()
+
+    frases_bloqueadas = [
         "quero", "queria", "gostaria", "serviço", "serviços",
         "servico", "servicos", "informação", "informações",
         "informacao", "informacoes", "tráfego", "trafego",
         "instagram", "facebook", "whatsapp", "como funciona",
         "orçamento", "orcamento", "valor", "preço", "preco",
         "empresa", "anúncio", "anuncio", "forway", "oferece",
-        "trabalham", "atendimento", "marketing"
+        "trabalham", "atendimento", "marketing",
+        "bom dia", "boa tarde", "boa noite", "olá", "ola", "oi",
+        "tudo bem", "sim", "não", "nao", "ok", "certo",
+        "beleza", "show", "perfeito", "entendi", "obrigado",
+        "obrigada", "valeu", "não sei", "nao sei",
+        "tudo isso", "todos", "as três", "as tres",
     ]
 
-    for palavra in palavras_bloqueadas:
-        if palavra in texto:
+    for frase in frases_bloqueadas:
+        if contem_termo(texto_lower, [frase]):
             return False
 
-    if len(texto.split()) > 4:
+    # Evita respostas grandes sendo interpretadas como nome.
+    palavras = texto.split()
+
+    if len(palavras) > 4:
         return False
 
-    if len(texto) < 2:
+    # Nome precisa ter letras de verdade.
+    letras = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]", texto)
+
+    if len(letras) < 2:
+        return False
+
+    # Não aceita números, emojis isolados ou pontuação como nome.
+    if re.search(r"\d", texto):
+        return False
+
+    if not re.fullmatch(
+        r"[A-Za-zÀ-ÖØ-öø-ÿ'’\\- ]+",
+        texto,
+    ):
         return False
 
     return True
+
+
+def resposta_nome_nao_identificado():
+    return resposta_aleatoria([
+        (
+            "Acho que não peguei seu nome direitinho 😅\\n\\n"
+            "Como você prefere que eu te chame?"
+        ),
+        (
+            "Desculpa, acho que entendi outra coisa 😊\\n\\n"
+            "Me fala só seu nome para eu continuar?"
+        ),
+        (
+            "Só para eu não registrar errado 😊\\n\\n"
+            "Qual é o seu nome?"
+        ),
+    ])
 
 
 def limpar_nome_cliente(texto: str):
@@ -137,6 +180,31 @@ def detectar_interacao_social(mensagem: str):
         return "despedida"
 
     return None
+
+
+def objetivo_multiplo_para_estrutura(texto: str) -> bool:
+    return contem_termo(
+        texto,
+        [
+            "tudo isso",
+            "quero tudo isso",
+            "busco tudo isso",
+            "estou buscando tudo isso",
+            "todos esses objetivos",
+            "todos esses pontos",
+            "tudo que você falou",
+            "tudo que voce falou",
+            "tudo o que você falou",
+            "tudo o que voce falou",
+            "tudo que você citou",
+            "tudo que voce citou",
+            "as três opções",
+            "as tres opcoes",
+            "as três",
+            "as tres",
+            "todos eles",
+        ],
+    )
 
 
 def objetivo_vendas_para_estrutura(texto: str) -> bool:
@@ -731,7 +799,12 @@ def conduzir_conversa(conversa, mensagem: str):
         )
 
         if conversa.servico is None:
-            if objetivo_marca_para_social_media(
+            if objetivo_multiplo_para_estrutura(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Estrutura Completa"
+
+            elif objetivo_marca_para_social_media(
                 conversa.objetivo or ""
             ):
                 conversa.servico = "Social Media Estratégico"
@@ -785,11 +858,7 @@ def conduzir_conversa(conversa, mensagem: str):
             return resposta, analise
 
         if not parece_nome(texto):
-            resposta = (
-                "Desculpa 😊\n\n"
-                "Não consegui identificar seu nome.\n\n"
-                "Como posso te chamar?"
-            )
+            resposta = resposta_nome_nao_identificado()
             conversa.historico += f"\nAgente: {resposta}"
             return resposta, analise
 
@@ -848,7 +917,12 @@ def conduzir_conversa(conversa, mensagem: str):
         )
 
         if conversa.servico is None:
-            if objetivo_marca_para_social_media(
+            if objetivo_multiplo_para_estrutura(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Estrutura Completa"
+
+            elif objetivo_marca_para_social_media(
                 conversa.objetivo or ""
             ):
                 conversa.servico = "Social Media Estratégico"
