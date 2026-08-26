@@ -139,7 +139,7 @@ def detectar_interacao_social(mensagem: str):
     return None
 
 
-def objetivo_amplo_para_estrutura(texto: str) -> bool:
+def objetivo_vendas_para_estrutura(texto: str) -> bool:
     return contem_termo(
         texto,
         [
@@ -157,14 +157,63 @@ def objetivo_amplo_para_estrutura(texto: str) -> bool:
             "mais contatos",
             "receber mais contatos",
             "gerar contatos",
+        ],
+    )
+
+
+def objetivo_marca_para_social_media(texto: str) -> bool:
+    return contem_termo(
+        texto,
+        [
             "fortalecer minha marca",
             "fortalecer a marca",
             "fortalecer presença",
             "fortalecer a presença",
+            "presença da marca",
+            "presenca da marca",
+            "fortalecer presença da marca",
+            "fortalecer a presença da marca",
             "melhorar minha presença digital",
             "presença digital",
             "presenca digital",
         ],
+    )
+
+
+def extrair_falas_cliente(historico: str) -> str:
+    if not historico:
+        return ""
+
+    falas = []
+
+    for linha in historico.splitlines():
+        linha = linha.strip()
+
+        if linha.lower().startswith("cliente:"):
+            falas.append(
+                linha.split(":", 1)[1].strip()
+            )
+
+    return "\n".join(falas)
+
+
+def montar_texto_comercial_cliente(
+    conversa,
+    mensagem_atual="",
+):
+    partes = [
+        extrair_falas_cliente(
+            conversa.historico or ""
+        ),
+        mensagem_atual.strip(),
+        conversa.objetivo or "",
+        conversa.servico or "",
+    ]
+
+    return "\n".join(
+        parte
+        for parte in partes
+        if parte
     )
 
 
@@ -175,7 +224,7 @@ def detectar_intencao_cliente(mensagem: str):
         ("duvida_lead", ["o que é lead","o que e lead","o que significa lead","não sei o que é lead","nao sei o que e lead","lead é o que","lead e o que","o que são leads","o que sao leads"]),
         ("objecao_experiencia_ruim", ["já tentei","ja tentei","não deu certo","nao deu certo","não funcionou","nao funcionou","experiência ruim","experiencia ruim","outra agência","outra agencia","outras agências","outras agencias","tenho medo","medo de contratar","não gostei","nao gostei","fui enganado","fui enganada","já perdi dinheiro","ja perdi dinheiro","joguei dinheiro fora","não confio","nao confio"]),
         ("estrutura_completa", ["estrutura completa","marketing completo","tudo completo","quero tudo","pacote completo","serviço completo","servico completo","solução completa","solucao completa","quero todos os serviços","quero todos os servicos","quero todos os seus serviços","quero todos os seus servicos","quero todos os serviços oferecidos","quero todos os servicos oferecidos","quero todos os serviços oferecido","quero todos os servicos oferecido","quero tudo que vocês oferecem","quero tudo que voces oferecem","quero tudo que a forway oferece","tenho interesse em todos os serviços","tenho interesse em todos os servicos","preciso de tudo","preciso de todos os serviços","preciso de todos os servicos","tráfego e social media","trafego e social media","tráfego, social media e atendimento","trafego, social media e atendimento"]),
-        ("conhecer_servicos", ["quais serviços","quais servicos","quais são os serviços","quais sao os servicos","que serviços vocês oferecem","que servicos voces oferecem","serviços vocês oferecem","servicos voces oferecem","serviços que a forway oferece","servicos que a forway oferece","informações sobre os serviços","informacoes sobre os servicos","o que vocês fazem","o que voces fazem","como vocês trabalham","como voces trabalham","me fala dos serviços","me fala dos servicos","me explica os serviços","me explica os servicos","o que oferecem","não sei o que preciso","nao sei o que preciso","não sei qual serviço","nao sei qual servico","quero conhecer","serviços da forway","servicos da forway","gostaria de saber os serviços","gostaria de saber os servicos","gostaria de saber sobre os serviços","gostaria de saber sobre os servicos","gostaria de saber mais sobre seus serviços","gostaria de saber mais sobre seus servicos","gostaria de saber sobre seus serviços","gostaria de saber sobre seus servicos","quero saber sobre seus serviços","quero saber sobre seus servicos","quero saber mais sobre seus serviços","quero saber mais sobre seus servicos","seus serviços","seus servicos","serviços de vocês","servicos de voces","saber sobre os serviços","saber sobre os servicos","saber mais sobre os serviços","saber mais sobre os servicos","saber mais sobre seus serviços","saber mais sobre seus servicos"]),
+        ("conhecer_servicos", ["como funciona o trabalho de vocês","como funciona o trabalho de voces","como funciona o trabalho da forway","como funciona o trabalho","quais serviços","quais servicos","quais são os serviços","quais sao os servicos","que serviços vocês oferecem","que servicos voces oferecem","serviços vocês oferecem","servicos voces oferecem","serviços que a forway oferece","servicos que a forway oferece","informações sobre os serviços","informacoes sobre os servicos","o que vocês fazem","o que voces fazem","como vocês trabalham","como voces trabalham","me fala dos serviços","me fala dos servicos","me explica os serviços","me explica os servicos","o que oferecem","não sei o que preciso","nao sei o que preciso","não sei qual serviço","nao sei qual servico","quero conhecer","serviços da forway","servicos da forway","gostaria de saber os serviços","gostaria de saber os servicos","gostaria de saber sobre os serviços","gostaria de saber sobre os servicos","gostaria de saber mais sobre seus serviços","gostaria de saber mais sobre seus servicos","gostaria de saber sobre seus serviços","gostaria de saber sobre seus servicos","quero saber sobre seus serviços","quero saber sobre seus servicos","quero saber mais sobre seus serviços","quero saber mais sobre seus servicos","seus serviços","seus servicos","serviços de vocês","servicos de voces","saber sobre os serviços","saber sobre os servicos","saber mais sobre os serviços","saber mais sobre os servicos","saber mais sobre seus serviços","saber mais sobre seus servicos"]),
         ("anuncio_instagram", ["vi um anúncio","vi um anuncio","vi vocês no instagram","vi voces no instagram","vim pelo instagram","vim do instagram","achei vocês no instagram","achei voces no instagram","anúncio de vocês","anuncio de voces","vi no facebook","vim pelo facebook","vi uma propaganda"]),
         ("orcamento", ["orçamento","orcamento","preço","preco","valor","quanto custa","quanto fica","qual o valor","qual valor","quanto vocês cobram","quanto voces cobram","investimento","mensalidade","pacote","pacotes","proposta"]),
         ("reuniao", ["reunião","reuniao","agenda","agendar","agendamento","marcar horário","marcar horario","marcar uma reunião","marcar uma reuniao","falar com o luciano","quero falar com o luciano","falar com especialista","falar com um especialista"]),
@@ -413,7 +462,7 @@ def resposta_apos_encaminhamento(texto, nome=None):
     if interacao == "agradecimento":
         return resposta_aleatoria([
             f"Eu que agradeço pelo contato{', ' + nome if nome else ''} 😊\n\nJá deixei tudo organizado para o Luciano continuar com você.",
-            "Obrigado você pela confiança 😊\n\nO Luciano já recebeu as informações e continua por aqui assim que possível.",
+            "Obrigado você pela confiança 😊\n\nJá deixei suas informações organizadas para o Luciano continuar por aqui assim que possível.",
             "Foi um prazer falar com você 😊\n\nAssim que o Luciano estiver disponível, ele segue o atendimento por aqui."
         ])
 
@@ -472,7 +521,7 @@ def resposta_base_por_servico(conversa, intencao):
     if conversa.servico == "Social Media Estratégico":
         return (
             "Entendi.\n\n"
-            "Para social media, o ideal é alinhar conteúdo, posicionamento e objetivo comercial."
+            "Nesse cenário, faz sentido trabalhar posicionamento, conteúdo e presença digital para fortalecer a marca de forma estratégica."
         )
 
     if conversa.servico == "Web Design":
@@ -516,15 +565,16 @@ def conduzir_conversa(conversa, mensagem: str):
 
     intencao = detectar_intencao_cliente(texto)
 
-    # Considera os sinais comerciais acumulados durante toda a conversa.
-    texto_para_analise = f"""
-    {conversa.historico or ''}
-    Cliente: {texto}
-    {conversa.objetivo or ''}
-    {conversa.servico or ''}
-    """
+    # Considera somente sinais comerciais vindos do cliente.
+    # As respostas da Sofia não podem influenciar a escolha do serviço.
+    texto_para_analise = montar_texto_comercial_cliente(
+        conversa,
+        texto,
+    )
 
-    analise = analisar_mensagem(texto_para_analise)
+    analise = analisar_mensagem(
+        texto_para_analise
+    )
 
     etapas_que_podem_identificar_servico = [
         "inicio",
@@ -652,28 +702,50 @@ def conduzir_conversa(conversa, mensagem: str):
 
         else:
             conversa.etapa = "coletar_nome"
-            resposta = resposta_inicial_por_servico("geral", texto)
+
+            ja_se_apresentou = (
+                "Sou a Sofia, da Forway."
+                in (conversa.historico or "")
+            )
+
+            if ja_se_apresentou:
+                resposta = (
+                    "Claro 😊\n\n"
+                    "Para eu entender melhor seu cenário, "
+                    "como posso te chamar?"
+                )
+            else:
+                resposta = resposta_inicial_por_servico(
+                    "geral",
+                    texto,
+                )
 
     elif conversa.etapa == "entender_objetivo_inicial":
 
         conversa.objetivo = texto
         analise = analisar_mensagem(
-            f"{conversa.historico or ''}\nCliente: {texto}\n"
-            f"{conversa.objetivo or ''}\n"
-            f"{conversa.servico or ''}"
+            montar_texto_comercial_cliente(
+                conversa,
+                texto,
+            )
         )
 
-        if (
-            conversa.servico is None
-            and objetivo_amplo_para_estrutura(conversa.objetivo or "")
-        ):
-            conversa.servico = "Estrutura Completa"
+        if conversa.servico is None:
+            if objetivo_marca_para_social_media(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Social Media Estratégico"
 
-        elif (
-            conversa.servico is None
-            and analise["produto"] != "não identificado"
-        ):
-            conversa.servico = analise["produto"]
+            elif objetivo_vendas_para_estrutura(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Estrutura Completa"
+
+            elif (
+                analise["produto"]
+                != "não identificado"
+            ):
+                conversa.servico = analise["produto"]
 
         conversa.etapa = "coletar_nome"
 
@@ -698,8 +770,10 @@ def conduzir_conversa(conversa, mensagem: str):
             "contratacao", "objetivo_comercial"
         ]:
             analise = analisar_mensagem(
-                f"{conversa.historico or ''}\nCliente: {texto}\n"
-                f"{conversa.objetivo or ''}\n{conversa.servico or ''}"
+                montar_texto_comercial_cliente(
+                    conversa,
+                    texto,
+                )
             )
             if analise["produto"] != "não identificado":
                 conversa.servico = analise["produto"]
@@ -767,25 +841,28 @@ def conduzir_conversa(conversa, mensagem: str):
         conversa.objetivo = texto
 
         analise = analisar_mensagem(
-            f"{conversa.historico or ''}\nCliente: {texto}\n"
-            f"{conversa.objetivo or ''}\n"
-            f"{conversa.servico or ''}"
+            montar_texto_comercial_cliente(
+                conversa,
+                texto,
+            )
         )
 
-        if (
-            conversa.servico is None
-            and objetivo_amplo_para_estrutura(conversa.objetivo or "")
-        ):
-            conversa.servico = "Estrutura Completa"
+        if conversa.servico is None:
+            if objetivo_marca_para_social_media(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Social Media Estratégico"
 
-        elif (
-            analise["produto"] == "Estrutura Completa"
-            or (
-                conversa.servico is None
-                and analise["produto"] != "não identificado"
-            )
-        ):
-            conversa.servico = analise["produto"]
+            elif objetivo_vendas_para_estrutura(
+                conversa.objetivo or ""
+            ):
+                conversa.servico = "Estrutura Completa"
+
+            elif (
+                analise["produto"]
+                != "não identificado"
+            ):
+                conversa.servico = analise["produto"]
 
         resposta_base = resposta_base_por_servico(conversa, intencao)
 
@@ -818,11 +895,11 @@ def conduzir_conversa(conversa, mensagem: str):
 
     conversa.historico += f"\nAgente: {resposta}"
 
-    # Recalcula a qualificação final com o contexto acumulado.
+    # Recalcula a qualificação final sem usar respostas da Sofia.
     analise = analisar_mensagem(
-        f"{conversa.historico or ''}\n"
-        f"{conversa.objetivo or ''}\n"
-        f"{conversa.servico or ''}"
+        montar_texto_comercial_cliente(
+            conversa
+        )
     )
 
     sincronizar_status_atendimento(conversa)
