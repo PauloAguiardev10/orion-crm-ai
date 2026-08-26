@@ -83,6 +83,37 @@ def obter_sessao_waha(payload: dict, mensagem: dict) -> str:
     return str(sessao)
 
 
+def obter_chat_id_whatsapp(telefone: str | None) -> str | None:
+    """
+    Normaliza um telefone configurado no ambiente para o formato
+    de chat usado pelo WAHA.
+
+    Exemplo:
+    5585999999999 -> 5585999999999@c.us
+    """
+    if not telefone:
+        return None
+
+    valor = str(telefone).strip()
+
+    if not valor:
+        return None
+
+    if valor.endswith("@c.us") or valor.endswith("@lid"):
+        return valor
+
+    numero = "".join(
+        caractere
+        for caractere in valor
+        if caractere.isdigit()
+    )
+
+    if not numero:
+        return None
+
+    return f"{numero}@c.us"
+
+
 def obter_telefone_real_waha(
     chat_id: str,
     sessao: str,
@@ -239,6 +270,8 @@ def receber_mensagem(dados: MensagemRequest):
 
         resumo = None
         lead_id = None
+        nova_lead = False
+        notificacao_luciano = None
 
         if conversa.etapa in [
             "encaminhar",
@@ -305,6 +338,20 @@ def receber_mensagem(dados: MensagemRequest):
                 db.refresh(lead)
 
                 lead_id = lead.id
+                nova_lead = True
+
+                notificacao_luciano = (
+                    "🔥 Nova lead qualificada — Forway\n\n"
+                    f"Nome: {conversa.nome or 'Não informado'}\n"
+                    f"Empresa: {conversa.empresa or 'Não informada'}\n"
+                    f"Segmento: {conversa.segmento or 'Não informado'}\n"
+                    f"WhatsApp: {conversa.telefone or 'Não informado'}\n"
+                    f"Serviço: {conversa.servico or 'Não identificado'}\n"
+                    f"Temperatura: {analise['temperatura'].capitalize()}\n"
+                    f"Prioridade: {analise['prioridade'].capitalize()}\n"
+                    f"Score: {analise['score']}\n\n"
+                    "Lead aguardando atendimento no CRM."
+                )
 
             else:
                 resumo = lead_existente.resumo_vendedor
@@ -333,6 +380,8 @@ def receber_mensagem(dados: MensagemRequest):
             ),
             "resumo_vendedor": resumo,
             "lead_id": lead_id,
+            "nova_lead": nova_lead,
+            "notificacao_luciano": notificacao_luciano,
         }
 
     except Exception as erro:
@@ -422,6 +471,41 @@ async def webhook_waha(payload: dict):
         }
 
     resposta = resultado.get("resposta_agente")
+
+    if (
+        resultado.get("nova_lead") is True
+        and resultado.get("notificacao_luciano")
+    ):
+        telefone_luciano = os.getenv("LUCIANO_WHATSAPP")
+        chat_id_luciano = obter_chat_id_whatsapp(
+            telefone_luciano,
+        )
+
+        if chat_id_luciano:
+            headers_notificacao = {
+                "Content-Type": "application/json",
+                "X-Api-Key": os.getenv(
+                    "WAHA_API_KEY",
+                    "orionsystems",
+                ),
+            }
+
+            try:
+                envio_notificacao = requests.post(
+                    "http://localhost:3000/api/sendText",
+                    headers=headers_notificacao,
+                    json={
+                        "session": sessao,
+                        "chatId": chat_id_luciano,
+                        "text": resultado["notificacao_luciano"],
+                    },
+                    timeout=15,
+                )
+
+                envio_notificacao.raise_for_status()
+
+            except requests.RequestException:
+                traceback.print_exc()
 
     if resposta:
         tamanho = len(resposta)
