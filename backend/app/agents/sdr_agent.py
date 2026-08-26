@@ -52,18 +52,34 @@ def parece_nome(texto: str):
         return False
 
     # Nome precisa ter letras de verdade.
-    letras = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]", texto)
+    quantidade_letras = sum(
+        1
+        for caractere in texto
+        if caractere.isalpha()
+    )
 
-    if len(letras) < 2:
+    if quantidade_letras < 2:
         return False
 
-    # Não aceita números, emojis isolados ou pontuação como nome.
-    if re.search(r"\d", texto):
+    # Não aceita números.
+    if any(
+        caractere.isdigit()
+        for caractere in texto
+    ):
         return False
 
-    if not re.fullmatch(
-        r"[A-Za-zÀ-ÖØ-öø-ÿ'’\\- ]+",
-        texto,
+    # Aceita letras Unicode, espaços, hífen e apóstrofos.
+    caracteres_permitidos = {
+        " ",
+        "-",
+        "'",
+        "’",
+    }
+
+    if not all(
+        caractere.isalpha()
+        or caractere in caracteres_permitidos
+        for caractere in texto
     ):
         return False
 
@@ -978,4 +994,4 @@ def conduzir_conversa(conversa, mensagem: str):
 
     sincronizar_status_atendimento(conversa)
 
-    return resposta, analise 
+    return resposta, analise
