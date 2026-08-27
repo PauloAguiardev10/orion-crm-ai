@@ -51,6 +51,9 @@ def carregar_mapa_sessoes() -> dict[str, int]:
 
 SESSAO_EMPRESA = carregar_mapa_sessoes()
 
+# Cache de mapeamentos LID -> telefone já resolvidos.
+TELEFONES_LID_CACHE: dict[str, str] = {}
+
 
 class MensagemRequest(BaseModel):
     empresa_id: int = Field(default=1, ge=1)
@@ -137,35 +140,81 @@ def obter_lid_luciano() -> str | None:
     return valor
 
 
+def buscar_telefone_real_no_banco(
+    chat_id: str,
+    empresa_id: int | None,
+) -> str | None:
+    """
+    Procura um telefone real já associado ao mesmo LID
+    em conversas anteriores da empresa.
+    """
+    if not chat_id or not empresa_id:
+        return None
+
+    db: Session = SessionLocal()
+
+    try:
+        conversa_anterior = (
+            db.query(Conversa)
+            .filter(
+                Conversa.empresa_id == empresa_id,
+                Conversa.identificador == chat_id,
+                Conversa.telefone.isnot(None),
+                ~Conversa.telefone.like("%@lid"),
+                ~Conversa.telefone.like("%@c.us"),
+            )
+            .order_by(Conversa.id.desc())
+            .first()
+        )
+
+        if not conversa_anterior:
+            return None
+
+        telefone = str(
+            conversa_anterior.telefone or ""
+        ).strip()
+
+        if telefone and telefone.isdigit():
+            return telefone
+
+        return None
+
+    finally:
+        db.close()
+
+
 def obter_telefone_real_waha(
     chat_id: str,
     sessao: str,
+    empresa_id: int | None = None,
 ) -> str:
     """
-    Mantém o chat_id técnico para comunicação com o WAHA,
-    mas tenta obter o telefone real para salvar no CRM.
+    Tenta resolver o telefone real antes de salvar no CRM.
 
-    Exemplos:
-
-    5585999999999@c.us
-        -> 5585999999999
-
-    62354452656201@lid
-        -> 558599558799
+    Ordem:
+    1. @c.us;
+    2. cache em memória;
+    3. agenda do WAHA;
+    4. histórico do PostgreSQL;
+    5. preserva o LID se não houver resolução.
     """
 
     if not chat_id:
         return chat_id
 
-    # Formato tradicional do WhatsApp.
     if chat_id.endswith("@c.us"):
-        return chat_id.replace("@c.us", "")
+        telefone = chat_id.replace("@c.us", "").strip()
+        return telefone or chat_id
 
-    # Se não for LID, preserva o valor original.
     if not chat_id.endswith("@lid"):
         return chat_id
 
-    lid_numero = chat_id.replace("@lid", "")
+    telefone_cache = TELEFONES_LID_CACHE.get(chat_id)
+
+    if telefone_cache:
+        return telefone_cache
+
+    lid_numero = chat_id.replace("@lid", "").strip()
 
     headers = {
         "X-Api-Key": os.getenv(
@@ -181,48 +230,54 @@ def obter_telefone_real_waha(
             params={
                 "session": sessao,
             },
-            timeout=10,
+            timeout=20,
         )
 
         resposta.raise_for_status()
 
         contatos = resposta.json()
 
-        if not isinstance(contatos, list):
-            return chat_id
+        if isinstance(contatos, list):
+            for contato in contatos:
+                if not isinstance(contato, dict):
+                    continue
 
-        for contato in contatos:
-            if not isinstance(contato, dict):
-                continue
+                numero = str(
+                    contato.get("number") or ""
+                ).strip()
 
-            numero = str(
-                contato.get("number") or ""
-            ).strip()
+                if numero != lid_numero:
+                    continue
 
-            if numero != lid_numero:
-                continue
+                contato_id = contato.get("id")
 
-            contato_id = contato.get("id")
-
-            if isinstance(contato_id, dict):
-                contato_id = (
-                    contato_id.get("_serialized")
-                    or (
-                        f"{contato_id.get('user')}@{contato_id.get('server')}"
-                        if contato_id.get("user")
-                        and contato_id.get("server")
-                        else None
+                if isinstance(contato_id, dict):
+                    contato_id = (
+                        contato_id.get("_serialized")
+                        or (
+                            f"{contato_id.get('user')}@{contato_id.get('server')}"
+                            if contato_id.get("user")
+                            and contato_id.get("server")
+                            else None
+                        )
                     )
-                )
 
-            if (
-                isinstance(contato_id, str)
-                and contato_id.endswith("@c.us")
-            ):
-                telefone_real = contato_id.replace("@c.us", "").strip()
+                if (
+                    isinstance(contato_id, str)
+                    and contato_id.endswith("@c.us")
+                ):
+                    telefone_real = (
+                        contato_id
+                        .replace("@c.us", "")
+                        .strip()
+                    )
 
-                if telefone_real:
-                    return telefone_real
+                    if telefone_real:
+                        TELEFONES_LID_CACHE[
+                            chat_id
+                        ] = telefone_real
+
+                        return telefone_real
 
     except (
         requests.RequestException,
@@ -231,8 +286,18 @@ def obter_telefone_real_waha(
     ):
         pass
 
-    # Nunca impede o atendimento caso o WAHA
-    # não consiga resolver o telefone.
+    telefone_banco = buscar_telefone_real_no_banco(
+        chat_id,
+        empresa_id,
+    )
+
+    if telefone_banco:
+        TELEFONES_LID_CACHE[
+            chat_id
+        ] = telefone_banco
+
+        return telefone_banco
+
     return chat_id
 
 
@@ -486,6 +551,7 @@ async def webhook_waha(payload: dict):
     telefone_real = obter_telefone_real_waha(
         chat_id,
         sessao,
+        empresa_id,
     )
 
     dados = MensagemRequest(
