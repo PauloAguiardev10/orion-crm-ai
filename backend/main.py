@@ -114,6 +114,29 @@ def obter_chat_id_whatsapp(telefone: str | None) -> str | None:
     return f"{numero}@c.us"
 
 
+def obter_lid_luciano() -> str | None:
+    """
+    Retorna o identificador LID do WhatsApp interno do Luciano.
+
+    O LID fica configurado fora do código por variável de ambiente:
+    LUCIANO_WHATSAPP_LID=222805740281887@lid
+    """
+    valor = os.getenv("LUCIANO_WHATSAPP_LID")
+
+    if not valor:
+        return None
+
+    valor = str(valor).strip()
+
+    if not valor:
+        return None
+
+    if not valor.endswith("@lid"):
+        return None
+
+    return valor
+
+
 def obter_telefone_real_waha(
     chat_id: str,
     sessao: str,
@@ -446,6 +469,20 @@ async def webhook_waha(payload: dict):
             "motivo": "sem_texto_ou_chat_id",
         }
 
+    lid_luciano = obter_lid_luciano()
+
+    if (
+        lid_luciano
+        and chat_id == lid_luciano
+    ):
+        return {
+            "status": "ignorado",
+            "motivo": "contato_interno_luciano",
+            "empresa_id": empresa_id,
+            "sessao": sessao,
+            "chat_id": chat_id,
+        }
+
     telefone_real = obter_telefone_real_waha(
         chat_id,
         sessao,
@@ -476,10 +513,7 @@ async def webhook_waha(payload: dict):
         resultado.get("nova_lead") is True
         and resultado.get("notificacao_luciano")
     ):
-        telefone_luciano = os.getenv("LUCIANO_WHATSAPP")
-        chat_id_luciano = obter_chat_id_whatsapp(
-            telefone_luciano,
-        )
+        chat_id_luciano = obter_lid_luciano()
 
         if chat_id_luciano:
             headers_notificacao = {
