@@ -405,7 +405,7 @@ Resumo da conversa:
 A lead demonstrou interesse nos serviços da Forway e informou como principal objetivo: "{conversa.objetivo or "não informado"}".
 
 Próxima ação recomendada:
-Luciano deve continuar o atendimento de forma consultiva e entender melhor o cenário da lead.
+Luciano deve entrar em contato com a lead de forma consultiva e aprofundar o entendimento do cenário.
 """.strip()
 
 
@@ -464,7 +464,7 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
     if intencao == "reuniao":
         return (
             f"{saudacao}\n\n"
-            "Antes de te passar para o Luciano, vou pegar um contexto rápido para ele já continuar com mais clareza.\n\n"
+            "Antes de encaminhar seu atendimento para o Luciano, responsável pela Forway, vou entender rapidamente seu cenário para ele receber seu caso com o contexto certo.\n\n"
             "Qual é o seu nome?"
         )
 
@@ -507,7 +507,7 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
         return (
             f"{saudacao}\n\n"
             "Perfeito 😊\n\n"
-            "Para eu organizar seu atendimento e o Luciano já continuar com o contexto certo, como posso te chamar?"
+            "Para eu organizar seu atendimento e encaminhar tudo certinho para o Luciano, responsável pela Forway, como posso te chamar?"
         )
 
     if intencao == "objetivo_comercial":
@@ -524,9 +524,6 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
         "Como posso ajudar você hoje?"
     )
 
-
-def comentario_segmento(segmento: str):
-    texto = segmento.lower()
 
 def comentario_segmento(segmento: str):
     texto = segmento.lower()
@@ -548,29 +545,74 @@ def resposta_apos_encaminhamento(texto, nome=None):
 
     if interacao == "agradecimento":
         return resposta_aleatoria([
-            f"Eu que agradeço pelo contato{', ' + nome if nome else ''} 😊\n\nJá deixei tudo organizado para o Luciano continuar com você.",
-            "Obrigado você pela confiança 😊\n\nJá deixei suas informações organizadas para o Luciano continuar por aqui assim que possível.",
-            "Foi um prazer falar com você 😊\n\nAssim que o Luciano estiver disponível, ele segue o atendimento por aqui."
+            (
+                f"Eu que agradeço pelo contato{', ' + nome if nome else ''} 😊\n\n"
+                "Já deixei tudo organizado e encaminhei seu atendimento diretamente "
+                "para o Luciano, responsável pela Forway. Ele vai entrar em contato "
+                "com você assim que possível."
+            ),
+            (
+                "Obrigado você pela confiança 😊\n\n"
+                "Suas informações já estão organizadas e seu atendimento foi encaminhado "
+                "diretamente para o Luciano. Ele vai entrar em contato com você assim que possível."
+            ),
+            (
+                "Foi um prazer falar com você 😊\n\n"
+                "Seu atendimento já está encaminhado para o Luciano. "
+                "Ele vai entrar em contato com você assim que estiver disponível."
+            ),
         ])
 
     if interacao == "confirmacao":
         return resposta_aleatoria([
-            "Perfeito 😊\n\nJá deixei tudo certo por aqui.",
-            "Combinado 😊\n\nO Luciano continua com você assim que possível.",
-            "Tudo certo 😊\n\nSeu atendimento já está encaminhado."
+            (
+                "Perfeito 😊\n\n"
+                "Já deixei tudo certo e seu atendimento está encaminhado."
+            ),
+            (
+                "Combinado 😊\n\n"
+                "Seu atendimento já está encaminhado para o Luciano. "
+                "Ele vai entrar em contato com você assim que possível."
+            ),
+            (
+                "Tudo certo 😊\n\n"
+                "Agora é só aguardar o contato do Luciano."
+            ),
         ])
 
     if interacao == "despedida":
         return resposta_aleatoria([
-            "Combinado 😊\n\nObrigado pelo contato. O Luciano segue com você assim que estiver disponível.",
-            "Tudo certo 😊\n\nFoi um prazer te atender.",
-            "Perfeito 😊\n\nQualquer novidade o Luciano continua por aqui."
+            (
+                "Combinado 😊\n\n"
+                "Obrigado pelo contato. O Luciano vai entrar em contato "
+                "com você assim que estiver disponível."
+            ),
+            (
+                "Tudo certo 😊\n\n"
+                "Foi um prazer te atender."
+            ),
+            (
+                "Perfeito 😊\n\n"
+                "Seu atendimento já está encaminhado. "
+                "Agora é só aguardar o contato do Luciano."
+            ),
         ])
 
     return resposta_aleatoria([
-        "Seu atendimento já está com o Luciano 😊\n\nAssim que ele estiver disponível, continua com você por aqui.",
-        "Já deixei as informações organizadas para o Luciano analisar com calma 😊",
-        "Tudo certo por aqui 😊\n\nO Luciano segue com você assim que possível."
+        (
+            "Seu atendimento já foi encaminhado diretamente para o Luciano, "
+            "responsável pela Forway 😊\n\n"
+            "Ele vai entrar em contato com você assim que estiver disponível."
+        ),
+        (
+            "Já deixei suas informações organizadas e encaminhadas "
+            "para o Luciano analisar com atenção 😊"
+        ),
+        (
+            "Tudo certo por aqui 😊\n\n"
+            "Seu atendimento já está com o Luciano. "
+            "Ele vai entrar em contato com você assim que possível."
+        ),
     ])
 
 
@@ -585,7 +627,7 @@ def resposta_base_por_servico(conversa, intencao):
         return (
             "Entendo seu cuidado.\n\n"
             "Quando uma experiência anterior não foi boa, o ideal é olhar o que foi feito, o público, a comunicação e o acompanhamento.\n\n"
-            "Assim o Luciano consegue orientar com mais segurança."
+            "Assim o Luciano consegue analisar seu cenário e orientar você com mais segurança."
         )
 
     if conversa.servico == "Gestão de Tráfego Pago":
@@ -595,9 +637,9 @@ def resposta_base_por_servico(conversa, intencao):
         )
     if conversa.servico == "Estrutura Completa":
         return (
-        "Entendi.\n\n"
-        "Nesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada."
-    )
+            "Entendi.\n\n"
+            "Nesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada."
+        )
     
     if conversa.servico == "Atendimento com IA":
         return (
@@ -745,7 +787,7 @@ def conduzir_conversa(conversa, mensagem: str):
                     )
                 elif intencao == "reuniao":
                     resposta = (
-                        "Antes de te passar para o Luciano, vou pegar um contexto rápido para ele já continuar com mais clareza.\n\n"
+                        "Antes de encaminhar seu atendimento para o Luciano, responsável pela Forway, vou entender rapidamente seu cenário para ele receber seu caso com o contexto certo.\n\n"
                         "Qual é o seu nome?"
                     )
                 elif intencao == "automacao":
@@ -776,7 +818,7 @@ def conduzir_conversa(conversa, mensagem: str):
                 elif intencao == "contratacao":
                     resposta = (
                         "Perfeito 😊\n\n"
-                        "Para eu organizar seu atendimento e o Luciano já continuar com o contexto certo, como posso te chamar?"
+                        "Para eu organizar seu atendimento e encaminhar tudo certinho para o Luciano, responsável pela Forway, como posso te chamar?"
                     )
                 else:
                     resposta = (
@@ -908,14 +950,14 @@ def conduzir_conversa(conversa, mensagem: str):
                 conversa.etapa = "coletar_whatsapp"
                 resposta = (
                     f"{comentario_segmento(conversa.segmento)}\n\n"
-                    "Para o Luciano continuar com você de forma mais direta, me passa seu WhatsApp?"
+                    "Para eu encaminhar seu atendimento ao Luciano e ele falar com você diretamente, me passa seu WhatsApp?"
                 )
             else:
                 conversa.etapa = "aguardando_humano"
                 resposta = (
                     f"{comentario_segmento(conversa.segmento)}\n\n"
                     "Já deixei as informações principais organizadas para o Luciano analisar seu cenário.\n\n"
-                    "Ele continua com você por aqui assim que estiver disponível."
+                    "Ele vai entrar em contato com você assim que estiver disponível."
                 )
         else:
             conversa.etapa = "entender_objetivo"
@@ -963,14 +1005,14 @@ def conduzir_conversa(conversa, mensagem: str):
             conversa.etapa = "coletar_whatsapp"
             resposta = (
                 f"{resposta_base}\n\n"
-                "Para o Luciano continuar de forma mais direta, me passa seu WhatsApp?"
+                "Para eu encaminhar seu atendimento ao Luciano e ele falar com você diretamente, me passa seu WhatsApp?"
             )
         else:
             conversa.etapa = "aguardando_humano"
             resposta = (
                 f"{resposta_base}\n\n"
                 "Já organizei as informações principais para o Luciano analisar seu caso com mais calma.\n\n"
-                "Ele continua essa conversa com você por aqui assim que estiver disponível 😊"
+                "Seu atendimento já foi encaminhado para o Luciano. Ele vai entrar em contato com você assim que estiver disponível 😊"
             )
 
     elif conversa.etapa == "coletar_whatsapp":
@@ -980,7 +1022,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
         resposta = (
             "Perfeito 😊\n\n"
-            "Já deixei tudo organizado para o Luciano continuar com você."
+            "Já deixei tudo organizado e encaminhei seu atendimento diretamente para o Luciano, responsável pela Forway. Ele vai entrar em contato com você assim que possível."
         )
 
     else:
