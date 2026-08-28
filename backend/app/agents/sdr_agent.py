@@ -264,7 +264,64 @@ def objetivo_marca_para_social_media(texto: str) -> bool:
     )
 
 
-def extrair_falas_cliente(historico: str) -> str:
+def normalizar_texto_comparacao(texto: str) -> str:
+    return re.sub(
+        r"\s+",
+        " ",
+        (texto or "").strip().lower(),
+    )
+
+
+def eh_resposta_cadastral(texto: str, conversa) -> bool:
+    valor = normalizar_texto_comparacao(texto)
+
+    if not valor:
+        return True
+
+    campos = [
+        conversa.nome,
+        conversa.empresa,
+        conversa.segmento,
+        conversa.telefone,
+    ]
+
+    for campo in campos:
+        campo_normalizado = normalizar_texto_comparacao(
+            str(campo or "")
+        )
+
+        if campo_normalizado and valor == campo_normalizado:
+            return True
+
+    prefixos_cadastrais = [
+        "meu nome é ", "meu nome e ", "eu sou ", "sou o ", "sou a ",
+        "me chamo ", "minha empresa é ", "minha empresa e ",
+        "minha empresa se chama ", "minha loja é ", "minha loja e ",
+        "atuamos com ", "atuamos na área de ", "atuamos na area de ",
+        "atuamos em ", "trabalhamos com ", "trabalhamos na área de ",
+        "trabalhamos na area de ", "trabalhamos em ",
+        "somos do segmento de ", "somos da área de ", "somos da area de ",
+    ]
+
+    for prefixo in prefixos_cadastrais:
+        if valor.startswith(prefixo):
+            restante = valor[len(prefixo):].strip()
+
+            for campo in campos:
+                campo_normalizado = normalizar_texto_comparacao(
+                    str(campo or "")
+                )
+
+                if campo_normalizado and restante == campo_normalizado:
+                    return True
+
+    return False
+
+
+def extrair_falas_cliente_comerciais(
+    historico: str,
+    conversa,
+) -> str:
     if not historico:
         return ""
 
@@ -273,10 +330,18 @@ def extrair_falas_cliente(historico: str) -> str:
     for linha in historico.splitlines():
         linha = linha.strip()
 
-        if linha.lower().startswith("cliente:"):
-            falas.append(
-                linha.split(":", 1)[1].strip()
-            )
+        if not linha.lower().startswith("cliente:"):
+            continue
+
+        fala = linha.split(":", 1)[1].strip()
+
+        if not fala:
+            continue
+
+        if eh_resposta_cadastral(fala, conversa):
+            continue
+
+        falas.append(fala)
 
     return "\n".join(falas)
 
@@ -286,12 +351,12 @@ def montar_texto_comercial_cliente(
     mensagem_atual="",
 ):
     partes = [
-        extrair_falas_cliente(
-            conversa.historico or ""
+        extrair_falas_cliente_comerciais(
+            conversa.historico or "",
+            conversa,
         ),
         mensagem_atual.strip(),
         conversa.objetivo or "",
-        conversa.servico or "",
     ]
 
     return "\n".join(
@@ -893,10 +958,7 @@ def conduzir_conversa(conversa, mensagem: str):
             )
 
             if ja_se_apresentou:
-                resposta = (
-                    f"{saudacao_personalizada(texto)}\n\n"
-                    "Como posso ajudar você hoje?"
-                )
+                resposta = "Como posso ajudar você hoje? 😊"
             else:
                 resposta = resposta_inicial_por_servico(
                     "saudacao",
