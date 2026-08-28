@@ -20,6 +20,10 @@ def garantir_tabelas_auth() -> None:
 
     Esta função não cria tabelas. A estrutura do PostgreSQL deve ser
     criada pelos scripts de migração do projeto.
+
+    IMPORTANTE:
+    Se o administrador já existir, sua senha atual é preservada.
+    A senha padrão é utilizada somente na criação inicial do usuário.
     """
     conn = conectar()
 
@@ -117,8 +121,6 @@ def garantir_tabelas_auth() -> None:
 
                 empresa_id = int(cursor.fetchone()["id"])
 
-            senha_hash = criptografar_senha(SENHA_ADMIN_PADRAO)
-
             cursor.execute(
                 """
                 SELECT id
@@ -137,6 +139,10 @@ def garantir_tabelas_auth() -> None:
             usuario_existente = cursor.fetchone()
 
             if usuario_existente:
+                # O usuário já existe.
+                #
+                # Atualizamos apenas os dados administrativos necessários.
+                # A senha e o senha_hash NÃO são alterados aqui.
                 cursor.execute(
                     """
                     UPDATE usuarios
@@ -146,8 +152,6 @@ def garantir_tabelas_auth() -> None:
                         usuario = %s,
                         nome = %s,
                         email = %s,
-                        senha = %s,
-                        senha_hash = %s,
                         nivel = %s,
                         status = %s,
                         atualizado_em = CURRENT_TIMESTAMP
@@ -159,8 +163,6 @@ def garantir_tabelas_auth() -> None:
                         USUARIO_ADMIN_PADRAO,
                         NOME_ADMIN_PADRAO,
                         EMAIL_ADMIN_PADRAO,
-                        senha_hash,
-                        senha_hash,
                         "parceiro_admin",
                         "ativo",
                         int(usuario_existente["id"]),
@@ -168,6 +170,10 @@ def garantir_tabelas_auth() -> None:
                 )
 
             else:
+                # A senha padrão é utilizada SOMENTE quando o administrador
+                # ainda não existe e precisa ser criado pela primeira vez.
+                senha_hash = criptografar_senha(SENHA_ADMIN_PADRAO)
+
                 cursor.execute(
                     """
                     INSERT INTO usuarios (
@@ -222,6 +228,7 @@ def _buscar_usuario_por_login(
     senha_hash: str | None = None,
 ):
     filtros_senha = ""
+
     parametros = [
         login,
         login,

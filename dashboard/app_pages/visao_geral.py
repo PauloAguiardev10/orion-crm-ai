@@ -287,7 +287,9 @@ def aplicar_css():
                 color: #E2E8F0;
                 margin-top: 12px;
                 line-height: 1.72;
-                box-shadow: 0 0 30px rgba(34,211,238,.06), inset 0 1px 0 rgba(255,255,255,.02);
+                box-shadow:
+                    0 0 30px rgba(34,211,238,.06),
+                    inset 0 1px 0 rgba(255,255,255,.02);
             }
 
             .diagnostico-card strong {
@@ -297,7 +299,12 @@ def aplicar_css():
             }
 
             .empresa-contexto-card {
-                background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.78));
+                background:
+                    linear-gradient(
+                        135deg,
+                        rgba(15,23,42,.96),
+                        rgba(30,41,59,.78)
+                    );
                 border: 1px solid rgba(34,211,238,.14);
                 border-radius: 18px;
                 padding: 16px 20px;
@@ -396,33 +403,55 @@ def calcular_metricas(
 
             em_atendimento = len(
                 status[
-                    status.str.contains("em atendimento", na=False)
+                    status.str.contains(
+                        "em atendimento",
+                        na=False,
+                    )
                 ]
             )
 
             aguardando = len(
                 status[
-                    status.str.contains("aguardando", na=False)
+                    status.str.contains(
+                        "aguardando",
+                        na=False,
+                    )
                 ]
             )
 
             fechados = len(
                 status[
-                    status.str.contains("fechado", na=False)
-                    & ~status.str.contains("não fechado|nao fechado", na=False)
+                    status.str.contains(
+                        "fechado",
+                        na=False,
+                    )
+                    & ~status.str.contains(
+                        "não fechado|nao fechado",
+                        na=False,
+                    )
                 ]
             )
 
             nao_fechados = len(
                 status[
-                    status.str.contains("não fechado|nao fechado", na=False)
+                    status.str.contains(
+                        "não fechado|nao fechado",
+                        na=False,
+                    )
                 ]
             )
 
     valor_pedidos = 0
 
-    if not pedidos.empty and "valor_total" in pedidos.columns:
-        valor_pedidos = pedidos["valor_total"].fillna(0).sum()
+    if (
+        not pedidos.empty
+        and "valor_total" in pedidos.columns
+    ):
+        valor_pedidos = (
+            pedidos["valor_total"]
+            .fillna(0)
+            .sum()
+        )
 
     return {
         "total": total,
@@ -463,50 +492,33 @@ def render_graficos_leads(
             )
 
 
-def render_empresa_ativa():
+@st.fragment(run_every="10s")
+def render_dados_atualizados():
+    """
+    Atualiza automaticamente os dados comerciais sem
+    recarregar a aplicação inteira e sem destruir a sessão
+    atual do usuário.
+    """
 
-    aplicar_css()
-
-    empresa_nome_atual = (
+    empresa_id = st.session_state.get(
+        "empresa_ativa_id",
         st.session_state.get(
-            "empresa_ativa_nome",
-            st.session_state.get(
-                "empresa",
-                "",
-            ),
-        )
-    )
-
-    topo(
-        f"🏠 Visão Geral — {empresa_nome_atual}",
-        (
-            "Painel operacional da empresa ativa, "
-            "com indicadores de atendimento, "
-            "leads e resultados comerciais."
+            "empresa_id",
         ),
     )
 
-    render_seletor_empresa()
-
-    st.markdown("---")
-
-    empresa_id = (
+    empresa_nome = st.session_state.get(
+        "empresa_ativa_nome",
         st.session_state.get(
-            "empresa_ativa_id",
-            st.session_state.get(
-                "empresa_id"
-            ),
-        )
+            "empresa",
+        ),
     )
 
-    empresa_nome = (
-        st.session_state.get(
-            "empresa_ativa_nome",
-            st.session_state.get(
-                "empresa"
-            ),
+    if not empresa_id:
+        st.warning(
+            "Nenhuma empresa ativa selecionada."
         )
-    )
+        return
 
     leads, pedidos, produtos = (
         buscar_dados_empresa(
@@ -523,22 +535,46 @@ def render_empresa_ativa():
     c1, c2, c3, c4, c5, c6 = st.columns(6)
 
     with c1:
-        card("Total Leads", m["total"], "cyan")
+        card(
+            "Total Leads",
+            m["total"],
+            "cyan",
+        )
 
     with c2:
-        card("🔥 Quentes", m["quentes"], "pink")
+        card(
+            "🔥 Quentes",
+            m["quentes"],
+            "pink",
+        )
 
     with c3:
-        card("🕘 Atendimento", m["em_atendimento"], "purple")
+        card(
+            "🕘 Atendimento",
+            m["em_atendimento"],
+            "purple",
+        )
 
     with c4:
-        card("⏳ Aguardando", m["aguardando"], "amber")
+        card(
+            "⏳ Aguardando",
+            m["aguardando"],
+            "amber",
+        )
 
     with c5:
-        card("✅ Fechados", m["fechados"], "green")
+        card(
+            "✅ Fechados",
+            m["fechados"],
+            "green",
+        )
 
     with c6:
-        card("⚪ Não fechados", m["nao_fechados"], "red")
+        card(
+            "⚪ Não fechados",
+            m["nao_fechados"],
+            "red",
+        )
 
     st.markdown(
         dedent(
@@ -556,7 +592,8 @@ def render_empresa_ativa():
             dedent(
                 """
                 <div class="diagnostico-card">
-                    Ainda não existem dados suficientes para diagnóstico desta empresa.
+                    Ainda não existem dados suficientes
+                    para diagnóstico desta empresa.
                 </div>
                 """
             ),
@@ -613,7 +650,9 @@ def render_empresa_ativa():
         unsafe_allow_html=True,
     )
 
-    render_graficos_leads(leads)
+    render_graficos_leads(
+        leads
+    )
 
     st.markdown(
         dedent(
@@ -627,7 +666,9 @@ def render_empresa_ativa():
     )
 
     if leads.empty:
-        st.info("Nenhuma lead cadastrada.")
+        st.info(
+            "Nenhuma lead cadastrada."
+        )
 
     else:
         st.dataframe(
@@ -635,6 +676,37 @@ def render_empresa_ativa():
             width="stretch",
             hide_index=True,
         )
+
+
+def render_empresa_ativa():
+
+    aplicar_css()
+
+    empresa_nome_atual = (
+        st.session_state.get(
+            "empresa_ativa_nome",
+            st.session_state.get(
+                "empresa",
+                "",
+            ),
+        )
+    )
+
+    topo(
+        f"🏠 Visão Geral — {empresa_nome_atual}",
+        (
+            "Painel operacional da empresa ativa, "
+            "com indicadores de atendimento, "
+            "leads e resultados comerciais."
+        ),
+    )
+
+    render_seletor_empresa()
+
+    st.markdown("---")
+
+    # Apenas esta área é atualizada automaticamente.
+    render_dados_atualizados()
 
 
 def render_visao_geral(
