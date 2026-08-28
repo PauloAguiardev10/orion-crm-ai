@@ -307,12 +307,13 @@ def detectar_intencao_cliente(mensagem: str):
     grupos = [
         ("duvida_lead", ["o que é lead","o que e lead","o que significa lead","não sei o que é lead","nao sei o que e lead","lead é o que","lead e o que","o que são leads","o que sao leads"]),
         ("objecao_experiencia_ruim", ["já tentei","ja tentei","não deu certo","nao deu certo","não funcionou","nao funcionou","experiência ruim","experiencia ruim","outra agência","outra agencia","outras agências","outras agencias","tenho medo","medo de contratar","não gostei","nao gostei","fui enganado","fui enganada","já perdi dinheiro","ja perdi dinheiro","joguei dinheiro fora","não confio","nao confio"]),
+        # Intenções comerciais fortes vêm antes de consultas genéricas.
+        ("contratacao", ["quero contratar","quero fechar","vamos fechar","fechar negócio","fechar negocio","quero começar","quero comecar","podemos começar","podemos comecar","quero comprar","tenho interesse em contratar","quero contratar vocês","quero contratar voces"]),
+        ("reuniao", ["reunião","reuniao","agenda","agendar","agendamento","marcar horário","marcar horario","marcar uma reunião","marcar uma reuniao","falar com o luciano","quero falar com o luciano","falar com especialista","falar com um especialista"]),
+        ("orcamento", ["orçamento","orcamento","preço","preco","valor","quanto custa","quanto fica","qual o valor","qual valor","quanto vocês cobram","quanto voces cobram","investimento","mensalidade","pacote","pacotes","proposta"]),
         ("estrutura_completa", ["estrutura completa","marketing completo","tudo completo","quero tudo","pacote completo","serviço completo","servico completo","solução completa","solucao completa","quero todos os serviços","quero todos os servicos","quero todos os seus serviços","quero todos os seus servicos","quero todos os serviços oferecidos","quero todos os servicos oferecidos","quero todos os serviços oferecido","quero todos os servicos oferecido","quero tudo que vocês oferecem","quero tudo que voces oferecem","quero tudo que a forway oferece","tenho interesse em todos os serviços","tenho interesse em todos os servicos","preciso de tudo","preciso de todos os serviços","preciso de todos os servicos","tráfego e social media","trafego e social media","tráfego, social media e atendimento","trafego, social media e atendimento"]),
         ("conhecer_servicos", ["como funciona o trabalho de vocês","como funciona o trabalho de voces","como funciona o trabalho da forway","como funciona o trabalho","quais serviços","quais servicos","quais são os serviços","quais sao os servicos","que serviços vocês oferecem","que servicos voces oferecem","serviços vocês oferecem","servicos voces oferecem","serviços que a forway oferece","servicos que a forway oferece","informações sobre os serviços","informacoes sobre os servicos","o que vocês fazem","o que voces fazem","como vocês trabalham","como voces trabalham","me fala dos serviços","me fala dos servicos","me explica os serviços","me explica os servicos","o que oferecem","não sei o que preciso","nao sei o que preciso","não sei qual serviço","nao sei qual servico","quero conhecer","serviços da forway","servicos da forway","gostaria de saber os serviços","gostaria de saber os servicos","gostaria de saber sobre os serviços","gostaria de saber sobre os servicos","gostaria de saber mais sobre seus serviços","gostaria de saber mais sobre seus servicos","gostaria de saber sobre seus serviços","gostaria de saber sobre seus servicos","quero saber sobre seus serviços","quero saber sobre seus servicos","quero saber mais sobre seus serviços","quero saber mais sobre seus servicos","seus serviços","seus servicos","serviços de vocês","servicos de voces","saber sobre os serviços","saber sobre os servicos","saber mais sobre os serviços","saber mais sobre os servicos","saber mais sobre seus serviços","saber mais sobre seus servicos"]),
         ("anuncio_instagram", ["vi um anúncio","vi um anuncio","vi vocês no instagram","vi voces no instagram","vim pelo instagram","vim do instagram","achei vocês no instagram","achei voces no instagram","anúncio de vocês","anuncio de voces","vi no facebook","vim pelo facebook","vi uma propaganda"]),
-        ("orcamento", ["orçamento","orcamento","preço","preco","valor","quanto custa","quanto fica","qual o valor","qual valor","quanto vocês cobram","quanto voces cobram","investimento","mensalidade","pacote","pacotes","proposta"]),
-        ("reuniao", ["reunião","reuniao","agenda","agendar","agendamento","marcar horário","marcar horario","marcar uma reunião","marcar uma reuniao","falar com o luciano","quero falar com o luciano","falar com especialista","falar com um especialista"]),
-        ("contratacao", ["quero contratar","quero fechar","vamos fechar","fechar negócio","fechar negocio","quero começar","quero comecar","podemos começar","podemos comecar","quero comprar","tenho interesse em contratar","quero contratar vocês","quero contratar voces"]),
         ("trafego", ["tráfego","trafego","tráfego pago","trafego pago","gestão de tráfego","gestao de trafego","anúncio","anuncio","anúncios","anuncios","facebook ads","instagram ads","meta ads","google ads","campanha paga","campanhas pagas","mídia paga","midia paga"]),
         ("web_design", ["site","landing page","website","web site","página de vendas","pagina de vendas","criar um site","fazer um site","site profissional","loja virtual"]),
         ("social_media", ["social media","social mídia","social midia","gestão de redes sociais","gestao de redes sociais","instagram","conteúdo","conteudo","rede social","redes sociais","postagem","postagens","engajamento","feed","reels","stories","cuidar do instagram","gerenciar instagram"]),
@@ -329,18 +330,80 @@ def detectar_intencao_cliente(mensagem: str):
 
 
 def analisar_mensagem(mensagem: str):
-    """Classificação comercial determinística com score limitado de 0 a 10."""
+    """
+    Classificação comercial determinística e explicável.
+
+    A temperatura representa o estágio comercial demonstrado pelo cliente:
+    - fria: descoberta, sem interesse específico ou necessidade concreta;
+    - morna: interesse em serviço específico ou necessidade comercial;
+    - quente: intenção clara de avançar (orçamento, proposta, reunião,
+      especialista ou contratação).
+
+    O score, limitado de 0 a 10, complementa a temperatura e mede a força
+    acumulada dos sinais comerciais. Cada categoria pontua no máximo uma vez.
+    """
     texto = mensagem.lower()
     score = 0
     produto = "não identificado"
 
     produtos = {
-        "Estrutura Completa": ["estrutura completa","marketing completo","tudo completo","pacote completo","serviço completo","servico completo","solução completa","solucao completa","quero tudo","quero todos os serviços","quero todos os servicos","quero todos os seus serviços","quero todos os seus servicos","quero todos os serviços oferecidos","quero todos os servicos oferecidos","quero todos os serviços oferecido","quero todos os servicos oferecido","quero tudo que vocês oferecem","quero tudo que voces oferecem","quero tudo que a forway oferece","tenho interesse em todos os serviços","tenho interesse em todos os servicos","preciso de todos os serviços","preciso de todos os servicos","tráfego e social media","trafego e social media"],
-        "Gestão de Tráfego Pago": ["tráfego","trafego","tráfego pago","trafego pago","gestão de tráfego","gestao de trafego","anúncio","anuncio","anúncios","anuncios","facebook ads","instagram ads","meta ads","google ads","campanha paga","campanhas pagas","mídia paga","midia paga"],
-        "Social Media Estratégico": ["social media","social mídia","social midia","conteúdo","conteudo","instagram","postagem","postagens","redes sociais","rede social","engajamento","feed","reels","stories","gestão de redes sociais","gestao de redes sociais"],
-        "Design": ["design","identidade visual","criativo","criativos","arte gráfica","arte grafica","artes gráficas","artes graficas","criação de arte","criacao de arte","criação de artes","criacao de artes","quero um logo","quero criar um logo","preciso de um logo","criar um logo","fazer um logo","criar logo","fazer logo","criação de logo","criacao de logo","logotipo","marca mais profissional","materiais melhores","material gráfico","material grafico"],
-        "Atendimento com IA": ["automação","automacao","ia","inteligência artificial","inteligencia artificial","chatbot","sdr","agente de ia","agente ia","atendimento automático","atendimento automatico","atendimento automatizado","automatizar atendimento","automatizar whatsapp","automatizar meu whatsapp","automatizar o whatsapp","automatizar nosso whatsapp","automatizar as mensagens","automatizar mensagens"],
-        "Web Design": ["site","landing page","website","web site","página de vendas","pagina de vendas","loja virtual","site profissional"],
+        "Estrutura Completa": [
+            "estrutura completa", "marketing completo", "tudo completo",
+            "pacote completo", "serviço completo", "servico completo",
+            "solução completa", "solucao completa", "quero tudo",
+            "quero todos os serviços", "quero todos os servicos",
+            "quero todos os seus serviços", "quero todos os seus servicos",
+            "quero todos os serviços oferecidos",
+            "quero todos os servicos oferecidos",
+            "quero todos os serviços oferecido",
+            "quero todos os servicos oferecido",
+            "quero tudo que vocês oferecem", "quero tudo que voces oferecem",
+            "quero tudo que a forway oferece",
+            "tenho interesse em todos os serviços",
+            "tenho interesse em todos os servicos",
+            "preciso de todos os serviços", "preciso de todos os servicos",
+            "tráfego e social media", "trafego e social media",
+        ],
+        "Gestão de Tráfego Pago": [
+            "tráfego", "trafego", "tráfego pago", "trafego pago",
+            "gestão de tráfego", "gestao de trafego",
+            "anúncio", "anuncio", "anúncios", "anuncios",
+            "facebook ads", "instagram ads", "meta ads", "google ads",
+            "campanha paga", "campanhas pagas", "mídia paga", "midia paga",
+        ],
+        "Social Media Estratégico": [
+            "social media", "social mídia", "social midia",
+            "conteúdo", "conteudo", "instagram",
+            "postagem", "postagens", "redes sociais", "rede social",
+            "engajamento", "feed", "reels", "stories",
+            "gestão de redes sociais", "gestao de redes sociais",
+        ],
+        "Design": [
+            "design", "identidade visual", "criativo", "criativos",
+            "arte gráfica", "arte grafica", "artes gráficas", "artes graficas",
+            "criação de arte", "criacao de arte",
+            "criação de artes", "criacao de artes",
+            "quero um logo", "quero criar um logo", "preciso de um logo",
+            "criar um logo", "fazer um logo", "criar logo", "fazer logo",
+            "criação de logo", "criacao de logo", "logotipo",
+            "marca mais profissional", "materiais melhores",
+            "material gráfico", "material grafico",
+        ],
+        "Atendimento com IA": [
+            "automação", "automacao", "ia",
+            "inteligência artificial", "inteligencia artificial",
+            "chatbot", "sdr", "agente de ia", "agente ia",
+            "atendimento automático", "atendimento automatico",
+            "atendimento automatizado", "automatizar atendimento",
+            "automatizar whatsapp", "automatizar meu whatsapp",
+            "automatizar o whatsapp", "automatizar nosso whatsapp",
+            "automatizar as mensagens", "automatizar mensagens",
+        ],
+        "Web Design": [
+            "site", "landing page", "website", "web site",
+            "página de vendas", "pagina de vendas",
+            "loja virtual", "site profissional",
+        ],
     }
 
     for nome_produto, termos in produtos.items():
@@ -349,40 +412,113 @@ def analisar_mensagem(mensagem: str):
             if nome_produto == "Estrutura Completa":
                 break
 
-    # Sinais independentes: cada categoria pontua uma vez.
-    if contem_termo(texto, ["quero contratar","vamos fechar","quero fechar","fechar negócio","fechar negocio","quero começar","quero comecar","podemos começar","podemos comecar","quero comprar","tenho interesse em contratar"]):
+    sinal_contratacao = contem_termo(texto, [
+        "quero contratar", "vamos fechar", "quero fechar",
+        "fechar negócio", "fechar negocio",
+        "quero começar", "quero comecar",
+        "podemos começar", "podemos comecar",
+        "quero comprar", "tenho interesse em contratar",
+        "quero contratar vocês", "quero contratar voces",
+    ])
+
+    sinal_reuniao = contem_termo(texto, [
+        "reunião", "reuniao",
+        "agenda", "agendar", "agendamento",
+        "marcar horário", "marcar horario",
+        "marcar reunião", "marcar reuniao",
+        "marcar uma reunião", "marcar uma reuniao",
+        "falar com o luciano", "quero falar com o luciano",
+        "falar com especialista", "falar com um especialista",
+    ])
+
+    sinal_orcamento = contem_termo(texto, [
+        "orçamento", "orcamento",
+        "preço", "preco", "valor",
+        "quanto custa", "quanto fica",
+        "qual o valor", "qual valor",
+        "quanto vocês cobram", "quanto voces cobram",
+        "proposta", "investimento", "mensalidade",
+    ])
+
+    sinal_objetivo = contem_termo(texto, [
+        "vender mais", "aumentar vendas", "aumentar minhas vendas",
+        "aumentar as vendas", "melhorar minhas vendas",
+        "gerar mais vendas", "gerar vendas",
+        "mais clientes", "conseguir mais clientes", "captar clientes",
+        "conseguir clientes", "gerar leads", "mais leads",
+        "mais contatos", "receber mais contatos", "gerar contatos",
+        "fortalecer a marca", "fortalecer minha marca",
+        "fortalecer a presença", "fortalecer presença",
+        "presença digital", "presenca digital",
+        "melhorar minha presença digital", "melhorar o instagram",
+        "automatizar atendimento", "automatizar whatsapp",
+        "melhorar atendimento",
+    ])
+
+    sinal_urgencia = contem_termo(texto, [
+        "urgente", "urgência", "urgencia", "o quanto antes",
+        "ainda hoje", "essa semana", "esta semana",
+        "preciso começar logo", "preciso comecar logo",
+        "quero começar logo", "quero comecar logo",
+        "imediatamente",
+    ])
+
+    sinal_dor = contem_termo(texto, [
+        "já tentei", "ja tentei",
+        "não deu certo", "nao deu certo",
+        "não funcionou", "nao funcionou",
+        "outra agência", "outra agencia",
+        "experiência ruim", "experiencia ruim",
+        "já perdi dinheiro", "ja perdi dinheiro",
+        "fui enganado", "fui enganada",
+    ])
+
+    # Score complementar: mede intensidade, mas não decide sozinho a temperatura.
+    if sinal_contratacao:
         score += 6
 
-    if contem_termo(texto, ["orçamento","orcamento","preço","preco","valor","quanto custa","quanto fica","qual o valor","quanto vocês cobram","quanto voces cobram","proposta","investimento","mensalidade","reunião","reuniao","agendar","marcar reunião","marcar reuniao","marcar uma reunião","marcar uma reuniao","falar com o luciano","falar com especialista"]):
-        score += 4
-
-    if contem_termo(texto, ["vender mais","aumentar vendas","aumentar minhas vendas","aumentar as vendas","melhorar minhas vendas","gerar mais vendas","gerar vendas","mais clientes","conseguir mais clientes","captar clientes","conseguir clientes","gerar leads","mais leads","mais contatos","receber mais contatos","gerar contatos","fortalecer a marca","fortalecer minha marca","fortalecer a presença","fortalecer presença","presença digital","presenca digital","melhorar minha presença digital","melhorar o instagram","automatizar atendimento","automatizar whatsapp","melhorar atendimento"]):
+    if sinal_reuniao:
         score += 3
 
+    if sinal_orcamento:
+        score += 3
+
+    if sinal_objetivo:
+        score += 3
+
+    # Interesse em um serviço específico já é um sinal comercial real.
     if produto != "não identificado":
-        score += 1
-
-    if produto == "Estrutura Completa":
-        score += 5
-
-    if contem_termo(texto, ["urgente","urgência","urgencia","o quanto antes","ainda hoje","essa semana","esta semana","preciso começar logo","preciso comecar logo","quero começar logo","quero comecar logo","imediatamente"]):
         score += 2
 
-    if contem_termo(texto, ["já tentei","ja tentei","não deu certo","nao deu certo","não funcionou","nao funcionou","outra agência","outra agencia","experiência ruim","experiencia ruim","já perdi dinheiro","ja perdi dinheiro","fui enganado","fui enganada"]):
+    # Estrutura completa amplia a necessidade, mas não torna a lead quente sozinha.
+    if produto == "Estrutura Completa":
+        score += 1
+
+    if sinal_urgencia:
+        score += 2
+
+    if sinal_dor:
         score += 1
 
     score = min(score, 10)
 
-    if score >= 9:
-        temperatura, prioridade = "quentíssima", "alta"
-    elif score >= 6:
+    # Temperatura por estágio comercial:
+    # intenção de avançar => quente;
+    # interesse/necessidade concreta => morna;
+    # descoberta sem sinal comercial concreto => fria.
+    if sinal_contratacao or sinal_reuniao or sinal_orcamento:
         temperatura, prioridade = "quente", "alta"
-    elif score >= 3:
+    elif produto != "não identificado" or sinal_objetivo:
         temperatura, prioridade = "morna", "média"
     else:
         temperatura, prioridade = "fria", "baixa"
 
-    return {"temperatura": temperatura, "score": score, "produto": produto, "prioridade": prioridade}
+    return {
+        "temperatura": temperatura,
+        "score": score,
+        "produto": produto,
+        "prioridade": prioridade,
+    }
 
 def gerar_resumo_vendedor(conversa, analise):
     try:
@@ -690,7 +826,9 @@ def conduzir_conversa(conversa, mensagem: str):
         resposta = resposta_apos_encaminhamento(texto, conversa.nome)
         conversa.historico = (conversa.historico or "") + f"\nCliente: {texto}"
         conversa.historico += f"\nAgente: {resposta}"
-        return resposta, analisar_mensagem(conversa.historico)
+        return resposta, analisar_mensagem(
+            montar_texto_comercial_cliente(conversa)
+        )
 
     intencao = detectar_intencao_cliente(texto)
 
