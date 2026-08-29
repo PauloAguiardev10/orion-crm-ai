@@ -1,16 +1,83 @@
 import re
 import random
+import unicodedata
 
 from app.services.gpt_service import gerar_resumo_comercial_gpt
 
 
+ABREVIACOES_WHATSAPP = {
+    "vc": "voce",
+    "vcs": "voces",
+    "ce": "voce",
+    "pq": "porque",
+    "q": "que",
+    "qto": "quanto",
+    "qnt": "quanto",
+    "tb": "tambem",
+    "tbm": "tambem",
+    "td": "tudo",
+    "agr": "agora",
+    "qro": "quero",
+    "to": "estou",
+    "ta": "esta",
+    "pra": "para",
+    "pro": "para o",
+    "pros": "para os",
+    "pras": "para as",
+    "qnd": "quando",
+    "dps": "depois",
+    "hj": "hoje",
+    "msg": "mensagem",
+    "insta": "instagram",
+    "face": "facebook",
+    "zap": "whatsapp",
+    "whats": "whatsapp",
+    "blz": "beleza",
+}
+
+
+PADRAO_ABREVIACOES_WHATSAPP = re.compile(
+    r"\b("
+    + "|".join(
+        re.escape(chave)
+        for chave in sorted(ABREVIACOES_WHATSAPP, key=len, reverse=True)
+    )
+    + r")\b"
+)
+
+
+def normalizar_linguagem_cliente(texto: str) -> str:
+    """
+    Normaliza a linguagem somente para interpretação comercial.
+
+    A mensagem original do cliente permanece intacta no histórico.
+    """
+    texto = str(texto or "").strip().lower()
+
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(
+        caractere
+        for caractere in texto
+        if not unicodedata.combining(caractere)
+    )
+
+    texto = PADRAO_ABREVIACOES_WHATSAPP.sub(
+        lambda correspondencia: ABREVIACOES_WHATSAPP[correspondencia.group(0)],
+        texto,
+    )
+
+    return re.sub(r"\s+", " ", texto).strip()
+
+
 def contem_termo(texto, termos):
-    texto = f" {texto.lower()} "
+    texto_normalizado = normalizar_linguagem_cliente(texto)
+
     for termo in termos:
-        termo = termo.lower()
-        padrao = r"(?<!\w)" + re.escape(termo) + r"(?!\w)"
-        if re.search(padrao, texto):
+        termo_normalizado = normalizar_linguagem_cliente(termo)
+        padrao = r"(?<!\w)" + re.escape(termo_normalizado) + r"(?!\w)"
+        if re.search(padrao, texto_normalizado):
             return True
+
     return False
 
 
@@ -206,6 +273,12 @@ def objetivo_multiplo_para_estrutura(texto: str) -> bool:
             "quero tudo isso",
             "busco tudo isso",
             "estou buscando tudo isso",
+            "estou precisando de tudo",
+            "preciso de tudo isso",
+            "tudo que você está falando",
+            "tudo que voce esta falando",
+            "tudo o que você está falando",
+            "tudo o que voce esta falando",
             "todos esses objetivos",
             "todos esses pontos",
             "tudo que você falou",
@@ -366,6 +439,137 @@ def montar_texto_comercial_cliente(
     )
 
 
+
+def detectar_contexto_aquisicao(mensagem: str):
+    """Detecta como o cliente conheceu a Forway sem substituir a intenção comercial."""
+    texto = normalizar_linguagem_cliente(mensagem)
+
+    if contem_termo(texto, [
+        "vim por indicacao",
+        "foi indicacao",
+        "por indicacao",
+        "me indicou",
+        "me recomendaram",
+        "me recomendou",
+        "me passou o contato",
+        "me passaram o contato",
+        "peguei o contato com",
+        "falou de voces",
+        "falou da forway",
+        "me falou de voces",
+        "me falou da forway",
+        "recomendou voces",
+        "recomendou a forway",
+    ]):
+        return {"tipo": "indicacao", "canal": None}
+
+    if contem_termo(texto, [
+        "vi o trabalho que voces estao fazendo",
+        "vi o trabalho de voces",
+        "vi o trabalho da forway",
+        "acompanho o trabalho que voces fazem",
+        "acompanho o trabalho da forway",
+        "vi o resultado que voces tiveram",
+        "vi os resultados que voces tiveram",
+        "vi um trabalho de voces",
+        "conheci o trabalho de voces",
+    ]):
+        return {"tipo": "referencia_cliente", "canal": None}
+
+    origem_anuncio = contem_termo(texto, [
+        "vi um anuncio",
+        "vi uma propaganda",
+        "vi uma campanha",
+        "vi uma publicidade",
+        "vi um patrocinado",
+        "vi uma patrocinada",
+        "vim por um anuncio",
+        "vim pelo anuncio",
+        "vim por uma propaganda",
+        "vim pela campanha",
+        "cheguei por um anuncio",
+        "cheguei pelo anuncio",
+        "cheguei por uma propaganda",
+        "cheguei pela campanha",
+        "achei voces por um anuncio",
+        "achei voces pelo anuncio",
+        "conheci voces por um anuncio",
+        "conheci voces pelo anuncio",
+    ])
+
+    if origem_anuncio:
+        canal = None
+
+        if contem_termo(texto, ["instagram"]):
+            canal = "instagram"
+        elif contem_termo(texto, ["facebook"]):
+            canal = "facebook"
+
+        return {"tipo": "anuncio", "canal": canal}
+
+    origem_organica = contem_termo(texto, [
+        "vi voces no instagram",
+        "conheci voces pelo instagram",
+        "achei voces no instagram",
+        "vim pelo instagram",
+        "vi uma postagem de voces",
+        "vi um post de voces",
+        "vi uma publicacao de voces",
+        "vi um conteudo de voces",
+    ])
+
+    if origem_organica and contem_termo(texto, ["instagram"]):
+        return {"tipo": "organico", "canal": "instagram"}
+
+    origem_organica = contem_termo(texto, [
+        "vi voces no facebook",
+        "conheci voces pelo facebook",
+        "achei voces no facebook",
+        "vim pelo facebook",
+        "vi uma postagem de voces",
+        "vi um post de voces",
+        "vi uma publicacao de voces",
+        "vi um conteudo de voces",
+    ])
+
+    if origem_organica and contem_termo(texto, ["facebook"]):
+        return {"tipo": "organico", "canal": "facebook"}
+
+    return None
+
+
+def resposta_contexto_aquisicao(contexto):
+    if not contexto:
+        return None
+
+    tipo = contexto.get("tipo")
+    canal = contexto.get("canal")
+
+    if tipo == "indicacao":
+        return "Que legal saber que você chegou até a Forway por indicação 😊"
+    if tipo == "referencia_cliente":
+        return "Que legal saber que você conheceu a Forway através de um trabalho que estamos realizando 😊"
+    if tipo == "anuncio" and canal == "instagram":
+        return "Que legal que você chegou até a Forway pelo nosso anúncio no Instagram 😊"
+    if tipo == "anuncio" and canal == "facebook":
+        return "Que legal que você chegou até a Forway pelo nosso anúncio no Facebook 😊"
+    if tipo == "anuncio":
+        return "Que legal que você chegou até a Forway através de uma campanha nossa 😊"
+    if tipo == "organico" and canal == "instagram":
+        return "Que legal que você conheceu a Forway pelo nosso Instagram 😊"
+    if tipo == "organico" and canal == "facebook":
+        return "Que legal que você conheceu a Forway pelo nosso Facebook 😊"
+
+    return None
+
+
+def combinar_contexto_com_resposta(contexto, resposta):
+    abertura = resposta_contexto_aquisicao(contexto)
+    if not abertura:
+        return resposta
+    return f"{abertura}\n\n{resposta}"
+
+
 def detectar_intencao_cliente(mensagem: str):
     texto = mensagem.lower().strip()
 
@@ -376,15 +580,15 @@ def detectar_intencao_cliente(mensagem: str):
         ("contratacao", ["quero contratar","quero fechar","vamos fechar","fechar negócio","fechar negocio","quero começar","quero comecar","podemos começar","podemos comecar","quero comprar","tenho interesse em contratar","quero contratar vocês","quero contratar voces"]),
         ("reuniao", ["reunião","reuniao","agenda","agendar","agendamento","marcar horário","marcar horario","marcar uma reunião","marcar uma reuniao","falar com o luciano","quero falar com o luciano","falar com especialista","falar com um especialista"]),
         ("orcamento", ["orçamento","orcamento","preço","preco","valor","quanto custa","quanto fica","qual o valor","qual valor","quanto vocês cobram","quanto voces cobram","investimento","mensalidade","pacote","pacotes","proposta"]),
-        ("estrutura_completa", ["estrutura completa","marketing completo","tudo completo","quero tudo","pacote completo","serviço completo","servico completo","solução completa","solucao completa","quero todos os serviços","quero todos os servicos","quero todos os seus serviços","quero todos os seus servicos","quero todos os serviços oferecidos","quero todos os servicos oferecidos","quero todos os serviços oferecido","quero todos os servicos oferecido","quero tudo que vocês oferecem","quero tudo que voces oferecem","quero tudo que a forway oferece","tenho interesse em todos os serviços","tenho interesse em todos os servicos","preciso de tudo","preciso de todos os serviços","preciso de todos os servicos","tráfego e social media","trafego e social media","tráfego, social media e atendimento","trafego, social media e atendimento"]),
+        ("estrutura_completa", ["estrutura completa","marketing completo","tudo completo","quero tudo","pacote completo","serviço completo","servico completo","solução completa","solucao completa","quero todos os serviços","quero todos os servicos","quero todos os seus serviços","quero todos os seus servicos","quero todos os serviços oferecidos","quero todos os servicos oferecidos","quero todos os serviços oferecido","quero todos os servicos oferecido","quero tudo que vocês oferecem","quero tudo que voces oferecem","quero tudo que a forway oferece","tenho interesse em todos os serviços","tenho interesse em todos os servicos","preciso de tudo","estou precisando de tudo","preciso de tudo isso","tudo que você está falando","tudo que voce esta falando","tudo o que você está falando","tudo o que voce esta falando","preciso de todos os serviços","preciso de todos os servicos","tráfego e social media","trafego e social media","tráfego, social media e atendimento","trafego, social media e atendimento"]),
         ("conhecer_servicos", ["como funciona o trabalho de vocês","como funciona o trabalho de voces","como funciona o trabalho da forway","como funciona o trabalho","quais serviços","quais servicos","quais são os serviços","quais sao os servicos","que serviços vocês oferecem","que servicos voces oferecem","serviços vocês oferecem","servicos voces oferecem","serviços que a forway oferece","servicos que a forway oferece","informações sobre os serviços","informacoes sobre os servicos","o que vocês fazem","o que voces fazem","como vocês trabalham","como voces trabalham","me fala dos serviços","me fala dos servicos","me explica os serviços","me explica os servicos","o que oferecem","não sei o que preciso","nao sei o que preciso","não sei qual serviço","nao sei qual servico","quero conhecer","serviços da forway","servicos da forway","gostaria de saber os serviços","gostaria de saber os servicos","gostaria de saber sobre os serviços","gostaria de saber sobre os servicos","gostaria de saber mais sobre seus serviços","gostaria de saber mais sobre seus servicos","gostaria de saber sobre seus serviços","gostaria de saber sobre seus servicos","quero saber sobre seus serviços","quero saber sobre seus servicos","quero saber mais sobre seus serviços","quero saber mais sobre seus servicos","seus serviços","seus servicos","serviços de vocês","servicos de voces","saber sobre os serviços","saber sobre os servicos","saber mais sobre os serviços","saber mais sobre os servicos","saber mais sobre seus serviços","saber mais sobre seus servicos"]),
-        ("anuncio_instagram", ["vi um anúncio","vi um anuncio","vi vocês no instagram","vi voces no instagram","vim pelo instagram","vim do instagram","achei vocês no instagram","achei voces no instagram","anúncio de vocês","anuncio de voces","vi no facebook","vim pelo facebook","vi uma propaganda"]),
-        ("trafego", ["tráfego","trafego","tráfego pago","trafego pago","gestão de tráfego","gestao de trafego","anúncio","anuncio","anúncios","anuncios","facebook ads","instagram ads","meta ads","google ads","campanha paga","campanhas pagas","mídia paga","midia paga"]),
+        ("trafego", ["tráfego","trafego","tráfego pago","trafego pago","gestão de tráfego","gestao de trafego","quero anunciar","quero fazer anúncios","quero fazer anuncios","fazer anúncios","fazer anuncios","criar anúncios","criar anuncios","rodar anúncios","rodar anuncios","facebook ads","instagram ads","meta ads","google ads","campanha paga","campanhas pagas","mídia paga","midia paga"]),
         ("web_design", ["site","landing page","website","web site","página de vendas","pagina de vendas","criar um site","fazer um site","site profissional","loja virtual"]),
-        ("social_media", ["social media","social mídia","social midia","gestão de redes sociais","gestao de redes sociais","instagram","conteúdo","conteudo","rede social","redes sociais","postagem","postagens","engajamento","feed","reels","stories","cuidar do instagram","gerenciar instagram"]),
+        ("social_media", ["social media","social mídia","social midia","gestão de redes sociais","gestao de redes sociais","cuidar do instagram","gerenciar instagram","gestão do instagram","gestao do instagram","cuidar das redes sociais","gerenciar redes sociais","quero conteúdo","quero conteudo","preciso de conteúdo","preciso de conteudo","criar conteúdo","criar conteudo","quero postagens","preciso de postagens","melhorar engajamento","aumentar engajamento"]),
         ("design", ["identidade visual","design","criativo","criativos","arte gráfica","arte grafica","artes gráficas","artes graficas","criação de arte","criacao de arte","criação de artes","criacao de artes","quero um logo","quero criar um logo","preciso de um logo","criar um logo","fazer um logo","criar logo","fazer logo","criação de logo","criacao de logo","logotipo","marca mais profissional","materiais melhores","material gráfico","material grafico","identidade da marca"]),
         ("automacao", ["automação","automacao","automação de atendimento","automacao de atendimento","ia","inteligência artificial","inteligencia artificial","chatbot","sdr","agente de ia","agente ia","robô","robo","atendimento automático","atendimento automatico","atendimento automatizado","automatizar atendimento","automatizar whatsapp","automatizar meu whatsapp","automatizar o whatsapp","automatizar nosso whatsapp","automatizar as mensagens","automatizar mensagens","primeiro atendimento"]),
         ("objetivo_comercial", ["vender mais","aumentar vendas","aumentar minhas vendas","aumentar as vendas","gerar mais vendas","gerar vendas","mais clientes","conseguir mais clientes","captar clientes","gerar leads","mais leads","mais contatos","receber mais contatos","gerar contatos","fortalecer minha marca","fortalecer a marca","fortalecer presença","fortalecer a presença","melhorar minha presença digital","presença digital","presenca digital"]),
+        ("anuncio_instagram", ["vi um anúncio","vi um anuncio","vi vocês no instagram","vi voces no instagram","vim pelo instagram","vim do instagram","achei vocês no instagram","achei voces no instagram","anúncio de vocês","anuncio de voces","vi no facebook","vim pelo facebook","vi uma propaganda"]),
         ("saudacao", ["oi","olá","ola","bom dia","boa tarde","boa noite","e aí","e ai","opa"]),
     ]
 
@@ -426,22 +630,33 @@ def analisar_mensagem(mensagem: str):
             "quero tudo que a forway oferece",
             "tenho interesse em todos os serviços",
             "tenho interesse em todos os servicos",
+            "preciso de tudo", "estou precisando de tudo",
+            "preciso de tudo isso",
+            "tudo que você está falando", "tudo que voce esta falando",
+            "tudo o que você está falando", "tudo o que voce esta falando",
             "preciso de todos os serviços", "preciso de todos os servicos",
             "tráfego e social media", "trafego e social media",
         ],
         "Gestão de Tráfego Pago": [
             "tráfego", "trafego", "tráfego pago", "trafego pago",
             "gestão de tráfego", "gestao de trafego",
-            "anúncio", "anuncio", "anúncios", "anuncios",
+            "quero anunciar", "quero fazer anúncios", "quero fazer anuncios",
+            "fazer anúncios", "fazer anuncios", "criar anúncios", "criar anuncios",
+            "rodar anúncios", "rodar anuncios",
             "facebook ads", "instagram ads", "meta ads", "google ads",
             "campanha paga", "campanhas pagas", "mídia paga", "midia paga",
         ],
         "Social Media Estratégico": [
             "social media", "social mídia", "social midia",
-            "conteúdo", "conteudo", "instagram",
-            "postagem", "postagens", "redes sociais", "rede social",
-            "engajamento", "feed", "reels", "stories",
             "gestão de redes sociais", "gestao de redes sociais",
+            "cuidar do instagram", "gerenciar instagram",
+            "gestão do instagram", "gestao do instagram",
+            "cuidar das redes sociais", "gerenciar redes sociais",
+            "quero conteúdo", "quero conteudo",
+            "preciso de conteúdo", "preciso de conteudo",
+            "criar conteúdo", "criar conteudo",
+            "quero postagens", "preciso de postagens",
+            "melhorar engajamento", "aumentar engajamento",
         ],
         "Design": [
             "design", "identidade visual", "criativo", "criativos",
@@ -474,8 +689,7 @@ def analisar_mensagem(mensagem: str):
     for nome_produto, termos in produtos.items():
         if contem_termo(texto, termos):
             produto = nome_produto
-            if nome_produto == "Estrutura Completa":
-                break
+            break
 
     sinal_contratacao = contem_termo(texto, [
         "quero contratar", "vamos fechar", "quero fechar",
@@ -623,6 +837,16 @@ def resposta_servicos_forway(saudacao=None):
         "• Web design\n"
         "• Treinamento e suporte comercial\n\n"
         "Para eu organizar melhor seu atendimento, como posso te chamar?"
+    )
+
+
+
+def sofia_ja_se_apresentou(conversa):
+    historico = conversa.historico or ""
+    return (
+        "Sou a Sofia, da Forway." in historico
+        or "Agente:" in historico
+        or "Sofia:" in historico
     )
 
 
@@ -841,7 +1065,7 @@ def resposta_base_por_servico(conversa, intencao):
             "Entendi.\n\n"
             "Nesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada."
         )
-    
+
     if conversa.servico == "Atendimento com IA":
         return (
             "Entendi.\n\n"
@@ -896,6 +1120,7 @@ def conduzir_conversa(conversa, mensagem: str):
         )
 
     intencao = detectar_intencao_cliente(texto)
+    contexto_aquisicao = detectar_contexto_aquisicao(texto)
 
     # Considera somente sinais comerciais vindos do cliente.
     # As respostas da Sofia não podem influenciar a escolha do serviço.
@@ -952,18 +1177,20 @@ def conduzir_conversa(conversa, mensagem: str):
         elif intencao == "saudacao":
             conversa.etapa = "inicio"
 
-            ja_se_apresentou = (
-                "Sou a Sofia, da Forway."
-                in (conversa.historico or "")
-            )
-
-            if ja_se_apresentou:
+            if sofia_ja_se_apresentou(conversa):
                 resposta = "Como posso ajudar você hoje? 😊"
             else:
                 resposta = resposta_inicial_por_servico(
                     "saudacao",
                     texto,
                 )
+
+        elif contexto_aquisicao and intencao == "geral":
+            conversa.etapa = "inicio"
+            resposta = combinar_contexto_com_resposta(
+                contexto_aquisicao,
+                "Me conta, o que você está buscando para sua empresa hoje?",
+            )
 
         elif intencao in [
             "orcamento", "reuniao", "estrutura_completa", "trafego",
@@ -974,7 +1201,7 @@ def conduzir_conversa(conversa, mensagem: str):
 
             # Se a Sofia já respondeu uma saudação nesta conversa,
             # não cumprimenta novamente ao identificar o serviço.
-            if "Agente:" in (conversa.historico or ""):
+            if sofia_ja_se_apresentou(conversa):
                 if intencao == "trafego":
                     resposta = (
                         "Posso te ajudar com tráfego pago sim.\n\n"
@@ -1032,12 +1259,7 @@ def conduzir_conversa(conversa, mensagem: str):
         else:
             conversa.etapa = "coletar_nome"
 
-            ja_se_apresentou = (
-                "Sou a Sofia, da Forway."
-                in (conversa.historico or "")
-            )
-
-            if ja_se_apresentou:
+            if sofia_ja_se_apresentou(conversa):
                 resposta = (
                     "Claro 😊\n\n"
                     "Para eu entender melhor seu cenário, "
@@ -1048,6 +1270,12 @@ def conduzir_conversa(conversa, mensagem: str):
                     "geral",
                     texto,
                 )
+
+        if contexto_aquisicao and intencao != "geral":
+            resposta = combinar_contexto_com_resposta(
+                contexto_aquisicao,
+                resposta,
+            )
 
     elif conversa.etapa == "entender_objetivo_inicial":
 
