@@ -588,7 +588,6 @@ def detectar_intencao_cliente(mensagem: str):
         ("design", ["identidade visual","design","criativo","criativos","arte gráfica","arte grafica","artes gráficas","artes graficas","criação de arte","criacao de arte","criação de artes","criacao de artes","quero um logo","quero criar um logo","preciso de um logo","criar um logo","fazer um logo","criar logo","fazer logo","criação de logo","criacao de logo","logotipo","marca mais profissional","materiais melhores","material gráfico","material grafico","identidade da marca"]),
         ("automacao", ["automação","automacao","automação de atendimento","automacao de atendimento","ia","inteligência artificial","inteligencia artificial","chatbot","sdr","agente de ia","agente ia","robô","robo","atendimento automático","atendimento automatico","atendimento automatizado","automatizar atendimento","automatizar whatsapp","automatizar meu whatsapp","automatizar o whatsapp","automatizar nosso whatsapp","automatizar as mensagens","automatizar mensagens","primeiro atendimento"]),
         ("objetivo_comercial", ["vender mais","aumentar vendas","aumentar minhas vendas","aumentar as vendas","gerar mais vendas","gerar vendas","mais clientes","conseguir mais clientes","captar clientes","gerar leads","mais leads","mais contatos","receber mais contatos","gerar contatos","fortalecer minha marca","fortalecer a marca","fortalecer presença","fortalecer a presença","melhorar minha presença digital","presença digital","presenca digital"]),
-        ("anuncio_instagram", ["vi um anúncio","vi um anuncio","vi vocês no instagram","vi voces no instagram","vim pelo instagram","vim do instagram","achei vocês no instagram","achei voces no instagram","anúncio de vocês","anuncio de voces","vi no facebook","vim pelo facebook","vi uma propaganda"]),
         ("saudacao", ["oi","olá","ola","bom dia","boa tarde","boa noite","e aí","e ai","opa"]),
     ]
 
@@ -863,14 +862,6 @@ def resposta_inicial_por_servico(intencao, mensagem=""):
 
     if intencao == "conhecer_servicos":
         return resposta_servicos_forway()
-
-    if intencao == "anuncio_instagram":
-        return (
-            f"{saudacao}\n\n"
-            "Que bom que nosso anúncio chegou até você 😊\n\n"
-            "A Forway trabalha entendendo primeiro o objetivo da empresa para indicar uma estratégia mais adequada.\n\n"
-            "Hoje você busca mais vendas, mais contatos ou fortalecer a presença da marca?"
-        )
 
     if intencao == "trafego":
         return (
@@ -1169,10 +1160,6 @@ def conduzir_conversa(conversa, mensagem: str):
         elif intencao == "conhecer_servicos":
             conversa.etapa = "coletar_nome"
             resposta = resposta_inicial_por_servico("conhecer_servicos", texto)
-
-        elif intencao == "anuncio_instagram":
-            conversa.etapa = "entender_objetivo_inicial"
-            resposta = resposta_inicial_por_servico("anuncio_instagram", texto)
 
         elif intencao == "saudacao":
             conversa.etapa = "inicio"
