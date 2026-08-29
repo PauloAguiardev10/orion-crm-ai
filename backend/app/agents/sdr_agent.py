@@ -1,4 +1,4 @@
-import re
+﻿import re
 import random
 import unicodedata
 
@@ -537,6 +537,21 @@ def detectar_contexto_aquisicao(mensagem: str):
 
     return None
 
+def obter_origem_aquisicao(contexto):
+    """
+    Converte o contexto de aquisição detectado em um valor
+    padronizado para persistência no CRM.
+    """
+    if not contexto:
+        return None
+
+    tipo = contexto.get("tipo")
+    canal = contexto.get("canal")
+
+    if tipo in ("anuncio", "organico") and canal:
+        return f"{tipo}_{canal}"
+
+    return tipo
 
 def resposta_contexto_aquisicao(contexto):
     if not contexto:
@@ -1112,6 +1127,11 @@ def conduzir_conversa(conversa, mensagem: str):
 
     intencao = detectar_intencao_cliente(texto)
     contexto_aquisicao = detectar_contexto_aquisicao(texto)
+    # Persiste a primeira origem de aquisição identificada.
+    if contexto_aquisicao and not conversa.origem_aquisicao:
+        conversa.origem_aquisicao = obter_origem_aquisicao(
+            contexto_aquisicao
+        )
 
     # Considera somente sinais comerciais vindos do cliente.
     # As respostas da Sofia não podem influenciar a escolha do serviço.

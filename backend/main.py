@@ -468,6 +468,11 @@ def receber_mensagem(dados: MensagemRequest):
                 )
 
             if not lead_existente:
+                origem_aquisicao = (
+                    conversa.origem_aquisicao
+                    or conversa.canal
+                )
+
                 cliente = Cliente(
                     empresa_id=dados.empresa_id,
                     nome=conversa.nome,
@@ -476,7 +481,7 @@ def receber_mensagem(dados: MensagemRequest):
                     segmento=conversa.segmento,
                     telefone=conversa.telefone,
                     canal=conversa.canal,
-                    canal_origem=conversa.canal,
+                    canal_origem=origem_aquisicao,
                 )
 
                 db.add(cliente)
@@ -498,7 +503,7 @@ def receber_mensagem(dados: MensagemRequest):
                     temperatura=analise["temperatura"],
                     prioridade=analise["prioridade"],
                     score=analise["score"],
-                    origem=conversa.canal,
+                    origem=origem_aquisicao,
                     observacoes=conversa.objetivo,
                     resumo_vendedor=resumo,
                     status="Aguardando atendimento",

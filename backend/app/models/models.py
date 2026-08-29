@@ -137,6 +137,17 @@ class Conversa(Base):
     telefone = Column(String(80), nullable=True)
     servico = Column(String(150), nullable=True)
 
+    # Origem comercial pela qual o cliente conheceu a empresa.
+    # Exemplos:
+    # indicacao
+    # referencia_cliente
+    # anuncio_instagram
+    # anuncio_facebook
+    # anuncio
+    # organico_instagram
+    # organico_facebook
+    origem_aquisicao = Column(String(80), nullable=True)
+
 
 class Lead(Base):
     __tablename__ = "leads"
