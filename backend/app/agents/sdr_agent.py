@@ -1,8 +1,12 @@
-import re
+﻿import re
 import random
 import unicodedata
 
-from app.services.gpt_service import gerar_resumo_comercial_gpt
+from app.services.gpt_service import (
+    formatar_canal_atendimento,
+    formatar_origem_aquisicao,
+    gerar_resumo_comercial_gpt,
+)
 
 
 ABREVIACOES_WHATSAPP = {
@@ -553,6 +557,73 @@ def obter_origem_aquisicao(contexto):
 
     return tipo
 
+def detectar_origem_aquisicao_resposta(mensagem):
+    """
+    Interpreta a resposta do cliente quando a Sofia perguntou
+    especificamente como ele conheceu a Forway.
+
+    Aqui podemos aceitar respostas curtas como "Instagram" ou
+    "Facebook", pois já sabemos que o contexto da pergunta é a origem.
+    """
+    contexto = detectar_contexto_aquisicao(mensagem)
+
+    if contexto:
+        return obter_origem_aquisicao(contexto)
+
+    texto_normalizado = normalizar_texto_comparacao(mensagem)
+
+    if contem_termo(
+        texto_normalizado,
+        [
+            "trabalho de um cliente",
+            "trabalho para um cliente",
+            "trabalho de voces para um cliente",
+            "trabalho de vocês para um cliente",
+            "trabalho de cliente",
+            "cliente de voces",
+            "cliente de vocês",
+        ],
+    ) and not contem_termo(
+        texto_normalizado,
+        [
+            "me indicaram",
+            "me indicou",
+            "indicaram",
+            "indicou",
+            "indicacao",
+            "indicação",
+        ],
+    ):
+        return "referencia_cliente"
+
+    if contem_termo(
+        texto_normalizado,
+        [
+            "indicacao",
+            "indicação",
+            "me indicaram",
+            "me indicou",
+            "indicaram",
+            "indicou",
+            "amigo",
+        ],
+    ):
+        return "indicacao"
+
+    if contem_termo(
+        texto_normalizado,
+        ["instagram", "insta"],
+    ):
+        return "organico_instagram"
+
+    if contem_termo(
+        texto_normalizado,
+        ["facebook", "face"],
+    ):
+        return "organico_facebook"
+
+    return None
+
 def resposta_contexto_aquisicao(contexto):
     if not contexto:
         return None
@@ -816,14 +887,24 @@ def analisar_mensagem(mensagem: str):
 def gerar_resumo_vendedor(conversa, analise):
     try:
         return gerar_resumo_comercial_gpt(conversa, analise)
+
     except Exception:
+        canal = formatar_canal_atendimento(
+            getattr(conversa, "canal", None)
+        )
+
+        origem = formatar_origem_aquisicao(
+            getattr(conversa, "origem_aquisicao", None)
+        )
+
         return f"""
 Nova lead qualificada — Forway
 
 Nome: {conversa.nome or "Não informado"}
 Empresa: {conversa.empresa or "Não informado"}
 Segmento: {conversa.segmento or "Não informado"}
-Canal: {conversa.canal}
+Canal de atendimento: {canal}
+Origem da lead: {origem}
 WhatsApp: {conversa.telefone or "Não informado"}
 Serviço de interesse: {conversa.servico or analise["produto"]}
 Temperatura: {analise["temperatura"].capitalize()}
@@ -1381,7 +1462,13 @@ def conduzir_conversa(conversa, mensagem: str):
         conversa.segmento = limpar_segmento(texto)
 
         if conversa.objetivo:
-            if canal in ["instagram", "facebook", "messenger"]:
+            if not conversa.origem_aquisicao:
+                conversa.etapa = "coletar_origem"
+                resposta = (
+                    f"{comentario_segmento(conversa.segmento)}\n\n"
+                    "E só para eu registrar uma informação: como você conheceu a Forway?"
+                )
+            elif canal in ["instagram", "facebook", "messenger"]:
                 conversa.etapa = "coletar_whatsapp"
                 resposta = (
                     f"{comentario_segmento(conversa.segmento)}\n\n"
@@ -1436,7 +1523,13 @@ def conduzir_conversa(conversa, mensagem: str):
 
         resposta_base = resposta_base_por_servico(conversa, intencao)
 
-        if canal in ["instagram", "facebook", "messenger"]:
+        if not conversa.origem_aquisicao:
+            conversa.etapa = "coletar_origem"
+            resposta = (
+                f"{resposta_base}\n\n"
+                "E só para eu registrar uma informação: como você conheceu a Forway?"
+            )
+        elif canal in ["instagram", "facebook", "messenger"]:
             conversa.etapa = "coletar_whatsapp"
             resposta = (
                 f"{resposta_base}\n\n"
@@ -1448,6 +1541,36 @@ def conduzir_conversa(conversa, mensagem: str):
                 f"{resposta_base}\n\n"
                 "Já organizei as informações principais para o Luciano analisar seu caso com mais calma.\n\n"
                 "Seu atendimento já foi encaminhado para o Luciano. Ele vai entrar em contato com você assim que estiver disponível 😊"
+            )
+
+    elif conversa.etapa == "coletar_origem":
+
+        origem = detectar_origem_aquisicao_resposta(texto)
+
+        if origem:
+            if not conversa.origem_aquisicao:
+                conversa.origem_aquisicao = origem
+
+            if canal in ["instagram", "facebook", "messenger"]:
+                conversa.etapa = "coletar_whatsapp"
+                resposta = (
+                    "Perfeito, obrigado 😊\n\n"
+                    "Para eu encaminhar seu atendimento ao Luciano e ele falar com você diretamente, me passa seu WhatsApp?"
+                )
+            else:
+                conversa.etapa = "aguardando_humano"
+                resposta = (
+                    "Perfeito, obrigado 😊\n\n"
+                    "Já organizei as informações principais para o Luciano analisar seu caso.\n\n"
+                    "Seu atendimento já foi encaminhado para o Luciano. "
+                    "Ele vai entrar em contato com você assim que estiver disponível."
+                )
+
+        else:
+            conversa.etapa = "coletar_origem"
+            resposta = (
+                "Só para eu registrar certinho: você conheceu a Forway por indicação, "
+                "Instagram, Facebook ou algum anúncio?"
             )
 
     elif conversa.etapa == "coletar_whatsapp":

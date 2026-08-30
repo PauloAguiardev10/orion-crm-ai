@@ -187,13 +187,57 @@ def sanitizar_resumo_comercial(texto: str) -> str:
     return texto_corrigido.strip()
 
 
+def formatar_canal_atendimento(canal):
+    mapa = {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram",
+        "facebook": "Facebook",
+        "messenger": "Facebook Messenger",
+    }
+
+    valor = str(canal or "").strip()
+
+    if not valor:
+        return "Não informado"
+
+    return mapa.get(
+        valor.lower(),
+        valor,
+    )
+
+
+def formatar_origem_aquisicao(origem):
+    mapa = {
+        "indicacao": "Indicação",
+        "referencia_cliente": "Referência de cliente",
+        "anuncio_instagram": "Anúncio no Instagram",
+        "anuncio_facebook": "Anúncio no Facebook",
+        "anuncio": "Anúncio",
+        "organico_instagram": "Instagram orgânico",
+        "organico_facebook": "Facebook orgânico",
+    }
+
+    valor = str(origem or "").strip()
+
+    if not valor:
+        return "Não informado"
+
+    return mapa.get(
+        valor,
+        valor.replace("_", " ").capitalize(),
+    )
+
+
 def gerar_resumo_comercial_gpt(conversa, analise):
     analise = analise or {}
 
     nome = conversa.nome or "Não informado"
     empresa = conversa.empresa or "Não informado"
     segmento = conversa.segmento or "Não informado"
-    canal = conversa.canal or "Não informado"
+    canal = formatar_canal_atendimento(conversa.canal)
+    origem = formatar_origem_aquisicao(
+        getattr(conversa, "origem_aquisicao", None)
+    )
     telefone = conversa.telefone or "Não informado"
 
     servico = (
@@ -233,8 +277,8 @@ REGRAS OBRIGATÓRIAS:
 - Não escreva "Estratégia de mídia social".
 - Não invente informações.
 - Não copie o histórico bruto.
-- Não altere nome, empresa, telefone, canal, serviço, temperatura,
-  prioridade ou score.
+- Não altere nome, empresa, telefone, canal de atendimento, origem da lead,
+  serviço, temperatura, prioridade ou score.
 - Não informe que a venda foi concluída.
 - Não informe que a lead foi derrotada.
 - O resumo deve ser objetivo, profissional e consultivo.
@@ -252,7 +296,8 @@ Gere o resumo usando somente os dados abaixo.
 Nome: {nome}
 Empresa: {empresa}
 Segmento: {segmento}
-Canal: {canal}
+Canal de atendimento: {canal}
+Origem da lead: {origem}
 WhatsApp: {telefone}
 Serviço de interesse: {servico}
 Temperatura: {temperatura}
@@ -270,7 +315,8 @@ Nova lead qualificada — Forway
 Nome: {nome}
 Empresa: {empresa}
 Segmento: {segmento}
-Canal: {canal}
+Canal de atendimento: {canal}
+Origem da lead: {origem}
 WhatsApp: {telefone}
 Serviço de interesse: {servico}
 Temperatura: {temperatura}
@@ -310,7 +356,8 @@ Nova lead qualificada — Forway
 Nome: {nome}
 Empresa: {empresa}
 Segmento: {segmento}
-Canal: {canal}
+Canal de atendimento: {canal}
+Origem da lead: {origem}
 WhatsApp: {telefone}
 Serviço de interesse: {servico}
 Temperatura: {str(temperatura).capitalize()}
