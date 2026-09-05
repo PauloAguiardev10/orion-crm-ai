@@ -228,17 +228,53 @@ def formatar_origem_aquisicao(origem):
     )
 
 
-def gerar_resumo_comercial_gpt(conversa, analise):
+def gerar_resumo_comercial_gpt(
+    conversa,
+    analise,
+    contexto_empresa=None,
+    nome_especialista=None,
+):
     analise = analise or {}
+
+    nome_empresa = (
+        getattr(
+            contexto_empresa,
+            "nome_empresa",
+            None,
+        )
+        or "Empresa"
+    )
+
+    especialista_responsavel = (
+        nome_especialista
+        or "Equipe comercial"
+    )
+
+    responsavel_acao = (
+        nome_especialista
+        or "A equipe comercial"
+    )
 
     nome = conversa.nome or "Não informado"
     empresa = conversa.empresa or "Não informado"
     segmento = conversa.segmento or "Não informado"
-    canal = formatar_canal_atendimento(conversa.canal)
-    origem = formatar_origem_aquisicao(
-        getattr(conversa, "origem_aquisicao", None)
+
+    canal = formatar_canal_atendimento(
+        conversa.canal
     )
-    telefone = conversa.telefone or "Não informado"
+
+    origem = formatar_origem_aquisicao(
+        getattr(
+            conversa,
+            "origem_aquisicao",
+            None,
+        )
+    )
+
+    telefone = (
+        conversa.telefone
+        or "Não informado"
+    )
 
     servico = (
         conversa.servico
@@ -246,12 +282,30 @@ def gerar_resumo_comercial_gpt(conversa, analise):
         or "Não informado"
     )
 
-    temperatura = analise.get("temperatura") or "Não informado"
-    prioridade = analise.get("prioridade") or "Não informado"
-    score = analise.get("score", 0)
+    temperatura = (
+        analise.get("temperatura")
+        or "Não informado"
+    )
 
-    objetivo = conversa.objetivo or "Não informado"
-    historico = conversa.historico or "Não informado"
+    prioridade = (
+        analise.get("prioridade")
+        or "Não informado"
+    )
+
+    score = analise.get(
+        "score",
+        0,
+    )
+
+    objetivo = (
+        conversa.objetivo
+        or "Não informado"
+    )
+
+    historico = (
+        conversa.historico
+        or "Não informado"
+    )
 
     try:
         resposta = client.chat.completions.create(
@@ -259,8 +313,8 @@ def gerar_resumo_comercial_gpt(conversa, analise):
             messages=[
                 {
                     "role": "system",
-                    "content": """
-Você é responsável por gerar resumos comerciais para vendedores da Forway.
+                    "content": f"""
+Você é responsável por gerar resumos comerciais para a equipe da {nome_empresa}.
 
 Escreva exclusivamente em português do Brasil.
 
@@ -270,21 +324,19 @@ REGRAS OBRIGATÓRIAS:
 - Nunca traduza "lead" como "liderança", "pista" ou qualquer outro termo.
 - Nunca use as palavras "derrotada", "derrotado" ou "jurídico".
 - O título deve ser exatamente:
-  Nova lead qualificada — Forway
-- Preserve exatamente os nomes dos serviços informados.
-- Quando o serviço for "Social Media Estratégico", escreva exatamente:
-  Social Media Estratégico
-- Não escreva "Estratégia de mídia social".
+  Nova lead qualificada — {nome_empresa}
+- Preserve exatamente o nome do serviço informado.
+- Nunca renomeie, traduza ou substitua o serviço por outro.
 - Não invente informações.
 - Não copie o histórico bruto.
-- Não altere nome, empresa, telefone, canal de atendimento, origem da lead,
-  serviço, temperatura, prioridade ou score.
+- Não altere nome, empresa da lead, telefone, canal de atendimento, origem da lead, serviço, temperatura, prioridade ou score.
 - Não informe que a venda foi concluída.
 - Não informe que a lead foi derrotada.
 - O resumo deve ser objetivo, profissional e consultivo.
 - Não use linguagem excessivamente promocional.
 - Utilize marcadores com o caractere "-".
 - Não inclua saudações, emojis ou mensagens direcionadas ao cliente.
+- Na próxima ação recomendada, respeite o responsável comercial informado.
 - Produza somente o resumo comercial no formato solicitado.
 """
                 },
@@ -292,6 +344,9 @@ REGRAS OBRIGATÓRIAS:
                     "role": "user",
                     "content": f"""
 Gere o resumo usando somente os dados abaixo.
+
+Empresa responsável pelo atendimento: {nome_empresa}
+Especialista responsável: {especialista_responsavel}
 
 Nome: {nome}
 Empresa: {empresa}
@@ -310,7 +365,7 @@ Histórico da conversa:
 
 Use obrigatoriamente este formato:
 
-Nova lead qualificada — Forway
+Nova lead qualificada — {nome_empresa}
 
 Nome: {nome}
 Empresa: {empresa}
@@ -332,26 +387,35 @@ Pontos importantes:
 - [ponto importante]
 
 Próxima ação recomendada:
-[ação comercial consultiva]
+[use {responsavel_acao} como responsável pela continuidade comercial]
 """
                 }
             ],
             temperature=0.2,
-            max_tokens=600
+            max_tokens=600,
         )
 
-        resumo = extrair_conteudo_resposta(resposta)
+        resumo = extrair_conteudo_resposta(
+            resposta
+        )
 
         if resumo:
-            return sanitizar_resumo_comercial(resumo)
+            return sanitizar_resumo_comercial(
+                resumo
+            )
 
-        raise ValueError("A OpenAI retornou um resumo vazio.")
+        raise ValueError(
+            "A OpenAI retornou um resumo vazio."
+        )
 
     except Exception as erro:
-        print("ERRO GPT RESUMO:", erro)
+        print(
+            "ERRO GPT RESUMO:",
+            erro,
+        )
 
         resumo_fallback = f"""
-Nova lead qualificada — Forway
+Nova lead qualificada — {nome_empresa}
 
 Nome: {nome}
 Empresa: {empresa}
@@ -368,13 +432,16 @@ Resumo da conversa:
 A lead atua no segmento de {segmento} e demonstrou interesse em {servico}. O objetivo informado foi: "{objetivo}".
 
 Pontos importantes:
-- Demonstrou interesse nos serviços da Forway
+- Demonstrou interesse em {servico}
 - Informou o objetivo principal do negócio
 - Está disponível para contato comercial
 - Deve receber uma abordagem consultiva
 
 Próxima ação recomendada:
-Entrar em contato apresentando uma solução alinhada ao objetivo informado, sem repetir perguntas já respondidas.
+{responsavel_acao} deve entrar em contato apresentando uma solução alinhada ao objetivo informado, sem repetir perguntas já respondidas.
 """
 
-        return sanitizar_resumo_comercial(resumo_fallback)
+        return sanitizar_resumo_comercial(
+            resumo_fallback
+        )
+

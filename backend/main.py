@@ -15,7 +15,14 @@ from app.agents.sdr_agent import (
     gerar_resumo_vendedor,
 )
 from app.database.database import SessionLocal, engine
-from app.models.models import Base, Cliente, Conversa, Lead
+from app.services.empresa_context_service import carregar_contexto_empresa
+from app.models.models import (
+    Base,
+    Cliente,
+    ConexaoCanal,
+    Conversa,
+    Lead,
+)
 
 
 Base.metadata.create_all(bind=engine)
@@ -354,7 +361,45 @@ def obter_telefone_real_waha(
         flush=True,
     )
     return None
+def buscar_conexao_canal_meta(
+    db: Session,
+    canal: str,
+    *,
+    account_id: str | None = None,
+    page_id: str | None = None,
+    phone_number_id: str | None = None,
+) -> ConexaoCanal | None:
+    """
+    Localiza a conexão Meta ativa responsável pelo evento recebido.
 
+    A resolução é multiempresa: a conta externa identifica qual
+    empresa do Orion CRM deve receber a mensagem.
+    """
+    query = db.query(ConexaoCanal).filter(
+        ConexaoCanal.provedor == "meta",
+        ConexaoCanal.canal == canal,
+        ConexaoCanal.ativo.is_(True),
+    )
+
+    if account_id:
+        query = query.filter(
+            ConexaoCanal.account_id == str(account_id)
+        )
+
+    elif page_id:
+        query = query.filter(
+            ConexaoCanal.page_id == str(page_id)
+        )
+
+    elif phone_number_id:
+        query = query.filter(
+            ConexaoCanal.phone_number_id == str(phone_number_id)
+        )
+
+    else:
+        return None
+
+    return query.first()
 
 @app.post("/mensagem")
 def receber_mensagem(dados: MensagemRequest):
@@ -424,10 +469,17 @@ def receber_mensagem(dados: MensagemRequest):
                 "humano_assumiu": True,
             }
 
+        contexto_empresa = carregar_contexto_empresa(
+            db,
+            conversa.empresa_id,
+        )
+
         resposta, analise = conduzir_conversa(
             conversa,
             dados.mensagem,
+            contexto_empresa=contexto_empresa,
         )
+        
 
         db.commit()
 
@@ -493,6 +545,7 @@ def receber_mensagem(dados: MensagemRequest):
                 resumo = gerar_resumo_vendedor(
                     conversa,
                     analise,
+                    contexto_empresa=contexto_empresa,
                 )
 
                 lead = Lead(
