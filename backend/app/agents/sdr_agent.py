@@ -396,6 +396,12 @@ def detectar_interacao_social(mensagem: str):
 
 
 def objetivo_multiplo_para_estrutura(texto: str) -> bool:
+    if (
+        objetivo_vendas_para_estrutura(texto)
+        and objetivo_marca_para_social_media(texto)
+    ):
+        return True
+
     return contem_termo(
         texto,
         [
@@ -786,7 +792,22 @@ def combinar_contexto_com_resposta(
     if not abertura:
         return resposta
 
-    return f"{abertura}\n\n{resposta}"
+    resposta_limpa = resposta.strip()
+
+    saudacoes = (
+        "Olá 😊",
+        "Ola 😊",
+        "Bom dia 😊",
+        "Boa tarde 😊",
+        "Boa noite 😊",
+    )
+
+    for saudacao in saudacoes:
+        if resposta_limpa.startswith(saudacao):
+            resposta_limpa = resposta_limpa[len(saudacao):].lstrip()
+            break
+
+    return f"{abertura}\n\n{resposta_limpa}"
 
 
 def detectar_intencao_cliente(mensagem: str):
@@ -1218,10 +1239,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     elif conversa.etapa == 'entender_objetivo_inicial':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if conversa.servico is None:
-            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
+        if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
+            conversa.servico = 'Estrutura Completa'
+        elif conversa.servico is None:
+            if objetivo_marca_para_social_media(conversa.objetivo or ''):
                 conversa.servico = 'Social Media Estratégico'
             elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
                 conversa.servico = 'Estrutura Completa'
@@ -1272,10 +1293,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     elif conversa.etapa == 'entender_objetivo':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if conversa.servico is None:
-            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
+        if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
+            conversa.servico = 'Estrutura Completa'
+        elif conversa.servico is None:
+            if objetivo_marca_para_social_media(conversa.objetivo or ''):
                 conversa.servico = 'Social Media Estratégico'
             elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
                 conversa.servico = 'Estrutura Completa'

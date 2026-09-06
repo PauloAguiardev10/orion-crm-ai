@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.agents.sdr_agent import (
     conduzir_conversa,
     gerar_resumo_vendedor,
+    obter_especialista_responsavel,
 )
 from app.database.database import SessionLocal, engine
 from app.services.empresa_context_service import carregar_contexto_empresa
@@ -542,6 +543,11 @@ def receber_mensagem(dados: MensagemRequest):
 
                 conversa.cliente_id = cliente.id
 
+                especialista_responsavel = obter_especialista_responsavel(
+                    contexto_empresa,
+                    nome_servico=conversa.servico,
+                )
+
                 resumo = gerar_resumo_vendedor(
                     conversa,
                     analise,
@@ -552,6 +558,11 @@ def receber_mensagem(dados: MensagemRequest):
                     empresa_id=dados.empresa_id,
                     cliente_id=cliente.id,
                     conversa_id=conversa.id,
+                    especialista_id=(
+                        especialista_responsavel.id
+                        if especialista_responsavel is not None
+                        else None
+                    ),
                     produto=conversa.servico,
                     temperatura=analise["temperatura"],
                     prioridade=analise["prioridade"],
