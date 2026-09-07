@@ -8,6 +8,7 @@ from app.models.models import (
     AgenteConfig,
     ConexaoCanal,
     Empresa,
+    EmpresaAtendimentoConfig,
     Especialista,
     EspecialistaServico,
     Produto,
@@ -34,6 +35,24 @@ class ConfiguracaoAgenteContexto:
     whatsapp: bool
     instagram: bool
     facebook: bool
+
+
+@dataclass(frozen=True)
+class AtendimentoEmpresaContexto:
+    descricao_empresa: Optional[str]
+
+    whatsapp_comercial: Optional[str]
+    email_comercial: Optional[str]
+
+    site: Optional[str]
+    instagram_url: Optional[str]
+    facebook_url: Optional[str]
+
+    horario_atendimento: Optional[str]
+    regiao_atendimento: Optional[str]
+
+    informacoes_comerciais: Optional[str]
+    observacoes_atendimento: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -87,6 +106,7 @@ class ContextoEmpresa:
     status_empresa: Optional[str]
 
     agente: ConfiguracaoAgenteContexto
+    atendimento: AtendimentoEmpresaContexto
 
     servicos: tuple[ServicoContexto, ...]
     produtos: tuple[ProdutoContexto, ...]
@@ -224,6 +244,46 @@ def _montar_configuracao_agente(
             config.facebook,
             _bool_seguro(empresa.facebook, False),
         ),
+    )
+
+
+
+def _montar_atendimento_empresa(
+    config: Optional[EmpresaAtendimentoConfig],
+) -> AtendimentoEmpresaContexto:
+    """
+    Monta somente o contexto institucional/comercial permitido
+    para uso da Sofia durante o atendimento.
+
+    Dados internos de notificacao e responsavel por leads nao sao
+    expostos neste objeto.
+    """
+
+    if config is None:
+        return AtendimentoEmpresaContexto(
+            descricao_empresa=None,
+            whatsapp_comercial=None,
+            email_comercial=None,
+            site=None,
+            instagram_url=None,
+            facebook_url=None,
+            horario_atendimento=None,
+            regiao_atendimento=None,
+            informacoes_comerciais=None,
+            observacoes_atendimento=None,
+        )
+
+    return AtendimentoEmpresaContexto(
+        descricao_empresa=config.descricao_empresa,
+        whatsapp_comercial=config.whatsapp_comercial,
+        email_comercial=config.email_comercial,
+        site=config.site,
+        instagram_url=config.instagram_url,
+        facebook_url=config.facebook_url,
+        horario_atendimento=config.horario_atendimento,
+        regiao_atendimento=config.regiao_atendimento,
+        informacoes_comerciais=config.informacoes_comerciais,
+        observacoes_atendimento=config.observacoes_atendimento,
     )
 
 
@@ -441,6 +501,18 @@ def carregar_contexto_empresa(
         config=config,
     )
 
+    atendimento_config = (
+        db.query(EmpresaAtendimentoConfig)
+        .filter(
+            EmpresaAtendimentoConfig.empresa_id == empresa_id,
+        )
+        .one_or_none()
+    )
+
+    atendimento = _montar_atendimento_empresa(
+        config=atendimento_config,
+    )
+
     servicos = _carregar_servicos(
         db=db,
         empresa_id=empresa_id,
@@ -470,6 +542,7 @@ def carregar_contexto_empresa(
         nicho_empresa=empresa.nicho,
         status_empresa=empresa.status,
         agente=agente,
+        atendimento=atendimento,
         servicos=servicos,
         produtos=produtos,
         especialistas=especialistas,

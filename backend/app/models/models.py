@@ -144,6 +144,63 @@ class Empresa(Base):
     )
 
 
+class EmpresaAtendimentoConfig(Base):
+    """
+    Dados institucionais e operacionais fornecidos pela empresa
+    para uso da Sofia durante os atendimentos.
+
+    Esta tabela NAO armazena regras comportamentais, prompts,
+    qualificacao, score ou logica interna do agente.
+    """
+
+    __tablename__ = "empresa_atendimento_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    empresa_id = Column(
+        Integer,
+        ForeignKey(
+            "empresas.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    descricao_empresa = Column(Text, nullable=True)
+
+    whatsapp_comercial = Column(String(80), nullable=True)
+    email_comercial = Column(String(150), nullable=True)
+
+    site = Column(Text, nullable=True)
+    instagram_url = Column(Text, nullable=True)
+    facebook_url = Column(Text, nullable=True)
+
+    horario_atendimento = Column(Text, nullable=True)
+    regiao_atendimento = Column(Text, nullable=True)
+
+    informacoes_comerciais = Column(Text, nullable=True)
+    observacoes_atendimento = Column(Text, nullable=True)
+
+    responsavel_leads = Column(String(150), nullable=True)
+    whatsapp_notificacao = Column(String(80), nullable=True)
+    email_notificacao = Column(String(150), nullable=True)
+
+    criado_em = Column(
+        DateTime,
+        nullable=True,
+        server_default=func.now(),
+    )
+
+    atualizado_em = Column(
+        DateTime,
+        nullable=True,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class AgenteConfig(Base):
     """
     Configuração comportamental e operacional do agente de uma empresa.

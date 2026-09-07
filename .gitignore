@@ -26,3 +26,26 @@ database/*.db
 # Sistema
 .DS_Store
 Thumbs.db
+
+# ============================================================
+# Arquivos locais / runtime do Orion CRM
+# ============================================================
+
+# Logos enviadas pelos clientes em tempo de execucao
+dashboard/assets/logos/*
+!dashboard/assets/logos/.gitkeep
+
+# Backups locais de codigo
+*.bak
+*.bak_*
+*.backup_*
+*_backup_*
+
+# Arquivos temporarios
+*.tmp
+
+# Pacotes/comparacoes locais
+*.zip
+
+# Diffs gerados para auditoria
+diff_*.txt

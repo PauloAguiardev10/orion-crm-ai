@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 from styles.theme import carregar_tema
 from components.sidebar import render_sidebar
@@ -30,11 +31,108 @@ from app_pages.configuracoes import render_configuracoes
 from app_pages.empresas import render_empresas
 
 
+def proteger_interface_contra_traducao():
+    """
+    Marca o Orion CRM como interface pt-BR
+    e solicita que tradutores automaticos nao alterem a pagina.
+    """
+
+    components.html(
+        """
+        <script>
+        (function () {
+            try {
+                const doc = window.parent.document;
+
+                doc.documentElement.lang = "pt-BR";
+                doc.documentElement.setAttribute(
+                    "translate",
+                    "no"
+                );
+
+                doc.documentElement.classList.add(
+                    "notranslate"
+                );
+
+                if (doc.body) {
+                    doc.body.setAttribute(
+                        "translate",
+                        "no"
+                    );
+
+                    doc.body.classList.add(
+                        "notranslate"
+                    );
+                }
+
+                let metaGoogle = doc.head.querySelector(
+                    'meta[name="google"]'
+                );
+
+                if (!metaGoogle) {
+                    metaGoogle = doc.createElement(
+                        "meta"
+                    );
+
+                    metaGoogle.setAttribute(
+                        "name",
+                        "google"
+                    );
+
+                    doc.head.appendChild(
+                        metaGoogle
+                    );
+                }
+
+                metaGoogle.setAttribute(
+                    "content",
+                    "notranslate"
+                );
+
+                let metaLanguage = doc.head.querySelector(
+                    'meta[http-equiv="Content-Language"]'
+                );
+
+                if (!metaLanguage) {
+                    metaLanguage = doc.createElement(
+                        "meta"
+                    );
+
+                    metaLanguage.setAttribute(
+                        "http-equiv",
+                        "Content-Language"
+                    );
+
+                    doc.head.appendChild(
+                        metaLanguage
+                    );
+                }
+
+                metaLanguage.setAttribute(
+                    "content",
+                    "pt-BR"
+                );
+
+            } catch (erro) {
+                console.warn(
+                    "Orion CRM notranslate:",
+                    erro
+                );
+            }
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 st.set_page_config(
     page_title="Orion Systems",
     page_icon="🚀",
     layout="wide",
 )
+
+proteger_interface_contra_traducao()
 
 carregar_tema()
 

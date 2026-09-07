@@ -1,7 +1,34 @@
+from pathlib import Path
+
 import streamlit as st
 
 from database.db import conectar
 from services.empresa_contexto_service import listar_empresas_permitidas
+
+
+def resolver_caminho_logo(logo_path):
+    """
+    Resolve caminhos de imagens sempre a partir da pasta
+    dashboard, independentemente do diretorio em que o
+    Streamlit foi iniciado.
+    """
+
+    pasta_dashboard = (
+        Path(__file__).resolve().parent.parent
+    )
+
+    if not logo_path:
+        return None
+
+    caminho = Path(str(logo_path))
+
+    if not caminho.is_absolute():
+        caminho = (
+            pasta_dashboard
+            / caminho
+        )
+
+    return str(caminho)
 
 
 def obter_logo_empresa(empresa_id):
@@ -23,7 +50,9 @@ def obter_logo_empresa(empresa_id):
             resultado = cursor.fetchone()
 
         if resultado and resultado[0]:
-            return resultado[0]
+            return resolver_caminho_logo(
+                resultado[0]
+            )
 
     except Exception:
         pass
@@ -32,7 +61,9 @@ def obter_logo_empresa(empresa_id):
         if conn:
             conn.close()
 
-    return "assets/logo_orion.png"
+    return resolver_caminho_logo(
+        "assets/logo_orion.png"
+    )
 
 
 def inicializar_contexto_empresa():
@@ -232,53 +263,25 @@ def render_sidebar():
         # nível de acesso do funcionário.
         # =========================================
 
-        if (
+        # A identidade visual superior pertence
+        # sempre a empresa em que o usuario fez login.
+        # A logo e carregada dinamicamente do banco.
+
+        logo_path = obter_logo_empresa(
+            empresa_login_id
+        )
+
+        nome_marca = (
             str(empresa_login_nome)
             .strip()
-            .lower()
-            == "forway"
-        ):
+            .upper()
+        )
 
-            logo_path = (
-                "assets/logo_forway.png"
-            )
-
-            titulo_crm = (
-                "FORWAY CRM"
-            )
-
-        elif (
-            str(empresa_login_nome)
-            .strip()
-            .lower()
-            == "orion systems"
-        ):
-
-            logo_path = (
-                "assets/logo_orion.png"
-            )
-
-            titulo_crm = (
-                "ORION SYSTEMS CRM"
-            )
-
-        else:
-
-            logo_path = obter_logo_empresa(
-                empresa_login_id
-            )
-
-            nome_marca = (
-                str(empresa_login_nome)
-                .strip()
-                .upper()
-            )
-
-            titulo_crm = (
-                f"{nome_marca} CRM"
-                if nome_marca
-                else "ORION SYSTEMS CRM"
-            )
+        titulo_crm = (
+            f"{nome_marca} CRM"
+            if nome_marca
+            else "ORION SYSTEMS CRM"
+        )
 
         try:
 
@@ -347,7 +350,9 @@ def render_sidebar():
         try:
 
             st.image(
-                "assets/logo_orion.png",
+                resolver_caminho_logo(
+                    "assets/logo_orion.png"
+                ),
                 width=130,
             )
 
