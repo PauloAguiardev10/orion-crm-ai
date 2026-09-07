@@ -1286,7 +1286,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 resposta = f'{comentario_segmento(conversa.segmento)}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'{comentario_segmento(conversa.segmento)}\n\nJá deixei as informações principais organizadas para {obter_referencia_especialista_atual()} analisar seu cenário.\n\nO contato será feito assim que possível.'
+                resposta = f'{comentario_segmento(conversa.segmento)}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
         else:
             conversa.etapa = 'entender_objetivo'
             resposta = f'{comentario_segmento(conversa.segmento)}\n\nHoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?'
@@ -1311,7 +1311,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             resposta = f'{resposta_base}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
         else:
             conversa.etapa = 'aguardando_humano'
-            resposta = f'{resposta_base}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma.\n\nSeu atendimento já foi encaminhado para {obter_referencia_especialista_atual()}. O contato será feito assim que possível.'
+            resposta = f'{resposta_base}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
     elif conversa.etapa == 'coletar_origem':
         origem = detectar_origem_aquisicao_resposta(texto)
         if origem:
@@ -1322,14 +1322,14 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 resposta = f'Perfeito, obrigado 😊\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'Perfeito, obrigado 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso.\n\nSeu atendimento já foi encaminhado para {obter_referencia_especialista_atual()}. O contato será feito assim que possível.'
+                resposta = f'Perfeito, obrigado 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
         else:
             conversa.etapa = 'coletar_origem'
             resposta = f'Só para eu registrar certinho: você conheceu a {nome_empresa} por indicação, Instagram, Facebook ou algum anúncio?'
     elif conversa.etapa == 'coletar_whatsapp':
         conversa.telefone = texto
         conversa.etapa = 'aguardando_humano'
-        resposta = f'Perfeito 😊\n\nJá deixei tudo organizado e encaminhei seu atendimento para {obter_referencia_responsavel_atual()}. O contato será feito assim que possível.'
+        resposta = f'Perfeito 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
     else:
         resposta = resposta_apos_encaminhamento(texto, conversa.nome, contexto_empresa=contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
     conversa.historico += f'\nAgente: {resposta}'
