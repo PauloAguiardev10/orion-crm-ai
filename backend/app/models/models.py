@@ -47,6 +47,12 @@ class Empresa(Base):
 
     nicho = Column(String(255), nullable=True)
 
+    timezone = Column(
+        String(80),
+        nullable=False,
+        server_default="America/Fortaleza",
+    )
+
     nome_agente = Column(
         String(100),
         nullable=True,

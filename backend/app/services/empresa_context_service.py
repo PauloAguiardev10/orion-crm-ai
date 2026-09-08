@@ -104,6 +104,7 @@ class ContextoEmpresa:
 
     nicho_empresa: Optional[str]
     status_empresa: Optional[str]
+    timezone: str
 
     agente: ConfiguracaoAgenteContexto
     atendimento: AtendimentoEmpresaContexto
@@ -541,6 +542,10 @@ def carregar_contexto_empresa(
         parceiro_id=empresa.parceiro_id,
         nicho_empresa=empresa.nicho,
         status_empresa=empresa.status,
+        timezone=(
+            empresa.timezone
+            or "America/Fortaleza"
+        ),
         agente=agente,
         atendimento=atendimento,
         servicos=servicos,

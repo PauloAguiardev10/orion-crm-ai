@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 
+from utils.tempo import agora_empresa
+
 from database.db import conectar
 from services.usuarios_service import criar_admin_empresa, hash_senha
 
@@ -871,9 +873,14 @@ def render_empresas():
         formatar_moeda(valor_total_novo),
     )
 
-    data_adesao = datetime.now().strftime("%Y-%m-%d")
+    agora_local = agora_empresa()
+
+    data_adesao = agora_local.strftime(
+        "%Y-%m-%d"
+    )
+
     data_vencimento_nova = (
-        datetime.now() + timedelta(days=30)
+        agora_local + timedelta(days=30)
     ).strftime("%Y-%m-%d")
 
     st.info(
@@ -1111,7 +1118,7 @@ def render_empresas():
     data_vencimento_atual = (
         empresa["data_vencimento"]
         if empresa["data_vencimento"]
-        else datetime.now().date()
+        else agora_empresa().date()
     )
 
     if isinstance(

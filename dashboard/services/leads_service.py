@@ -1,5 +1,6 @@
 import pandas as pd
-from datetime import datetime
+
+from utils.tempo import horas_desde_timestamp_utc
 
 from database.db import conectar
 
@@ -150,15 +151,9 @@ def carregar_leads(empresa_id=1):
             errors="coerce",
         )
 
-        agora = datetime.now()
-
         leads["horas_desde_entrada"] = leads["criado_em"].apply(
-            lambda data: round(
-                (
-                    agora - data.to_pydatetime()
-                ).total_seconds()
-                / 3600,
-                1,
+            lambda data: horas_desde_timestamp_utc(
+                data.to_pydatetime()
             )
             if pd.notna(data)
             else 0

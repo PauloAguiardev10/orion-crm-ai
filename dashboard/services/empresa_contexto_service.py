@@ -107,7 +107,8 @@ def obter_empresa_por_id(empresa_id: int):
                     id,
                     nome,
                     tipo,
-                    parceiro_id
+                    parceiro_id,
+                    timezone
                 FROM empresas
                 WHERE id = %s
                   AND status = 'ativa'
@@ -125,6 +126,10 @@ def obter_empresa_por_id(empresa_id: int):
             "nome": resultado[1],
             "tipo": resultado[2],
             "parceiro_id": resultado[3],
+            "timezone": (
+                resultado[4]
+                or "America/Fortaleza"
+            ),
         }
 
     finally:
