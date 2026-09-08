@@ -69,7 +69,15 @@ def carregar_leads(empresa_id=1):
                 leads.observacoes,
                 leads.resumo_vendedor,
                 leads.status,
-                leads.responsavel,
+
+                COALESCE(
+                    especialistas.nome,
+                    NULLIF(
+                        leads.responsavel,
+                        'Não atribuído'
+                    )
+                ) AS responsavel,
+
                 leads.valor_negocio,
                 leads.mensalidade,
                 leads.motivo_perda,
@@ -80,6 +88,10 @@ def carregar_leads(empresa_id=1):
 
             LEFT JOIN clientes
                 ON clientes.id = leads.cliente_id
+
+            LEFT JOIN especialistas
+                ON especialistas.id = leads.especialista_id
+               AND especialistas.empresa_id = leads.empresa_id
 
             WHERE leads.empresa_id = %s
 
