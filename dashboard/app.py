@@ -7,6 +7,7 @@ from services.leads_service import carregar_leads
 
 from services.auth_service import (
     validar_login,
+    obter_usuario_id,
     obter_empresa_usuario,
     obter_empresa_id_usuario,
     obter_nivel_usuario,
@@ -142,6 +143,9 @@ if "logado" not in st.session_state:
 
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
+
+if "usuario_id" not in st.session_state:
+    st.session_state.usuario_id = None
 
 if "empresa" not in st.session_state:
     st.session_state.empresa = None
@@ -330,12 +334,14 @@ def tela_login():
             use_container_width=True,
         ):
             if validar_login(usuario, senha):
+                usuario_id = obter_usuario_id(usuario)
                 empresa = obter_empresa_usuario(usuario)
                 empresa_id = obter_empresa_id_usuario(usuario)
                 nivel = obter_nivel_usuario(usuario)
 
                 st.session_state.logado = True
                 st.session_state.usuario = usuario
+                st.session_state.usuario_id = usuario_id
                 st.session_state.empresa = empresa
                 st.session_state.empresa_id = empresa_id
                 st.session_state.nivel = nivel
@@ -385,6 +391,7 @@ with st.sidebar:
     if st.button("Sair"):
         st.session_state.logado = False
         st.session_state.usuario = None
+        st.session_state.usuario_id = None
         st.session_state.empresa = None
         st.session_state.empresa_id = None
         st.session_state.nivel = None

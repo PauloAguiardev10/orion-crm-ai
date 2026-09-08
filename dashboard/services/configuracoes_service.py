@@ -18,7 +18,9 @@ def garantir_tabelas_config():
 
                     empresa_id INTEGER DEFAULT 1,
 
-                    nome VARCHAR(255) NOT NULL
+                    nome VARCHAR(255) NOT NULL,
+
+                    usuario_id INTEGER
 
                 )
             """)
@@ -205,6 +207,8 @@ def carregar_especialistas(empresa_id=1):
 
                 especialistas.nome,
 
+                especialistas.usuario_id,
+
                 STRING_AGG(
                     DISTINCT servicos.nome,
                     ', '
@@ -237,7 +241,9 @@ def carregar_especialistas(empresa_id=1):
 
                 especialistas.empresa_id,
 
-                especialistas.nome
+                especialistas.nome,
+
+                especialistas.usuario_id
 
             ORDER BY especialistas.id
         """, conn, params=(empresa_id,))
@@ -250,7 +256,8 @@ def carregar_especialistas(empresa_id=1):
 
 def carregar_ids_servicos_especialista(
     nome,
-    empresa_id=1
+    empresa_id=1,
+    usuario_id=None,
 ):
 
     garantir_tabelas_config()
@@ -261,22 +268,41 @@ def carregar_ids_servicos_especialista(
 
         with conn.cursor() as cursor:
 
-            cursor.execute("""
-                SELECT id
-                FROM especialistas
+            if usuario_id is not None:
 
-                WHERE empresa_id = %s
+                cursor.execute("""
+                    SELECT id
+                    FROM especialistas
 
-                AND LOWER(TRIM(nome)) =
-                    LOWER(TRIM(%s))
+                    WHERE empresa_id = %s
+                    AND usuario_id = %s
 
-                ORDER BY id ASC
+                    ORDER BY id ASC
 
-                LIMIT 1
-            """, (
-                empresa_id,
-                nome.strip()
-            ))
+                    LIMIT 1
+                """, (
+                    empresa_id,
+                    int(usuario_id),
+                ))
+
+            else:
+
+                cursor.execute("""
+                    SELECT id
+                    FROM especialistas
+
+                    WHERE empresa_id = %s
+
+                    AND LOWER(TRIM(nome)) =
+                        LOWER(TRIM(%s))
+
+                    ORDER BY id ASC
+
+                    LIMIT 1
+                """, (
+                    empresa_id,
+                    nome.strip()
+                ))
 
             especialista = cursor.fetchone()
 
@@ -306,60 +332,7 @@ def carregar_ids_servicos_especialista(
 
     finally:
         conn.close()
-        def cadastrar_servico(nome, empresa_id=1):
 
-            if not nome.strip():
-                return False
-
-    garantir_tabelas_config()
-
-    conn = conectar()
-
-    try:
-
-        with conn.cursor() as cursor:
-
-            cursor.execute("""
-                SELECT id
-                FROM servicos
-
-                WHERE empresa_id = %s
-
-                AND LOWER(TRIM(nome)) =
-                    LOWER(TRIM(%s))
-            """, (
-                empresa_id,
-                nome.strip()
-            ))
-
-            existente = cursor.fetchone()
-
-            if existente:
-                return True
-
-            cursor.execute("""
-                INSERT INTO servicos (
-
-                    empresa_id,
-                    nome
-
-                )
-                VALUES (%s, %s)
-            """, (
-                empresa_id,
-                nome.strip()
-            ))
-
-        conn.commit()
-
-        return True
-
-    except Exception:
-        conn.rollback()
-        raise
-
-    finally:
-        conn.close()
 
 def cadastrar_servico(nome, empresa_id=1):
 
@@ -417,7 +390,8 @@ def cadastrar_servico(nome, empresa_id=1):
 def cadastrar_especialista(
     nome,
     servicos_ids,
-    empresa_id=1
+    empresa_id=1,
+    usuario_id=None,
 ):
 
     if not nome.strip():
@@ -433,22 +407,41 @@ def cadastrar_especialista(
 
         with conn.cursor() as cursor:
 
-            cursor.execute("""
-                SELECT id
-                FROM especialistas
+            if usuario_id is not None:
 
-                WHERE empresa_id = %s
+                cursor.execute("""
+                    SELECT id
+                    FROM especialistas
 
-                AND LOWER(TRIM(nome)) =
-                    LOWER(TRIM(%s))
+                    WHERE empresa_id = %s
+                    AND usuario_id = %s
 
-                ORDER BY id ASC
+                    ORDER BY id ASC
 
-                LIMIT 1
-            """, (
-                empresa_id,
-                nome
-            ))
+                    LIMIT 1
+                """, (
+                    empresa_id,
+                    int(usuario_id),
+                ))
+
+            else:
+
+                cursor.execute("""
+                    SELECT id
+                    FROM especialistas
+
+                    WHERE empresa_id = %s
+
+                    AND LOWER(TRIM(nome)) =
+                        LOWER(TRIM(%s))
+
+                    ORDER BY id ASC
+
+                    LIMIT 1
+                """, (
+                    empresa_id,
+                    nome
+                ))
 
             especialista = cursor.fetchone()
 
@@ -459,13 +452,18 @@ def cadastrar_especialista(
                 cursor.execute("""
                     UPDATE especialistas
 
-                    SET nome = %s
+                    SET
+                        nome = %s,
+                        usuario_id = %s
 
                     WHERE id = %s
 
                     AND empresa_id = %s
                 """, (
                     nome,
+                    int(usuario_id)
+                    if usuario_id is not None
+                    else None,
                     especialista_id,
                     empresa_id
                 ))
@@ -476,15 +474,19 @@ def cadastrar_especialista(
                     INSERT INTO especialistas (
 
                         empresa_id,
-                        nome
+                        nome,
+                        usuario_id
 
                     )
-                    VALUES (%s, %s)
+                    VALUES (%s, %s, %s)
 
                     RETURNING id
                 """, (
                     empresa_id,
-                    nome
+                    nome,
+                    int(usuario_id)
+                    if usuario_id is not None
+                    else None,
                 ))
 
                 especialista_id = cursor.fetchone()[0]
@@ -529,6 +531,84 @@ def cadastrar_especialista(
     limpar_especialistas_duplicados(empresa_id)
 
     return True
+
+
+def excluir_especialista_por_usuario(
+    usuario_id,
+    empresa_id=1,
+):
+    """
+    Exclui o especialista vinculado a um usuario da mesma empresa.
+
+    A identidade do vinculo e especialistas.usuario_id,
+    evitando depender de nome ou login.
+    """
+
+    garantir_tabelas_config()
+
+    conn = conectar()
+
+    try:
+
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                SELECT id
+                FROM especialistas
+
+                WHERE empresa_id = %s
+                AND usuario_id = %s
+
+                ORDER BY id
+            """, (
+                empresa_id,
+                int(usuario_id),
+            ))
+
+            especialistas = cursor.fetchall()
+
+            ids = [
+                linha[0]
+                for linha in especialistas
+            ]
+
+            for especialista_id in ids:
+
+                cursor.execute("""
+                    DELETE FROM especialista_servicos
+
+                    WHERE empresa_id = %s
+                    AND especialista_id = %s
+                """, (
+                    empresa_id,
+                    especialista_id,
+                ))
+
+                cursor.execute("""
+                    DELETE FROM especialistas
+
+                    WHERE empresa_id = %s
+                    AND id = %s
+                    AND usuario_id = %s
+                """, (
+                    empresa_id,
+                    especialista_id,
+                    int(usuario_id),
+                ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
+
 
 
 def excluir_especialista_por_nome(

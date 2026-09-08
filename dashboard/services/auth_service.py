@@ -309,6 +309,28 @@ def validar_login(usuario: str, senha: str) -> bool:
         conn.close()
 
 
+def obter_usuario_id(usuario: str):
+    garantir_tabelas_auth()
+
+    login = usuario.strip().lower()
+    conn = conectar()
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            resultado = _buscar_usuario_por_login(
+                cursor,
+                login,
+            )
+
+            if resultado:
+                return int(resultado["id"])
+
+            return None
+
+    finally:
+        conn.close()
+
+
 def obter_empresa_usuario(usuario: str):
     garantir_tabelas_auth()
 

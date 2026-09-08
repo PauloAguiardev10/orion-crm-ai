@@ -407,6 +407,12 @@ class Especialista(Base):
         nullable=False,
     )
 
+    usuario_id = Column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
+
 
 class EspecialistaServico(Base):
     """

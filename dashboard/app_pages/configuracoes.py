@@ -8,7 +8,7 @@ from services.configuracoes_service import (
     cadastrar_especialista,
     cadastrar_servico,
     carregar_ids_servicos_especialista,
-    excluir_especialista_por_nome,
+    excluir_especialista_por_usuario,
     excluir_servico,
 )
 
@@ -26,8 +26,8 @@ def limpar_formularios():
 
 
 def excluir_usuario(usuario_id, usuario_nome, empresa_id):
-    excluir_especialista_por_nome(
-        usuario_nome,
+    excluir_especialista_por_usuario(
+        usuario_id,
         empresa_id,
     )
 
@@ -40,8 +40,10 @@ def excluir_usuario(usuario_id, usuario_nome, empresa_id):
             cursor.execute("""
                 DELETE FROM usuarios
                 WHERE id = %s
+                  AND empresa_id = %s
             """, (
                 int(usuario_id),
+                int(empresa_id),
             ))
 
         conn.commit()
@@ -484,8 +486,22 @@ def render_configuracoes():
 
     funcionarios = []
 
+    funcionarios_por_usuario = {}
+
     if not usuarios_empresa.empty:
-        funcionarios = usuarios_empresa["usuario"].tolist()
+
+        funcionarios = (
+            usuarios_empresa["usuario"]
+            .dropna()
+            .astype(str)
+            .tolist()
+        )
+
+        funcionarios_por_usuario = {
+            str(row["usuario"]): int(row["id"])
+            for _, row in usuarios_empresa.iterrows()
+            if row["usuario"] is not None
+        }
 
     if not funcionarios:
 
@@ -510,6 +526,12 @@ def render_configuracoes():
 
         if funcionario_selecionado:
 
+            funcionario_usuario_id = (
+                funcionarios_por_usuario.get(
+                    funcionario_selecionado
+                )
+            )
+
             opcoes_servicos = {
                 row["nome"]: row["id"]
                 for _, row in servicos.iterrows()
@@ -518,6 +540,7 @@ def render_configuracoes():
             ids_atuais = carregar_ids_servicos_especialista(
                 funcionario_selecionado,
                 empresa_id,
+                usuario_id=funcionario_usuario_id,
             )
 
             nomes_atuais = [
@@ -544,6 +567,7 @@ def render_configuracoes():
                     funcionario_selecionado,
                     servicos_ids,
                     empresa_id,
+                    usuario_id=funcionario_usuario_id,
                 )
 
                 st.success("Especialidades atualizadas com sucesso.")
