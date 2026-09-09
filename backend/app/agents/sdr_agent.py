@@ -133,34 +133,72 @@ def resposta_servicos_empresa(contexto_empresa, saudacao=None):
     return f'{inicio}Hoje a {nome_empresa} trabalha com:\n\n{lista_servicos}\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
 
 
-def obter_especialista_responsavel(contexto_empresa, nome_servico=None):
+def obter_especialista_responsavel(
+    contexto_empresa,
+    nome_servico=None,
+):
     """
     Resolve o especialista responsável dentro do próprio tenant.
 
-    Quando um serviço é informado, prioriza especialistas vinculados
-    especificamente àquele serviço.
+    Quando um serviço ? informado, retorna somente um especialista
+    explicitamente vinculado àquele serviço.
 
-    Se nenhum serviço for informado, ou nenhum vínculo específico for
-    encontrado, usa o primeiro especialista configurado da própria empresa.
+    Se existem especialistas na empresa, mas nenhum atende ao serviço
+    informado, retorna None para impedir encaminhamento nominal incorreto.
+
+    Quando nenhum serviço ? informado, pode usar o primeiro especialista
+    configurado da própria empresa como referência geral.
 
     Nunca busca especialista em outra empresa.
     """
     if contexto_empresa is None:
         return None
-    especialistas = contexto_empresa.especialistas or ()
+
+    especialistas = (
+        contexto_empresa.especialistas
+        or ()
+    )
+
     if not especialistas:
         return None
+
     if nome_servico:
-        nome_normalizado = normalizar_texto_comparacao(nome_servico)
+        nome_normalizado = (
+            normalizar_texto_comparacao(
+                nome_servico
+            )
+        )
+
         servico_encontrado = None
-        for servico in contexto_empresa.servicos or ():
-            if normalizar_texto_comparacao(servico.nome) == nome_normalizado:
+
+        for servico in (
+            contexto_empresa.servicos
+            or ()
+        ):
+            if (
+                normalizar_texto_comparacao(
+                    servico.nome
+                )
+                == nome_normalizado
+            ):
                 servico_encontrado = servico
                 break
+
         if servico_encontrado is not None:
             for especialista in especialistas:
-                if servico_encontrado.id in especialista.servicos_ids:
+                if (
+                    servico_encontrado.id
+                    in especialista.servicos_ids
+                ):
                     return especialista
+
+        # Existe um serviço definido, mas nenhum
+        # especialista está vinculado a ele.
+        # Não usar outro especialista como fallback.
+        return None
+
+    # Sem serviço definido, o primeiro especialista
+    # da própria empresa pode servir como referência geral.
     return especialistas[0]
 
 
@@ -1056,14 +1094,13 @@ def resposta_inicial_por_servico(intencao, mensagem='', contexto_empresa=None):
     saudacao = saudacao_personalizada(mensagem)
     nome_agente = obter_nome_agente(contexto_empresa)
     nome_empresa = obter_nome_empresa(contexto_empresa)
-    nome_especialista = obter_nome_especialista(contexto_empresa)
-    referencia_especialista = nome_especialista if nome_especialista else 'nosso especialista'
+    referencia_especialista = "a equipe comercial"
     if intencao == 'saudacao':
         return f'{saudacao}\n\nTudo bem?\n\nSou a {nome_agente}, da {nome_empresa}.\n\nComo posso ajudar você hoje?'
     if intencao == 'conhecer_servicos':
         return resposta_servicos_empresa(contexto_empresa=contexto_empresa)
     if intencao == 'trafego':
-        return f'{saudacao}\n\nPosso te ajudar com tráfego pago sim.\n\nAntes de te encaminhar para o especialista, me fala seu nome?'
+        return f'{saudacao}\n\nPosso te ajudar com tráfego pago sim.\n\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
     if intencao == 'orcamento':
         return f'{saudacao}\n\nPara falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\nMe fala seu nome?'
     if intencao == 'reuniao':
@@ -1100,30 +1137,174 @@ def comentario_segmento(segmento: str):
     )
 
 
-def resposta_apos_encaminhamento(texto, nome=None, contexto_empresa=None, nome_servico=None):
+def resposta_apos_encaminhamento(
+    texto,
+    nome=None,
+    contexto_empresa=None,
+    nome_servico=None,
+):
     interacao = detectar_interacao_social(texto)
-    nome_especialista = obter_nome_especialista(contexto_empresa, nome_servico=nome_servico)
-    nome_empresa = obter_nome_empresa(contexto_empresa)
+
+    nome_especialista = obter_nome_especialista(
+        contexto_empresa,
+        nome_servico=nome_servico,
+    )
+
+    nome_empresa = obter_nome_empresa(
+        contexto_empresa
+    )
+
+    especialistas = (
+        getattr(
+            contexto_empresa,
+            "especialistas",
+            (),
+        )
+        if contexto_empresa is not None
+        else ()
+    ) or ()
+
     if nome_especialista:
         referencia_contato = nome_especialista
         referencia_destino = nome_especialista
-        referencia_responsavel = f'{nome_especialista}, responsável pela {nome_empresa}'
+        referencia_responsavel = (
+            f"{nome_especialista}, "
+            f"responsável pela {nome_empresa}"
+        )
+
+    elif especialistas and nome_servico:
+        referencia_contato = (
+            "a equipe responsável por esse atendimento"
+        )
+        referencia_destino = (
+            "a equipe responsável por esse atendimento"
+        )
+        referencia_responsavel = (
+            "a equipe responsável por esse atendimento"
+        )
+
     else:
-        referencia_contato = 'nossa equipe'
-        referencia_destino = 'nossa equipe'
-        referencia_responsavel = 'nossa equipe especializada'
-    if interacao == 'agradecimento':
-        return resposta_aleatoria([f"Eu que agradeço pelo contato{(', ' + nome if nome else '')} 😊\n\nJá deixei tudo organizado e encaminhei seu atendimento diretamente para {referencia_responsavel}. {referencia_contato} vai entrar em contato com você assim que possível.", f'Obrigado você pela confiança 😊\n\nSuas informações já estão organizadas e seu atendimento foi encaminhado diretamente para {referencia_destino}. O contato será feito assim que possível.', f'Foi um prazer falar com você 😊\n\nSeu atendimento já está encaminhado para {referencia_destino}. O contato será feito assim que houver disponibilidade.'])
-    if interacao == 'confirmacao':
-        return resposta_aleatoria(['Perfeito 😊\n\nJá deixei tudo certo e seu atendimento está encaminhado.', f'Combinado 😊\n\nSeu atendimento já está encaminhado para {referencia_destino}. O contato será feito assim que possível.', f'Tudo certo 😊\n\nAgora é só aguardar o contato de {referencia_contato}.'])
-    if interacao == 'despedida':
-        return resposta_aleatoria([f'Combinado 😊\n\nObrigado pelo contato. {referencia_contato} vai entrar em contato com você assim que houver disponibilidade.', 'Tudo certo 😊\n\nFoi um prazer te atender.', f'Perfeito 😊\n\nSeu atendimento já está encaminhado. Agora é só aguardar o contato de {referencia_contato}.'])
-    return resposta_aleatoria([f'Seu atendimento já foi encaminhado diretamente para {referencia_responsavel} 😊\n\nO contato será feito assim que houver disponibilidade.', f'Já deixei suas informações organizadas e encaminhadas para {referencia_destino} analisar com atenção 😊', f'Tudo certo por aqui 😊\n\nSeu atendimento já está com {referencia_destino}. O contato será feito assim que possível.'])
+        referencia_contato = "a equipe comercial"
+        referencia_destino = "a equipe comercial"
+        referencia_responsavel = "a equipe comercial"
+
+    if interacao == "agradecimento":
+        return resposta_aleatoria([
+            (
+                f"Eu que agradeço pelo contato"
+                f"{(', ' + nome if nome else '')} 😊\n\n"
+                f"Já deixei tudo organizado e encaminhei "
+                f"seu atendimento diretamente para "
+                f"{referencia_responsavel}. "
+                f"O contato será feito assim que possível."
+            ),
+            (
+                f"Obrigado você pela confiança 😊\n\n"
+                f"Suas informações já estão organizadas "
+                f"e seu atendimento foi encaminhado "
+                f"diretamente para {referencia_destino}. "
+                f"O contato será feito assim que possível."
+            ),
+            (
+                f"Foi um prazer falar com você 😊\n\n"
+                f"Seu atendimento já está encaminhado "
+                f"para {referencia_destino}. "
+                f"O contato será feito assim que houver "
+                f"disponibilidade."
+            ),
+        ])
+
+    if interacao == "confirmacao":
+        return resposta_aleatoria([
+            (
+                "Perfeito 😊\n\n"
+                "Já deixei tudo certo e seu atendimento "
+                "está encaminhado."
+            ),
+            (
+                f"Combinado 😊\n\n"
+                f"Seu atendimento já está encaminhado "
+                f"para {referencia_destino}. "
+                f"O contato será feito assim que possível."
+            ),
+            (
+                f"Tudo certo 😊\n\n"
+                f"Agora é só aguardar o contato de "
+                f"{referencia_contato}."
+            ),
+        ])
+
+    if interacao == "despedida":
+        return resposta_aleatoria([
+            (
+                f"Combinado 😊\n\n"
+                f"Obrigado pelo contato. "
+                f"O contato de {referencia_contato} "
+                f"será feito assim que houver disponibilidade."
+            ),
+            (
+                "Tudo certo 😊\n\n"
+                "Foi um prazer te atender."
+            ),
+            (
+                f"Perfeito 😊\n\n"
+                f"Seu atendimento já está encaminhado. "
+                f"Agora é só aguardar o contato de "
+                f"{referencia_contato}."
+            ),
+        ])
+
+    return resposta_aleatoria([
+        (
+            f"Seu atendimento já foi encaminhado "
+            f"diretamente para {referencia_responsavel} 😊\n\n"
+            f"O contato será feito assim que houver "
+            f"disponibilidade."
+        ),
+        (
+            f"Já deixei suas informações organizadas "
+            f"e encaminhadas para {referencia_destino} "
+            f"analisar com atenção 😊"
+        ),
+        (
+            f"Tudo certo por aqui 😊\n\n"
+            f"Seu atendimento já está com "
+            f"{referencia_destino}. "
+            f"O contato será feito assim que possível."
+        ),
+    ])
 
 
 def resposta_base_por_servico(conversa, intencao, contexto_empresa=None):
     nome_especialista = obter_nome_especialista(contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
-    referencia_especialista = nome_especialista if nome_especialista else 'nossa equipe especializada'
+    if nome_especialista:
+        referencia_especialista = nome_especialista
+    else:
+        especialistas = (
+            getattr(
+                contexto_empresa,
+                "especialistas",
+                (),
+            )
+            if contexto_empresa is not None
+            else ()
+        ) or ()
+
+        if (
+            especialistas
+            and getattr(
+                conversa,
+                "servico",
+                None,
+            )
+        ):
+            referencia_especialista = (
+                "a equipe responsável por esse atendimento"
+            )
+        else:
+            referencia_especialista = (
+                "a equipe comercial"
+            )
     if intencao == 'duvida_lead':
         return 'Lead é um possível cliente 😊\n\nPode ser alguém que chamou no WhatsApp, pediu orçamento, veio pelo Instagram ou demonstrou interesse em algum serviço.'
     if intencao == 'objecao_experiencia_ruim':
@@ -1157,16 +1338,74 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     nome_empresa = obter_nome_empresa(contexto_empresa)
 
     def obter_referencia_especialista_atual():
-        nome_especialista = obter_nome_especialista(contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
+        nome_servico = getattr(
+            conversa,
+            "servico",
+            None,
+        )
+
+        nome_especialista = obter_nome_especialista(
+            contexto_empresa,
+            nome_servico=nome_servico,
+        )
+
         if nome_especialista:
             return nome_especialista
-        return 'nossa equipe especializada'
+
+        especialistas = (
+            getattr(
+                contexto_empresa,
+                "especialistas",
+                (),
+            )
+            if contexto_empresa is not None
+            else ()
+        ) or ()
+
+        if especialistas and nome_servico:
+            return (
+                "a equipe responsável "
+                "por esse atendimento"
+            )
+
+        return "a equipe comercial"
 
     def obter_referencia_responsavel_atual():
-        nome_especialista = obter_nome_especialista(contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
+        nome_servico = getattr(
+            conversa,
+            "servico",
+            None,
+        )
+
+        nome_especialista = obter_nome_especialista(
+            contexto_empresa,
+            nome_servico=nome_servico,
+        )
+
         if nome_especialista:
-            return f'{nome_especialista}, responsável pela {nome_empresa}'
-        return 'nossa equipe especializada'
+            return (
+                f"{nome_especialista}, "
+                f"responsável pela {nome_empresa}"
+            )
+
+        especialistas = (
+            getattr(
+                contexto_empresa,
+                "especialistas",
+                (),
+            )
+            if contexto_empresa is not None
+            else ()
+        ) or ()
+
+        if especialistas and nome_servico:
+            return (
+                "a equipe responsável "
+                "por esse atendimento"
+            )
+
+        return "a equipe comercial"
+
     texto = mensagem.strip()
     canal = conversa.canal.lower()
     if conversa.etapa == 'aguardando_humano':
@@ -1207,7 +1446,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             conversa.etapa = 'coletar_nome'
             if sofia_ja_se_apresentou(conversa, contexto_empresa=contexto_empresa):
                 if intencao == 'trafego':
-                    resposta = 'Posso te ajudar com tráfego pago sim.\n\nAntes de te encaminhar para o especialista, me fala seu nome?'
+                    resposta = 'Posso te ajudar com tráfego pago sim.\n\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
                 elif intencao == 'orcamento':
                     resposta = 'Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\nMe fala seu nome?'
                 elif intencao == 'reuniao':
@@ -1286,7 +1525,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 resposta = f'{comentario_segmento(conversa.segmento)}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'{comentario_segmento(conversa.segmento)}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
+                resposta = f'{comentario_segmento(conversa.segmento)}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
         else:
             conversa.etapa = 'entender_objetivo'
             resposta = f'{comentario_segmento(conversa.segmento)}\n\nHoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?'
@@ -1311,7 +1550,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             resposta = f'{resposta_base}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
         else:
             conversa.etapa = 'aguardando_humano'
-            resposta = f'{resposta_base}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
+            resposta = f'{resposta_base}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
     elif conversa.etapa == 'coletar_origem':
         origem = detectar_origem_aquisicao_resposta(texto)
         if origem:
@@ -1322,14 +1561,14 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 resposta = f'Perfeito, obrigado 😊\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'Perfeito, obrigado 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
+                resposta = f'Perfeito, obrigado 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
         else:
             conversa.etapa = 'coletar_origem'
             resposta = f'Só para eu registrar certinho: você conheceu a {nome_empresa} por indicação, Instagram, Facebook ou algum anúncio?'
     elif conversa.etapa == 'coletar_whatsapp':
         conversa.telefone = texto
         conversa.etapa = 'aguardando_humano'
-        resposta = f'Perfeito 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. Ele entrará em contato assim que possível.'
+        resposta = f'Perfeito 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
     else:
         resposta = resposta_apos_encaminhamento(texto, conversa.nome, contexto_empresa=contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
     conversa.historico += f'\nAgente: {resposta}'
