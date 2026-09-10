@@ -1478,10 +1478,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     elif conversa.etapa == 'entender_objetivo_inicial':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-            conversa.servico = 'Estrutura Completa'
-        elif conversa.servico is None:
-            if objetivo_marca_para_social_media(conversa.objetivo or ''):
+        if conversa.servico is None:
+            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
+                conversa.servico = 'Estrutura Completa'
+            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
                 conversa.servico = 'Social Media Estratégico'
             elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
                 conversa.servico = 'Estrutura Completa'
@@ -1532,10 +1532,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     elif conversa.etapa == 'entender_objetivo':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-            conversa.servico = 'Estrutura Completa'
-        elif conversa.servico is None:
-            if objetivo_marca_para_social_media(conversa.objetivo or ''):
+        if conversa.servico is None:
+            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
+                conversa.servico = 'Estrutura Completa'
+            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
                 conversa.servico = 'Social Media Estratégico'
             elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
                 conversa.servico = 'Estrutura Completa'
