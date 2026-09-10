@@ -33,6 +33,18 @@ def agora_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def agora_empresa(
+    nome_timezone: str | None = None,
+) -> datetime:
+    """
+    Retorna o instante atual no timezone da empresa.
+    """
+
+    return agora_utc().astimezone(
+        obter_timezone(nome_timezone)
+    )
+
+
 def utc_sem_fuso_para_empresa(
     valor: datetime,
     nome_timezone: str | None = None,
