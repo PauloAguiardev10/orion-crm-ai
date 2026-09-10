@@ -228,6 +228,39 @@ def formatar_origem_aquisicao(origem):
     )
 
 
+
+def resumo_comercial_valido(texto: str) -> bool:
+    """
+    Valida se o resumo comercial possui uma proxima acao
+    suficientemente completa para uso pela equipe comercial.
+    """
+
+    if not texto:
+        return False
+
+    padrao = re.compile(
+        "Pr\u00f3xima a\u00e7\u00e3o recomendada:\\s*(.+)",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    resultado = padrao.search(
+        texto.strip()
+    )
+
+    if not resultado:
+        return False
+
+    acao = resultado.group(1).strip()
+
+    palavras = re.findall(
+        r"\b[\w\u00c0-\u00ff]+\b",
+        acao,
+        flags=re.UNICODE,
+    )
+
+    return len(palavras) >= 6
+
+
 def gerar_resumo_comercial_gpt(
     conversa,
     analise,
@@ -400,8 +433,17 @@ Próxima ação recomendada:
         )
 
         if resumo:
-            return sanitizar_resumo_comercial(
+            resumo_sanitizado = sanitizar_resumo_comercial(
                 resumo
+            )
+
+            if resumo_comercial_valido(
+                resumo_sanitizado
+            ):
+                return resumo_sanitizado
+
+            raise ValueError(
+                "A OpenAI retornou um resumo comercial incompleto."
             )
 
         raise ValueError(
