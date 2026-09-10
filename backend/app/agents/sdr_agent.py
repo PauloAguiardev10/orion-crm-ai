@@ -1,4 +1,4 @@
-import re
+﻿import re
 import random
 import unicodedata
 
@@ -848,6 +848,24 @@ def combinar_contexto_com_resposta(
     return f"{abertura}\n\n{resposta_limpa}"
 
 
+def servico_por_intencao(intencao: str):
+    """
+    Retorna o nome canonico do servico quando a intencao
+    representa explicitamente um servico.
+    """
+
+    servicos = {
+        'estrutura_completa': 'Estrutura Completa',
+        'trafego': 'Gestão de Tráfego Pago',
+        'automacao': 'Atendimento com IA',
+        'social_media': 'Social Media Estratégico',
+        'web_design': 'Web Design',
+        'design': 'Design',
+    }
+
+    return servicos.get(intencao)
+
+
 def detectar_intencao_cliente(mensagem: str):
     texto = mensagem.lower().strip()
     grupos = [('duvida_lead', ['o que é lead', 'o que e lead', 'o que significa lead', 'não sei o que é lead', 'nao sei o que e lead', 'lead é o que', 'lead e o que', 'o que são leads', 'o que sao leads']), ('objecao_experiencia_ruim', ['já tentei', 'ja tentei', 'não deu certo', 'nao deu certo', 'não funcionou', 'nao funcionou', 'experiência ruim', 'experiencia ruim', 'outra agência', 'outra agencia', 'outras agências', 'outras agencias', 'tenho medo', 'medo de contratar', 'não gostei', 'nao gostei', 'fui enganado', 'fui enganada', 'já perdi dinheiro', 'ja perdi dinheiro', 'joguei dinheiro fora', 'não confio', 'nao confio', 'experiência muito ruim', 'experiencia muito ruim', 'experiência péssima', 'experiencia pessima', 'não tive resultado', 'nao tive resultado', 'não deu resultado', 'nao deu resultado', 'sem resultado']), ('contratacao', ['quero contratar', 'quero fechar', 'vamos fechar', 'fechar negócio', 'fechar negocio', 'quero começar', 'quero comecar', 'podemos começar', 'podemos comecar', 'quero comprar', 'tenho interesse em contratar', 'quero contratar vocês', 'quero contratar voces']), ('reuniao', ['reunião', 'reuniao', 'agenda', 'agendar', 'agendamento', 'marcar horário', 'marcar horario', 'marcar uma reunião', 'marcar uma reuniao', 'falar com o luciano', 'quero falar com o luciano', 'falar com especialista', 'falar com um especialista']), ('orcamento', ['orçamento', 'orcamento', 'preço', 'preco', 'valor', 'quanto custa', 'quanto fica', 'qual o valor', 'qual valor', 'quanto vocês cobram', 'quanto voces cobram', 'investimento', 'mensalidade', 'pacote', 'pacotes', 'proposta']), ('estrutura_completa', ['estrutura completa', 'marketing completo', 'tudo completo', 'quero tudo', 'pacote completo', 'serviço completo', 'servico completo', 'solução completa', 'solucao completa', 'quero todos os serviços', 'quero todos os servicos', 'quero todos os seus serviços', 'quero todos os seus servicos', 'quero todos os serviços oferecidos', 'quero todos os servicos oferecidos', 'quero todos os serviços oferecido', 'quero todos os servicos oferecido', 'quero tudo que vocês oferecem', 'quero tudo que voces oferecem', 'quero tudo que a forway oferece', 'tenho interesse em todos os serviços', 'tenho interesse em todos os servicos', 'preciso de tudo', 'estou precisando de tudo', 'preciso de tudo isso', 'tudo que você está falando', 'tudo que voce esta falando', 'tudo o que você está falando', 'tudo o que voce esta falando', 'preciso de todos os serviços', 'preciso de todos os servicos', 'tráfego e social media', 'trafego e social media', 'tráfego, social media e atendimento', 'trafego, social media e atendimento']), ('conhecer_servicos', ['como funciona o trabalho de vocês', 'como funciona o trabalho de voces', 'como funciona o trabalho da forway', 'como funciona o trabalho', 'quais serviços', 'quais servicos', 'quais são os serviços', 'quais sao os servicos', 'que serviços vocês oferecem', 'que servicos voces oferecem', 'serviços vocês oferecem', 'servicos voces oferecem', 'serviços que a forway oferece', 'servicos que a forway oferece', 'informações sobre os serviços', 'informacoes sobre os servicos', 'o que vocês fazem', 'o que voces fazem', 'como vocês trabalham', 'como voces trabalham', 'me fala dos serviços', 'me fala dos servicos', 'me explica os serviços', 'me explica os servicos', 'o que oferecem', 'não sei o que preciso', 'nao sei o que preciso', 'não sei qual serviço', 'nao sei qual servico', 'quero conhecer', 'serviços da forway', 'servicos da forway', 'gostaria de saber os serviços', 'gostaria de saber os servicos', 'gostaria de saber sobre os serviços', 'gostaria de saber sobre os servicos', 'gostaria de saber mais sobre seus serviços', 'gostaria de saber mais sobre seus servicos', 'gostaria de saber sobre seus serviços', 'gostaria de saber sobre seus servicos', 'quero saber sobre seus serviços', 'quero saber sobre seus servicos', 'quero saber mais sobre seus serviços', 'quero saber mais sobre seus servicos', 'seus serviços', 'seus servicos', 'serviços de vocês', 'servicos de voces', 'saber sobre os serviços', 'saber sobre os servicos', 'saber mais sobre os serviços', 'saber mais sobre os servicos', 'saber mais sobre seus serviços', 'saber mais sobre seus servicos']), ('trafego', ['tráfego', 'trafego', 'tráfego pago', 'trafego pago', 'gestão de tráfego', 'gestao de trafego', 'quero anunciar', 'quero fazer anúncios', 'quero fazer anuncios', 'fazer anúncios', 'fazer anuncios', 'criar anúncios', 'criar anuncios', 'rodar anúncios', 'rodar anuncios', 'facebook ads', 'instagram ads', 'meta ads', 'google ads', 'campanha paga', 'campanhas pagas', 'mídia paga', 'midia paga']), ('web_design', ['site', 'landing page', 'website', 'web site', 'página de vendas', 'pagina de vendas', 'criar um site', 'fazer um site', 'site profissional', 'loja virtual']), ('social_media', ['social media', 'social mídia', 'social midia', 'gestão de redes sociais', 'gestao de redes sociais', 'cuidar do instagram', 'gerenciar instagram', 'gestão do instagram', 'gestao do instagram', 'cuidar das redes sociais', 'gerenciar redes sociais', 'quero conteúdo', 'quero conteudo', 'preciso de conteúdo', 'preciso de conteudo', 'criar conteúdo', 'criar conteudo', 'quero postagens', 'preciso de postagens', 'melhorar engajamento', 'aumentar engajamento']), ('design', ['identidade visual', 'design', 'criativo', 'criativos', 'arte gráfica', 'arte grafica', 'artes gráficas', 'artes graficas', 'criação de arte', 'criacao de arte', 'criação de artes', 'criacao de artes', 'quero um logo', 'quero criar um logo', 'preciso de um logo', 'criar um logo', 'fazer um logo', 'criar logo', 'fazer logo', 'criação de logo', 'criacao de logo', 'logotipo', 'marca mais profissional', 'materiais melhores', 'material gráfico', 'material grafico', 'identidade da marca']), ('automacao', ['automação', 'automacao', 'automação de atendimento', 'automacao de atendimento', 'ia', 'inteligência artificial', 'inteligencia artificial', 'chatbot', 'sdr', 'agente de ia', 'agente ia', 'robô', 'robo', 'atendimento automático', 'atendimento automatico', 'atendimento automatizado', 'automatizar atendimento', 'automatizar whatsapp', 'automatizar meu whatsapp', 'automatizar o whatsapp', 'automatizar nosso whatsapp', 'automatizar as mensagens', 'automatizar mensagens', 'primeiro atendimento']), ('objetivo_comercial', ['vender mais', 'aumentar vendas', 'aumentar minhas vendas', 'aumentar as vendas', 'gerar mais vendas', 'gerar vendas', 'mais clientes', 'conseguir mais clientes', 'captar clientes', 'gerar leads', 'mais leads', 'mais contatos', 'receber mais contatos', 'gerar contatos', 'fortalecer minha marca', 'fortalecer a marca', 'fortalecer presença', 'fortalecer a presença', 'melhorar minha presença digital', 'presença digital', 'presenca digital']), ('saudacao', ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'e aí', 'e ai', 'opa'])]
@@ -1414,6 +1432,21 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         conversa.historico += f'\nAgente: {resposta}'
         return (resposta, analisar_mensagem(montar_texto_comercial_cliente(conversa), contexto_empresa=contexto_empresa))
     intencao = detectar_intencao_cliente(texto)
+
+    if conversa.servico is None:
+        servico_explicito = identificar_servico_empresa(
+            texto,
+            contexto_empresa=contexto_empresa,
+        )
+
+        if servico_explicito is None:
+            servico_explicito = servico_por_intencao(
+                intencao
+            )
+
+        if servico_explicito:
+            conversa.servico = servico_explicito
+
     contexto_aquisicao = detectar_contexto_aquisicao(texto)
     if contexto_aquisicao and (not conversa.origem_aquisicao):
         conversa.origem_aquisicao = obter_origem_aquisicao(contexto_aquisicao)
