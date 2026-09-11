@@ -211,6 +211,28 @@ def obter_nome_especialista(contexto_empresa, nome_servico=None):
     if especialista is None:
         return None
     nome = (especialista.nome or '').strip()
+
+    if nome and nome == nome.lower():
+        particulas = {
+            'da',
+            'das',
+            'de',
+            'do',
+            'dos',
+            'e',
+        }
+
+        palavras = nome.split()
+
+        nome = ' '.join(
+            (
+                palavra.capitalize()
+                if indice == 0 or palavra not in particulas
+                else palavra
+            )
+            for indice, palavra in enumerate(palavras)
+        )
+
     return nome or None
 
 
@@ -821,6 +843,7 @@ def combinar_contexto_com_resposta(
     contexto,
     resposta,
     contexto_empresa=None,
+    saudacao=None,
 ):
     abertura = resposta_contexto_aquisicao(
         contexto,
@@ -840,10 +863,17 @@ def combinar_contexto_com_resposta(
         "Boa noite 😊",
     )
 
-    for saudacao in saudacoes:
-        if resposta_limpa.startswith(saudacao):
-            resposta_limpa = resposta_limpa[len(saudacao):].lstrip()
+    for saudacao_existente in saudacoes:
+        if resposta_limpa.startswith(saudacao_existente):
+            resposta_limpa = resposta_limpa[len(saudacao_existente):].lstrip()
             break
+
+    if saudacao:
+        return (
+            f"{saudacao}\n\n"
+            f"{abertura}\n\n"
+            f"{resposta_limpa}"
+        )
 
     return f"{abertura}\n\n{resposta_limpa}"
 
@@ -1507,7 +1537,19 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             else:
                 resposta = resposta_inicial_por_servico('geral', texto, contexto_empresa=contexto_empresa)
         if contexto_aquisicao and intencao != 'geral':
-            resposta = combinar_contexto_com_resposta(contexto_aquisicao, resposta, contexto_empresa=contexto_empresa)
+            resposta = combinar_contexto_com_resposta(
+                contexto_aquisicao,
+                resposta,
+                contexto_empresa=contexto_empresa,
+                saudacao=(
+                    saudacao_personalizada(texto)
+                    if re.search(
+                        r'\b(bom dia|boa tarde|boa noite|ola|oi)\b',
+                        normalizar_linguagem_cliente(texto),
+                    )
+                    else None
+                ),
+            )
     elif conversa.etapa == 'entender_objetivo_inicial':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
