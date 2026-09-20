@@ -36,7 +36,6 @@ def estado_mudou(
 
     return (
         anterior.status != atual.status
-        or anterior.engine_state != atual.engine_state
         or anterior.detalhe != atual.detalhe
     )
 
