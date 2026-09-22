@@ -484,6 +484,13 @@ def objetivo_multiplo_para_estrutura(texto: str) -> bool:
             "tudo que você citou",
             "tudo que voce citou",
             "as três opções",
+            "tudo que você mencionou",
+            "tudo que voce mencionou",
+            "tudo o que você mencionou",
+            "tudo o que voce mencionou",
+            "tenho interesse em tudo",
+            "quero todos",
+            "quero todos eles",
             "as tres opcoes",
             "as três",
             "as tres",
@@ -802,6 +809,37 @@ def detectar_origem_aquisicao_resposta(mensagem):
     ):
         return "indicacao"
 
+    # Como esta funcao roda especificamente apos a pergunta de origem,
+    # mencoes curtas a anuncio/campanha podem ser interpretadas como
+    # aquisicao paga sem afetar a deteccao comercial geral.
+    sinal_anuncio = contem_termo(
+        texto_normalizado,
+        [
+            "anuncio",
+            "an\u00fancio",
+            "campanha",
+            "patrocinado",
+            "patrocinada",
+            "publicidade",
+            "propaganda",
+        ],
+    )
+
+    if sinal_anuncio:
+        if contem_termo(
+            texto_normalizado,
+            ["instagram", "insta"],
+        ):
+            return "anuncio_instagram"
+
+        if contem_termo(
+            texto_normalizado,
+            ["facebook", "face"],
+        ):
+            return "anuncio_facebook"
+
+        return "anuncio"
+
     if contem_termo(
         texto_normalizado,
         ["instagram", "insta"],
@@ -1014,6 +1052,11 @@ def analisar_mensagem(
             "automatizar whatsapp",
             "melhorar atendimento",
         ],
+    )
+
+    sinal_objetivo = (
+        sinal_objetivo
+        or objetivo_multiplo_para_estrutura(mensagem)
     )
 
     sinal_urgencia = contem_termo(
@@ -1463,7 +1506,18 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         return (resposta, analisar_mensagem(montar_texto_comercial_cliente(conversa), contexto_empresa=contexto_empresa))
     intencao = detectar_intencao_cliente(texto)
 
-    if conversa.servico is None:
+    etapas_cadastrais_sem_deteccao_servico = {
+        "coletar_nome",
+        "coletar_empresa",
+        "coletar_segmento",
+        "coletar_origem",
+        "coletar_whatsapp",
+    }
+
+    if (
+        conversa.servico is None
+        and conversa.etapa not in etapas_cadastrais_sem_deteccao_servico
+    ):
         servico_explicito = identificar_servico_empresa(
             texto,
             contexto_empresa=contexto_empresa,
