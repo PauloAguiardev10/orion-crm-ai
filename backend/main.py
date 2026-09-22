@@ -576,6 +576,11 @@ def receber_mensagem(dados: MensagemRequest):
                         if especialista_responsavel is not None
                         else None
                     ),
+                    responsavel=(
+                        especialista_responsavel.nome
+                        if especialista_responsavel is not None
+                        else "Não atribuído"
+                    ),
                     produto=conversa.servico,
                     temperatura=analise["temperatura"],
                     prioridade=analise["prioridade"],
