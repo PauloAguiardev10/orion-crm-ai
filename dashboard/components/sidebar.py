@@ -1,9 +1,38 @@
 from pathlib import Path
 
+import requests
 import streamlit as st
 
 from database.db import conectar
 from services.empresa_contexto_service import listar_empresas_permitidas
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def obter_status_whatsapp():
+    try:
+        resposta = requests.get(
+            "http://127.0.0.1:8000/status/waha",
+            timeout=3,
+        )
+        resposta.raise_for_status()
+
+        dados = resposta.json()
+
+        if not isinstance(dados, dict):
+            return {
+                "status": "INVALID_RESPONSE",
+                "conectado": False,
+                "requer_intervencao": False,
+            }
+
+        return dados
+
+    except (requests.RequestException, ValueError):
+        return {
+            "status": "UNAVAILABLE",
+            "conectado": False,
+            "requer_intervencao": False,
+        }
 
 
 def resolver_caminho_logo(logo_path):
@@ -340,6 +369,29 @@ def render_sidebar():
         st.success(
             "🟢 Agente IA Online"
         )
+
+        status_whatsapp = obter_status_whatsapp()
+
+        if status_whatsapp.get("conectado"):
+            st.success(
+                "🟢 WhatsApp Conectado"
+            )
+
+        elif status_whatsapp.get(
+            "requer_intervencao"
+        ):
+            st.error(
+                "🔴 WhatsApp Desconectado"
+            )
+            st.caption(
+                "Reconexão necessária"
+            )
+
+        else:
+            st.warning(
+                "🟡 WhatsApp Indisponível"
+            )
+
 
         st.caption(
             "WhatsApp • Instagram Direct • Facebook Messenger"

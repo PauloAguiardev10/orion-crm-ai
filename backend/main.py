@@ -17,6 +17,7 @@ from app.agents.sdr_agent import (
 )
 from app.database.database import SessionLocal, engine
 from app.services.empresa_context_service import carregar_contexto_empresa
+from app.services.waha_health_service import consultar_saude_sessao
 from app.models.models import (
     Base,
     Cliente,
@@ -29,6 +30,18 @@ from app.models.models import (
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Agente SDR Forway")
+
+
+@app.get("/status/waha")
+def status_waha():
+    resultado = consultar_saude_sessao("default")
+
+    return {
+        "status": resultado.status,
+        "conectado": resultado.saudavel,
+        "requer_intervencao": resultado.requer_intervencao,
+        "engine_state": resultado.engine_state,
+    }
 
 
 def carregar_mapa_sessoes() -> dict[str, int]:
