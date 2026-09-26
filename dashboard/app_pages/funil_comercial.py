@@ -320,6 +320,10 @@ def render_funil(leads):
     )
 
     status_visuais = {
+        "Aguardando resposta": {
+            "stage": "stage-waiting",
+            "card": "card-waiting",
+        },
         "Aguardando atendimento": {
             "stage": "stage-waiting",
             "card": "card-waiting",

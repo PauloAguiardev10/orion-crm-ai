@@ -3,6 +3,7 @@ import os
 import random
 import time
 import traceback
+import unicodedata
 from urllib.parse import quote
 
 import requests
@@ -502,6 +503,121 @@ def receber_mensagem(dados: MensagemRequest):
         nova_lead = False
         notificacao_luciano = None
 
+        # Registra no CRM contatos comerciais que ainda não concluíram
+        # a qualificação. A lead provisória não dispara notificação
+        # e será enriquecida quando a Sofia concluir o atendimento.
+        lead_provisoria = (
+            db.query(Lead)
+            .filter(
+                Lead.empresa_id == dados.empresa_id,
+                Lead.conversa_id == conversa.id,
+            )
+            .order_by(Lead.id.desc())
+            .first()
+        )
+
+        texto_inicial_normalizado = (
+            unicodedata.normalize(
+                "NFKD",
+                (dados.mensagem or "").strip().lower(),
+            )
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+
+        identificador_valido = (
+            bool(dados.identificador)
+            and dados.identificador != "0@c.us"
+            and (
+                dados.identificador.endswith("@c.us")
+                or dados.identificador.endswith("@lid")
+            )
+        )
+
+        sinais_interesse_comercial = [
+            "mais informacoes",
+            "saber mais",
+            "gostaria de saber",
+            "tenho interesse",
+            "quero contratar",
+            "quero saber",
+            "sobre os servicos",
+            "sobre isso",
+            "trafego pago",
+            "social media",
+            "design",
+            "web design",
+            "automacao",
+            "estrutura completa",
+            "treinamento comercial",
+        ]
+
+        tem_interesse_comercial = any(
+            sinal in texto_inicial_normalizado
+            for sinal in sinais_interesse_comercial
+        )
+
+        mensagem_comercial_valida = (
+            identificador_valido
+            and bool(conversa.telefone)
+            and 1 <= len(texto_inicial_normalizado) <= 1000
+            and tem_interesse_comercial
+            and "codigo de confirmacao do facebook"
+                not in texto_inicial_normalizado
+            and not texto_inicial_normalizado.startswith("/9j/")
+        )
+
+        if (
+            lead_provisoria is None
+            and conversa.etapa not in [
+                "encaminhar",
+                "aguardando_humano",
+            ]
+            and mensagem_comercial_valida
+        ):
+            origem_aquisicao = (
+                conversa.origem_aquisicao
+                or conversa.canal
+            )
+
+            cliente_provisorio = Cliente(
+                empresa_id=dados.empresa_id,
+                nome=conversa.nome,
+                empresa=conversa.empresa,
+                empresa_cliente=conversa.empresa,
+                segmento=conversa.segmento,
+                telefone=conversa.telefone,
+                canal=conversa.canal,
+                canal_origem=origem_aquisicao,
+            )
+
+            db.add(cliente_provisorio)
+            db.flush()
+
+            conversa.cliente_id = cliente_provisorio.id
+
+            lead_provisoria = Lead(
+                empresa_id=dados.empresa_id,
+                cliente_id=cliente_provisorio.id,
+                conversa_id=conversa.id,
+                especialista_id=None,
+                responsavel="Não atribuído",
+                produto=conversa.servico,
+                temperatura="fria",
+                prioridade="baixa",
+                score=0,
+                origem=origem_aquisicao,
+                observacoes=conversa.objetivo,
+                resumo_vendedor=None,
+                status="Aguardando resposta",
+            )
+
+            db.add(lead_provisoria)
+            db.commit()
+            db.refresh(lead_provisoria)
+
+            lead_id = lead_provisoria.id
+
         if conversa.etapa in [
             "encaminhar",
             "aguardando_humano",
@@ -528,6 +644,7 @@ def receber_mensagem(dados: MensagemRequest):
                         Cliente.empresa_id == dados.empresa_id,
                         Cliente.telefone == conversa.telefone,
                         Cliente.canal == conversa.canal,
+                        Lead.status == "Aguardando resposta",
                     )
                     .order_by(Lead.id.desc())
                     .first()
@@ -613,12 +730,101 @@ def receber_mensagem(dados: MensagemRequest):
                 )
 
             else:
-                resumo = lead_existente.resumo_vendedor
-                lead_id = lead_existente.id
+                era_lead_provisoria = (
+                    lead_existente.status == "Aguardando resposta"
+                )
 
-                if not conversa.cliente_id:
-                    conversa.cliente_id = lead_existente.cliente_id
+                if not era_lead_provisoria:
+                    resumo = lead_existente.resumo_vendedor
+                    lead_id = lead_existente.id
+
+                    if (
+                        not conversa.cliente_id
+                        and lead_existente.cliente_id
+                    ):
+                        conversa.cliente_id = lead_existente.cliente_id
+                        db.commit()
+
+                else:
+                    cliente_existente = None
+                    if lead_existente.cliente_id:
+                        cliente_existente = (
+                            db.query(Cliente)
+                            .filter(
+                                Cliente.id == lead_existente.cliente_id,
+                                Cliente.empresa_id == dados.empresa_id,
+                            )
+                            .first()
+                        )
+
+                    origem_aquisicao = (
+                        conversa.origem_aquisicao
+                        or conversa.canal
+                    )
+
+                    if cliente_existente:
+                        cliente_existente.nome = conversa.nome
+                        cliente_existente.empresa = conversa.empresa
+                        cliente_existente.empresa_cliente = conversa.empresa
+                        cliente_existente.segmento = conversa.segmento
+                        cliente_existente.telefone = conversa.telefone
+                        cliente_existente.canal = conversa.canal
+                        cliente_existente.canal_origem = origem_aquisicao
+
+                    if not conversa.cliente_id:
+                        conversa.cliente_id = lead_existente.cliente_id
+
+                    especialista_responsavel = (
+                        obter_especialista_responsavel(
+                            contexto_empresa,
+                            nome_servico=conversa.servico,
+                        )
+                    )
+
+                    resumo = gerar_resumo_vendedor(
+                        conversa,
+                        analise,
+                        contexto_empresa=contexto_empresa,
+                    )
+
+                    lead_existente.especialista_id = (
+                        especialista_responsavel.id
+                        if especialista_responsavel is not None
+                        else None
+                    )
+                    lead_existente.responsavel = (
+                        especialista_responsavel.nome
+                        if especialista_responsavel is not None
+                        else "Não atribuído"
+                    )
+                    lead_existente.produto = conversa.servico
+                    lead_existente.temperatura = analise["temperatura"]
+                    lead_existente.prioridade = analise["prioridade"]
+                    lead_existente.score = analise["score"]
+                    lead_existente.origem = origem_aquisicao
+                    lead_existente.observacoes = conversa.objetivo
+                    lead_existente.resumo_vendedor = resumo
+                    lead_existente.status = "Aguardando atendimento"
+
                     db.commit()
+                    db.refresh(lead_existente)
+
+                    lead_id = lead_existente.id
+                    nova_lead = True
+
+                    notificacao_luciano = (
+                        "🔥 Nova lead qualificada — Forway\n\n"
+                        f"Nome: {conversa.nome or 'Não informado'}\n"
+                        f"Empresa: {conversa.empresa or 'Não informada'}\n"
+                        f"Segmento: {conversa.segmento or 'Não informado'}\n"
+                        f"WhatsApp: +{conversa.telefone}\n"
+                        f"Abrir conversa: https://wa.me/{conversa.telefone}\n"
+                        f"Serviço: {conversa.servico or 'Não identificado'}\n"
+                        f"Temperatura: {analise['temperatura'].capitalize()}\n"
+                        f"Prioridade: {analise['prioridade'].capitalize()}\n"
+                        f"Score: {analise['score']}\n\n"
+                        "Lead aguardando atendimento no CRM."
+                    )
 
         return {
             "empresa_id": dados.empresa_id,

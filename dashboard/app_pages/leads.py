@@ -33,6 +33,9 @@ def valor_seguro(lead, coluna, padrao="Não informado"):
 def normalizar_status(status):
     status = str(status).strip().lower()
 
+    if "aguardando resposta" in status:
+        return "Aguardando resposta"
+
     if "aguardando" in status:
         return "Aguardando atendimento"
 
