@@ -127,10 +127,56 @@ def resposta_servicos_empresa(contexto_empresa, saudacao=None):
     servicos = contexto_empresa.servicos if contexto_empresa is not None else ()
     if not servicos:
         return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
-    lista_servicos = '\n'.join((f'• {servico.nome}' for servico in servicos if servico.nome and servico.nome.strip()))
-    if not lista_servicos:
+
+    nomes_servicos = [
+        servico.nome.strip()
+        for servico in servicos
+        if servico.nome and servico.nome.strip()
+    ]
+
+    estrutura_completa = next(
+        (
+            nome
+            for nome in nomes_servicos
+            if nome.casefold() == 'estrutura completa'
+        ),
+        None,
+    )
+
+    servicos_individuais = sorted(
+        (
+            nome
+            for nome in nomes_servicos
+            if nome.casefold() != 'estrutura completa'
+        ),
+        key=str.casefold,
+    )
+
+    lista_servicos = '\n'.join(
+        f'\u2022 {nome}' for nome in servicos_individuais
+    )
+
+    if not lista_servicos and not estrutura_completa:
         return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
-    return f'{inicio}Hoje a {nome_empresa} trabalha com:\n\n{lista_servicos}\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+
+    resposta = (
+        f'{inicio}Hoje a {nome_empresa} trabalha com:\n\n'
+        f'{lista_servicos}'
+    )
+
+    if estrutura_completa:
+        resposta += (
+            '\n\nE, para empresas que precisam de uma solu\u00e7\u00e3o mais completa, '
+            f'tamb\u00e9m oferecemos a {estrutura_completa}, que re\u00fane diferentes '
+            f'frentes da {nome_empresa} em uma estrat\u00e9gia integrada.'
+        )
+
+    resposta += (
+        '\n\nPara eu entender melhor o que faz sentido para voc\u00ea, '
+        'como posso te chamar?'
+    )
+
+    return resposta
 
 
 def obter_especialista_responsavel(
