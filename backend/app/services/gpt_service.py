@@ -1,8 +1,10 @@
 import os
 import re
+import unicodedata
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import BaseModel
 
 
 load_dotenv()
@@ -25,6 +27,251 @@ def extrair_conteudo_resposta(resposta) -> str:
 
     return ""
 
+
+
+class CampoContextoLead(BaseModel):
+    valor: str | None
+    evidencia: str | None
+
+
+class ContextoLeadExtraido(BaseModel):
+    nome: CampoContextoLead
+    empresa: CampoContextoLead
+    segmento: CampoContextoLead
+    objetivo: CampoContextoLead
+    dor: CampoContextoLead
+
+
+def extrair_contexto_lead_gpt(mensagem: str, debug: bool = False):
+    """
+    Extrai contexto comercial usando Structured Outputs.
+
+    A funcao nao conduz a conversa e nao grava dados.
+    Cada valor precisa estar apoiado por evidencia textual.
+    """
+
+    campos = (
+        "nome",
+        "empresa",
+        "segmento",
+        "objetivo",
+        "dor",
+    )
+
+    def resultado_vazio():
+        return {
+            campo: {
+                "valor": None,
+                "evidencia": None,
+            }
+            for campo in campos
+        }
+
+    mensagem = (mensagem or "").strip()
+
+    if not mensagem:
+        return resultado_vazio()
+
+    try:
+        resposta = client.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extraia somente informacoes explicitamente presentes "
+                        "na mensagem do cliente. "
+
+                        "Para cada campo, informe valor e evidencia. "
+                        "Quando nao houver informacao suficiente, use null "
+                        "em valor e null em evidencia. "
+
+                        "A evidencia deve ser um trecho literal da mensagem "
+                        "que sustente o valor extraido. "
+
+                        "NOME: somente o nome da pessoa. "
+
+                        "EMPRESA: somente nome proprio, marca ou nome comercial "
+                        "explicitamente informado. "
+                        "Uma descricao do tipo de negocio nao e nome de empresa. "
+                        "'Tenho uma oficina mecanica' nao informa empresa. "
+                        "'Tenho uma clinica de estetica' nao informa empresa. "
+
+                        "SEGMENTO: atividade, mercado ou tipo de negocio. "
+                        "'Tenho uma oficina mecanica' informa segmento "
+                        "oficina mecanica. "
+                        "'Tenho uma clinica de estetica' informa segmento "
+                        "clinica de estetica ou estetica. "
+                        "Esses sao apenas exemplos; identifique qualquer "
+                        "segmento informado pelo cliente. "
+
+                        "OBJETIVO: resultado comercial que o cliente deseja. "
+                        "Se houver varios objetivos, coloque todos em uma unica "
+                        "string curta, separados naturalmente. "
+                        "Exemplo: 'vender mais e fortalecer minha marca'. "
+                        "Conseguir clientes, gerar leads, aumentar vendas, "
+                        "aumentar faturamento e fortalecer a marca sao exemplos "
+                        "de objetivos. "
+                        "Pedido generico de informacoes sobre servicos nao e "
+                        "objetivo comercial. "
+
+                        "DOR: problema ou dificuldade explicitamente relatado, "
+                        "como vendas fracas, poucos contatos ou baixo retorno. "
+
+                        "Nao invente informacoes. "
+                        "Nao deduza nome de empresa a partir do segmento. "
+                        "Nao use conhecimento externo."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": mensagem,
+                },
+            ],
+            temperature=0,
+            max_tokens=320,
+            response_format=ContextoLeadExtraido,
+        )
+
+        mensagem_resposta = resposta.choices[0].message
+        extraido = mensagem_resposta.parsed
+
+        if debug:
+            print(
+                "GPT_PARSED:",
+                extraido.model_dump()
+                if extraido is not None
+                else None,
+            )
+
+        if extraido is None:
+            return resultado_vazio()
+
+        dados = extraido.model_dump()
+        resultado = resultado_vazio()
+
+        def normalizar_evidencia(texto_evidencia: str) -> str:
+            texto_evidencia = unicodedata.normalize(
+                "NFKD",
+                texto_evidencia,
+            )
+
+            texto_evidencia = "".join(
+                caractere
+                for caractere in texto_evidencia
+                if not unicodedata.combining(caractere)
+            )
+
+            texto_evidencia = texto_evidencia.lower()
+
+            texto_evidencia = re.sub(
+                r"[^a-z0-9\s]",
+                " ",
+                texto_evidencia,
+            )
+
+            return re.sub(
+                r"\s+",
+                " ",
+                texto_evidencia,
+            ).strip()
+
+        mensagem_normalizada = normalizar_evidencia(mensagem)
+
+        palavras_mensagem = re.findall(
+            r"[A-Za-z\u00c0-\u00ff0-9]+",
+            mensagem,
+        )
+
+        mensagem_de_uma_palavra = (
+            len(palavras_mensagem) == 1
+        )
+
+        segmento_extraido = dados.get("segmento") or {}
+
+        valor_segmento = (
+            segmento_extraido.get("valor")
+            if isinstance(segmento_extraido, dict)
+            else None
+        )
+
+        valor_segmento_normalizado = (
+            normalizar_evidencia(valor_segmento)
+            if isinstance(valor_segmento, str)
+            else ""
+        )
+
+        for campo in campos:
+            candidato = dados.get(campo)
+
+            if not isinstance(candidato, dict):
+                continue
+
+            valor = candidato.get("valor")
+            evidencia = candidato.get("evidencia")
+
+            if not isinstance(valor, str):
+                continue
+
+            if not isinstance(evidencia, str):
+                continue
+
+            valor = valor.strip()
+            evidencia = evidencia.strip()
+
+            if not valor or not evidencia:
+                continue
+
+            # Alguns modelos podem representar ausencia como texto.
+            if valor.lower() in {"null", "none"}:
+                continue
+
+            if evidencia.lower() in {"null", "none"}:
+                continue
+
+            valor_normalizado = normalizar_evidencia(valor)
+
+            # Evita transformar uma palavra comercial isolada
+            # em objetivo sem contexto suficiente.
+            if (
+                campo == "objetivo"
+                and mensagem_de_uma_palavra
+            ):
+                continue
+
+            # Se o mesmo valor foi extraido como empresa e
+            # segmento, priorizamos segmento. Isso evita casos
+            # como "Tenho um restaurante" -> empresa restaurante.
+            if (
+                campo == "empresa"
+                and valor_segmento_normalizado
+                and valor_normalizado
+                == valor_segmento_normalizado
+            ):
+                continue
+
+            evidencia_normalizada = normalizar_evidencia(
+                evidencia
+            )
+
+            if not evidencia_normalizada:
+                continue
+
+            # Segunda barreira:
+            # a evidencia precisa existir semanticamente no texto
+            # original, tolerando apenas acentos e pontuacao.
+            if evidencia_normalizada not in mensagem_normalizada:
+                continue
+
+            resultado[campo] = {
+                "valor": valor,
+                "evidencia": evidencia,
+            }
+
+        return resultado
+
+    except Exception:
+        return resultado_vazio()
 
 def gerar_resposta_gpt(contexto_cliente: str):
     try:

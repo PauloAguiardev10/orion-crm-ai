@@ -1,8 +1,9 @@
-﻿import re
+import re
 import random
 import unicodedata
 
 from app.services.gpt_service import (
+    extrair_contexto_lead_gpt,
     formatar_canal_atendimento,
     formatar_origem_aquisicao,
     gerar_resumo_comercial_gpt,
@@ -329,6 +330,44 @@ def parece_nome(texto: str):
 
     texto_lower = texto.lower()
 
+    # Evita interpretar contexto do negocio como nome da pessoa.
+    prefixos_contexto_negocio = [
+        "trabalho com ",
+        "trabalhamos com ",
+        "atuo com ",
+        "atuamos com ",
+        "vendo ",
+        "vendemos ",
+        "minha empresa ",
+        "minha loja ",
+        "meu negócio ",
+        "meu negocio ",
+        "somos do segmento ",
+        "sou do segmento ",
+    ]
+
+    if any(
+        texto_lower.startswith(prefixo)
+        for prefixo in prefixos_contexto_negocio
+    ):
+        return False
+
+    # Respostas comerciais curtas nao devem virar nome.
+    respostas_comerciais_curtas = {
+        "venda",
+        "vendas",
+        "cliente",
+        "clientes",
+        "lead",
+        "leads",
+        "contato",
+        "contatos",
+        "marca",
+    }
+
+    if texto_lower in respostas_comerciais_curtas:
+        return False
+
     frases_bloqueadas = [
         "quero", "queria", "gostaria", "serviço", "serviços",
         "servico", "servicos", "informação", "informações",
@@ -444,13 +483,41 @@ def limpar_nome_empresa(texto: str):
     return empresa.title()
 
 
+def parece_contexto_segmento(texto: str) -> bool:
+    valor = (texto or '').strip().lower()
+
+    if not valor:
+        return False
+
+    prefixos = [
+        "trabalho com ",
+        "trabalhamos com ",
+        "trabalho em ",
+        "trabalhamos em ",
+        "atuo com ",
+        "atuamos com ",
+        "atuo em ",
+        "atuamos em ",
+        "sou do segmento de ",
+        "somos do segmento de ",
+    ]
+
+    return any(
+        valor.startswith(prefixo)
+        for prefixo in prefixos
+    )
+
+
 def limpar_segmento(texto: str):
     segmento = texto.strip()
     substituicoes = [
         "atuamos com", "atuamos na área de", "atuamos na area de",
         "atuamos em", "trabalhamos com", "trabalhamos na área de",
         "trabalhamos na area de", "trabalhamos em",
-        "somos do segmento de", "somos da área de", "somos da area de",
+        "trabalho com", "trabalho na área de", "trabalho na area de",
+        "trabalho em", "atuo com", "atuo na área de", "atuo na area de",
+        "atuo em",
+        "somos do segmento de", "sou do segmento de", "somos da área de", "somos da area de",
     ]
     segmento_minusculo = segmento.lower()
     for frase in substituicoes:
@@ -501,6 +568,64 @@ def detectar_interacao_social(mensagem: str):
     return None
 
 
+
+def classificar_servico_por_objetivo_contextual(
+    conversa,
+    analise=None,
+    contexto_empresa=None,
+):
+    """
+    Classifica o servico a partir do objetivo ja consolidado.
+
+    Nunca sobrescreve um servico previamente identificado.
+    Quando existe contexto de empresa, somente aceita servicos
+    presentes e ativos no catalogo do tenant atual.
+    """
+    if conversa.servico:
+        return conversa.servico
+
+    objetivo = (conversa.objetivo or "").strip()
+    referencia_servico = None
+
+    if objetivo:
+        if objetivo_multiplo_para_estrutura(objetivo):
+            referencia_servico = "estrutura completa"
+
+        elif objetivo_marca_para_social_media(objetivo):
+            referencia_servico = "social media"
+
+
+    if referencia_servico:
+        if contexto_empresa is not None:
+            conversa.servico = identificar_servico_empresa(
+                referencia_servico,
+                contexto_empresa,
+            )
+        else:
+            if referencia_servico == "estrutura completa":
+                conversa.servico = "Estrutura Completa"
+
+            elif referencia_servico == "social media":
+                conversa.servico = "Social Media Estrat\u00e9gico"
+
+    if (
+        conversa.servico is None
+        and isinstance(analise, dict)
+    ):
+        produto = analise.get("produto")
+
+        if produto and produto != "n\u00e3o identificado":
+            if contexto_empresa is not None:
+                conversa.servico = identificar_servico_empresa(
+                    produto,
+                    contexto_empresa,
+                )
+            else:
+                conversa.servico = produto
+
+    return conversa.servico
+
+
 def objetivo_multiplo_para_estrutura(texto: str) -> bool:
     if (
         objetivo_vendas_para_estrutura(texto)
@@ -549,6 +674,8 @@ def objetivo_vendas_para_estrutura(texto: str) -> bool:
     return contem_termo(
         texto,
         [
+            "venda",
+            "vendas",
             "vender mais",
             "aumentar vendas",
             "aumentar minhas vendas",
@@ -980,9 +1107,112 @@ def servico_por_intencao(intencao: str):
     return servicos.get(intencao)
 
 
+def identificar_servico_explicito_na_mensagem(
+    mensagem: str,
+    contexto_empresa=None,
+):
+    """
+    Identifica apenas um servico explicitamente citado.
+
+    Mantem separadas a intencao conversacional
+    e a identificacao do servico.
+    """
+    servico_catalogo = identificar_servico_empresa(
+        mensagem,
+        contexto_empresa=contexto_empresa,
+    )
+
+    if servico_catalogo:
+        return servico_catalogo
+
+    # Em ambiente multiempresa, o catalogo da empresa
+    # e a unica fonte valida para identificar servicos.
+    if contexto_empresa is not None:
+        return None
+
+    texto = normalizar_linguagem_cliente(
+        mensagem
+    )
+
+    grupos_servico = (
+        (
+            "estrutura_completa",
+            (
+                "estrutura completa",
+                "estrutura de marketing",
+                "toda a estrutura",
+                "nossa estrutura",
+                "marketing completo",
+                "pacote completo",
+                "servico completo",
+                "solucao completa",
+            ),
+        ),
+        (
+            "trafego",
+            (
+                "trafego",
+                "trafego pago",
+                "gestao de trafego",
+                "facebook ads",
+                "instagram ads",
+                "meta ads",
+                "google ads",
+                "midia paga",
+            ),
+        ),
+        (
+            "social_media",
+            (
+                "social media",
+                "social midia",
+                "gestao de redes sociais",
+                "gestao do instagram",
+            ),
+        ),
+        (
+            "web_design",
+            (
+                "web design",
+                "landing page",
+                "website",
+                "site profissional",
+                "loja virtual",
+            ),
+        ),
+        (
+            "design",
+            (
+                "identidade visual",
+                "design",
+                "logotipo",
+            ),
+        ),
+        (
+            "automacao",
+            (
+                "automacao",
+                "automacao de atendimento",
+                "inteligencia artificial",
+                "chatbot",
+                "agente de ia",
+                "atendimento automatizado",
+            ),
+        ),
+    )
+
+    for intencao_servico, termos in grupos_servico:
+        if contem_termo(texto, termos):
+            return servico_por_intencao(
+                intencao_servico
+            )
+
+    return None
+
+
 def detectar_intencao_cliente(mensagem: str):
     texto = mensagem.lower().strip()
-    grupos = [('duvida_lead', ['o que é lead', 'o que e lead', 'o que significa lead', 'não sei o que é lead', 'nao sei o que e lead', 'lead é o que', 'lead e o que', 'o que são leads', 'o que sao leads']), ('objecao_experiencia_ruim', ['já tentei', 'ja tentei', 'não deu certo', 'nao deu certo', 'não funcionou', 'nao funcionou', 'experiência ruim', 'experiencia ruim', 'outra agência', 'outra agencia', 'outras agências', 'outras agencias', 'tenho medo', 'medo de contratar', 'não gostei', 'nao gostei', 'fui enganado', 'fui enganada', 'já perdi dinheiro', 'ja perdi dinheiro', 'joguei dinheiro fora', 'não confio', 'nao confio', 'experiência muito ruim', 'experiencia muito ruim', 'experiência péssima', 'experiencia pessima', 'não tive resultado', 'nao tive resultado', 'não deu resultado', 'nao deu resultado', 'sem resultado']), ('contratacao', ['quero contratar', 'quero fechar', 'vamos fechar', 'fechar negócio', 'fechar negocio', 'quero começar', 'quero comecar', 'podemos começar', 'podemos comecar', 'quero comprar', 'tenho interesse em contratar', 'quero contratar vocês', 'quero contratar voces']), ('reuniao', ['reunião', 'reuniao', 'agenda', 'agendar', 'agendamento', 'marcar horário', 'marcar horario', 'marcar uma reunião', 'marcar uma reuniao', 'falar com o luciano', 'quero falar com o luciano', 'falar com especialista', 'falar com um especialista']), ('orcamento', ['orçamento', 'orcamento', 'preço', 'preco', 'valor', 'quanto custa', 'quanto fica', 'qual o valor', 'qual valor', 'quanto vocês cobram', 'quanto voces cobram', 'investimento', 'mensalidade', 'pacote', 'pacotes', 'proposta']), ('estrutura_completa', ['estrutura completa', 'marketing completo', 'tudo completo', 'quero tudo', 'pacote completo', 'serviço completo', 'servico completo', 'solução completa', 'solucao completa', 'quero todos os serviços', 'quero todos os servicos', 'quero todos os seus serviços', 'quero todos os seus servicos', 'quero todos os serviços oferecidos', 'quero todos os servicos oferecidos', 'quero todos os serviços oferecido', 'quero todos os servicos oferecido', 'quero tudo que vocês oferecem', 'quero tudo que voces oferecem', 'quero tudo que a forway oferece', 'tenho interesse em todos os serviços', 'tenho interesse em todos os servicos', 'preciso de tudo', 'estou precisando de tudo', 'preciso de tudo isso', 'tudo que você está falando', 'tudo que voce esta falando', 'tudo o que você está falando', 'tudo o que voce esta falando', 'preciso de todos os serviços', 'preciso de todos os servicos', 'tráfego e social media', 'trafego e social media', 'tráfego, social media e atendimento', 'trafego, social media e atendimento']), ('conhecer_servicos', ['como funciona o trabalho de vocês', 'como funciona o trabalho de voces', 'como funciona o trabalho da forway', 'como funciona o trabalho', 'quais serviços', 'quais servicos', 'quais são os serviços', 'quais sao os servicos', 'que serviços vocês oferecem', 'que servicos voces oferecem', 'serviços vocês oferecem', 'servicos voces oferecem', 'serviços que a forway oferece', 'servicos que a forway oferece', 'informações sobre os serviços', 'informacoes sobre os servicos', 'o que vocês fazem', 'o que voces fazem', 'como vocês trabalham', 'como voces trabalham', 'me fala dos serviços', 'me fala dos servicos', 'me explica os serviços', 'me explica os servicos', 'o que oferecem', 'não sei o que preciso', 'nao sei o que preciso', 'não sei qual serviço', 'nao sei qual servico', 'quero conhecer', 'serviços da forway', 'servicos da forway', 'gostaria de saber os serviços', 'gostaria de saber os servicos', 'gostaria de saber sobre os serviços', 'gostaria de saber sobre os servicos', 'gostaria de saber mais sobre seus serviços', 'gostaria de saber mais sobre seus servicos', 'gostaria de saber sobre seus serviços', 'gostaria de saber sobre seus servicos', 'quero saber sobre seus serviços', 'quero saber sobre seus servicos', 'quero saber mais sobre seus serviços', 'quero saber mais sobre seus servicos', 'seus serviços', 'seus servicos', 'serviços de vocês', 'servicos de voces', 'saber sobre os serviços', 'saber sobre os servicos', 'saber mais sobre os serviços', 'saber mais sobre os servicos', 'saber mais sobre seus serviços', 'saber mais sobre seus servicos']), ('trafego', ['tráfego', 'trafego', 'tráfego pago', 'trafego pago', 'gestão de tráfego', 'gestao de trafego', 'quero anunciar', 'quero fazer anúncios', 'quero fazer anuncios', 'fazer anúncios', 'fazer anuncios', 'criar anúncios', 'criar anuncios', 'rodar anúncios', 'rodar anuncios', 'facebook ads', 'instagram ads', 'meta ads', 'google ads', 'campanha paga', 'campanhas pagas', 'mídia paga', 'midia paga']), ('web_design', ['site', 'landing page', 'website', 'web site', 'página de vendas', 'pagina de vendas', 'criar um site', 'fazer um site', 'site profissional', 'loja virtual']), ('social_media', ['social media', 'social mídia', 'social midia', 'gestão de redes sociais', 'gestao de redes sociais', 'cuidar do instagram', 'gerenciar instagram', 'gestão do instagram', 'gestao do instagram', 'cuidar das redes sociais', 'gerenciar redes sociais', 'quero conteúdo', 'quero conteudo', 'preciso de conteúdo', 'preciso de conteudo', 'criar conteúdo', 'criar conteudo', 'quero postagens', 'preciso de postagens', 'melhorar engajamento', 'aumentar engajamento']), ('design', ['identidade visual', 'design', 'criativo', 'criativos', 'arte gráfica', 'arte grafica', 'artes gráficas', 'artes graficas', 'criação de arte', 'criacao de arte', 'criação de artes', 'criacao de artes', 'quero um logo', 'quero criar um logo', 'preciso de um logo', 'criar um logo', 'fazer um logo', 'criar logo', 'fazer logo', 'criação de logo', 'criacao de logo', 'logotipo', 'marca mais profissional', 'materiais melhores', 'material gráfico', 'material grafico', 'identidade da marca']), ('automacao', ['automação', 'automacao', 'automação de atendimento', 'automacao de atendimento', 'ia', 'inteligência artificial', 'inteligencia artificial', 'chatbot', 'sdr', 'agente de ia', 'agente ia', 'robô', 'robo', 'atendimento automático', 'atendimento automatico', 'atendimento automatizado', 'automatizar atendimento', 'automatizar whatsapp', 'automatizar meu whatsapp', 'automatizar o whatsapp', 'automatizar nosso whatsapp', 'automatizar as mensagens', 'automatizar mensagens', 'primeiro atendimento']), ('objetivo_comercial', ['vender mais', 'aumentar vendas', 'aumentar minhas vendas', 'aumentar as vendas', 'gerar mais vendas', 'gerar vendas', 'mais clientes', 'conseguir mais clientes', 'captar clientes', 'gerar leads', 'mais leads', 'mais contatos', 'receber mais contatos', 'gerar contatos', 'fortalecer minha marca', 'fortalecer a marca', 'fortalecer presença', 'fortalecer a presença', 'melhorar minha presença digital', 'presença digital', 'presenca digital']), ('saudacao', ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'e aí', 'e ai', 'opa'])]
+    grupos = [('duvida_lead', ['o que é lead', 'o que e lead', 'o que significa lead', 'não sei o que é lead', 'nao sei o que e lead', 'lead é o que', 'lead e o que', 'o que são leads', 'o que sao leads']), ('objecao_experiencia_ruim', ['já tentei', 'ja tentei', 'não deu certo', 'nao deu certo', 'não funcionou', 'nao funcionou', 'experiência ruim', 'experiencia ruim', 'outra agência', 'outra agencia', 'outras agências', 'outras agencias', 'tenho medo', 'medo de contratar', 'não gostei', 'nao gostei', 'fui enganado', 'fui enganada', 'já perdi dinheiro', 'ja perdi dinheiro', 'joguei dinheiro fora', 'não confio', 'nao confio', 'experiência muito ruim', 'experiencia muito ruim', 'experiência péssima', 'experiencia pessima', 'não tive resultado', 'nao tive resultado', 'não deu resultado', 'nao deu resultado', 'sem resultado']), ('contratacao', ['quero contratar', 'quero fechar', 'vamos fechar', 'fechar negócio', 'fechar negocio', 'quero começar', 'quero comecar', 'podemos começar', 'podemos comecar', 'quero comprar', 'tenho interesse em contratar', 'quero contratar vocês', 'quero contratar voces']), ('reuniao', ['reunião', 'reuniao', 'agenda', 'agendar', 'agendamento', 'marcar horário', 'marcar horario', 'marcar uma reunião', 'marcar uma reuniao', 'falar com o luciano', 'quero falar com o luciano', 'falar com especialista', 'falar com um especialista']), ('orcamento', ['orçamento', 'orcamento', 'preço', 'preco', 'valor', 'quanto custa', 'quanto fica', 'qual o valor', 'qual valor', 'quanto vocês cobram', 'quanto voces cobram', 'investimento', 'mensalidade', 'pacote', 'pacotes', 'proposta']), ('estrutura_completa', ['estrutura completa', 'estrutura de marketing', 'toda a estrutura', 'nossa estrutura', 'marketing completo', 'tudo completo', 'quero tudo', 'pacote completo', 'serviço completo', 'servico completo', 'solução completa', 'solucao completa', 'quero todos os serviços', 'quero todos os servicos', 'quero todos os seus serviços', 'quero todos os seus servicos', 'quero todos os serviços oferecidos', 'quero todos os servicos oferecidos', 'quero todos os serviços oferecido', 'quero todos os servicos oferecido', 'quero tudo que vocês oferecem', 'quero tudo que voces oferecem', 'quero tudo que a forway oferece', 'tenho interesse em todos os serviços', 'tenho interesse em todos os servicos', 'preciso de tudo', 'estou precisando de tudo', 'preciso de tudo isso', 'tudo que você está falando', 'tudo que voce esta falando', 'tudo o que você está falando', 'tudo o que voce esta falando', 'preciso de todos os serviços', 'preciso de todos os servicos', 'tráfego e social media', 'trafego e social media', 'tráfego, social media e atendimento', 'trafego, social media e atendimento']), ('conhecer_servicos', ['como funciona o trabalho de vocês', 'como funciona o trabalho de voces', 'como funciona o trabalho da forway', 'como funciona o trabalho', 'quais serviços', 'quais servicos', 'quais são os serviços', 'quais sao os servicos', 'que serviços vocês oferecem', 'que servicos voces oferecem', 'serviços vocês oferecem', 'servicos voces oferecem', 'serviços que a forway oferece', 'servicos que a forway oferece', 'informações sobre os serviços', 'informacoes sobre os servicos', 'o que vocês fazem', 'o que voces fazem', 'como vocês trabalham', 'como voces trabalham', 'me fala dos serviços', 'me fala dos servicos', 'me explica os serviços', 'me explica os servicos', 'o que oferecem', 'não sei o que preciso', 'nao sei o que preciso', 'não sei qual serviço', 'nao sei qual servico', 'quero conhecer', 'serviços da forway', 'servicos da forway', 'gostaria de saber os serviços', 'gostaria de saber os servicos', 'gostaria de saber sobre os serviços', 'gostaria de saber sobre os servicos', 'gostaria de saber mais sobre seus serviços', 'gostaria de saber mais sobre seus servicos', 'gostaria de saber sobre seus serviços', 'gostaria de saber sobre seus servicos', 'quero saber sobre seus serviços', 'quero saber sobre seus servicos', 'quero saber mais sobre seus serviços', 'quero saber mais sobre seus servicos', 'seus serviços', 'seus servicos', 'serviços de vocês', 'servicos de voces', 'saber sobre os serviços', 'saber sobre os servicos', 'saber mais sobre os serviços', 'saber mais sobre os servicos', 'saber mais sobre seus serviços', 'saber mais sobre seus servicos']), ('trafego', ['tráfego', 'trafego', 'tráfego pago', 'trafego pago', 'gestão de tráfego', 'gestao de trafego', 'quero anunciar', 'quero fazer anúncios', 'quero fazer anuncios', 'fazer anúncios', 'fazer anuncios', 'criar anúncios', 'criar anuncios', 'rodar anúncios', 'rodar anuncios', 'facebook ads', 'instagram ads', 'meta ads', 'google ads', 'campanha paga', 'campanhas pagas', 'mídia paga', 'midia paga']), ('web_design', ['site', 'landing page', 'website', 'web site', 'página de vendas', 'pagina de vendas', 'criar um site', 'fazer um site', 'site profissional', 'loja virtual']), ('social_media', ['social media', 'social mídia', 'social midia', 'gestão de redes sociais', 'gestao de redes sociais', 'cuidar do instagram', 'gerenciar instagram', 'gestão do instagram', 'gestao do instagram', 'cuidar das redes sociais', 'gerenciar redes sociais', 'quero conteúdo', 'quero conteudo', 'preciso de conteúdo', 'preciso de conteudo', 'criar conteúdo', 'criar conteudo', 'quero postagens', 'preciso de postagens', 'melhorar engajamento', 'aumentar engajamento']), ('design', ['identidade visual', 'design', 'criativo', 'criativos', 'arte gráfica', 'arte grafica', 'artes gráficas', 'artes graficas', 'criação de arte', 'criacao de arte', 'criação de artes', 'criacao de artes', 'quero um logo', 'quero criar um logo', 'preciso de um logo', 'criar um logo', 'fazer um logo', 'criar logo', 'fazer logo', 'criação de logo', 'criacao de logo', 'logotipo', 'marca mais profissional', 'materiais melhores', 'material gráfico', 'material grafico', 'identidade da marca']), ('automacao', ['automação', 'automacao', 'automação de atendimento', 'automacao de atendimento', 'ia', 'inteligência artificial', 'inteligencia artificial', 'chatbot', 'sdr', 'agente de ia', 'agente ia', 'robô', 'robo', 'atendimento automático', 'atendimento automatico', 'atendimento automatizado', 'automatizar atendimento', 'automatizar whatsapp', 'automatizar meu whatsapp', 'automatizar o whatsapp', 'automatizar nosso whatsapp', 'automatizar as mensagens', 'automatizar mensagens', 'primeiro atendimento']), ('objetivo_comercial', ['vender mais', 'aumentar vendas', 'aumentar minhas vendas', 'aumentar as vendas', 'gerar mais vendas', 'gerar vendas', 'mais clientes', 'conseguir mais clientes', 'captar clientes', 'gerar leads', 'mais leads', 'mais contatos', 'receber mais contatos', 'gerar contatos', 'fortalecer minha marca', 'fortalecer a marca', 'fortalecer presença', 'fortalecer a presença', 'melhorar minha presença digital', 'presença digital', 'presenca digital']), ('saudacao', ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'e aí', 'e ai', 'opa'])]
     for intencao, termos in grupos:
         if contem_termo(texto, termos):
             return intencao
@@ -1072,6 +1302,9 @@ def analisar_mensagem(
     sinal_objetivo = contem_termo(
         texto,
         [
+            "vender",
+            "vendas",
+            "venda",
             "vender mais",
             "aumentar vendas",
             "aumentar minhas vendas",
@@ -1085,6 +1318,8 @@ def analisar_mensagem(
             "conseguir clientes",
             "gerar leads",
             "mais leads",
+            "contatos",
+            "clientes",
             "mais contatos",
             "receber mais contatos",
             "gerar contatos",
@@ -1233,30 +1468,74 @@ def resposta_inicial_por_servico(intencao, mensagem='', contexto_empresa=None):
     nome_empresa = obter_nome_empresa(contexto_empresa)
     referencia_especialista = "a equipe comercial"
     if intencao == 'saudacao':
-        return f'{saudacao}\n\nTudo bem?\n\nSou a {nome_agente}, da {nome_empresa}.\n\nComo posso ajudar você hoje?'
+        return f'{saudacao}\nTudo bem?\nSou a {nome_agente}, da {nome_empresa}.\nComo posso ajudar você hoje?'
     if intencao == 'conhecer_servicos':
         return resposta_servicos_empresa(contexto_empresa=contexto_empresa)
     if intencao == 'trafego':
-        return f'{saudacao}\n\nPosso te ajudar com tráfego pago sim.\n\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
+        return f'{saudacao}\nPosso te ajudar com tráfego pago sim.\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
     if intencao == 'orcamento':
-        return f'{saudacao}\n\nPara falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\nMe fala seu nome?'
+        return f'{saudacao}\nPara falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\nMe fala seu nome?'
     if intencao == 'reuniao':
-        return f'{saudacao}\n\nAntes de encaminhar seu atendimento para {referencia_especialista}, vou entender rapidamente seu cenário para que o responsável receba seu caso com o contexto certo.\n\nQual é o seu nome?'
+        return f'{saudacao}\nAntes de encaminhar seu atendimento para {referencia_especialista}, vou entender rapidamente seu cenário para que o responsável receba seu caso com o contexto certo.\nQual é o seu nome?'
     if intencao == 'automacao':
-        return f'{saudacao}\n\nAutomação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\n\nMe fala seu nome para eu entender seu cenário?'
+        return f'{saudacao}\nAutomação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\nMe fala seu nome para eu entender seu cenário?'
     if intencao == 'social_media':
-        return f'{saudacao}\n\nA {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\n\nComo posso te chamar?'
+        return f'{saudacao}\nA {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\nComo posso te chamar?'
     if intencao == 'web_design':
-        return f'{saudacao}\n\nUm site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\n\nMe fala seu nome?'
+        return f'{saudacao}\nUm site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\nMe fala seu nome?'
     if intencao == 'design':
-        return f'{saudacao}\n\nDesign e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\n\nComo posso te chamar?'
+        return f'{saudacao}\nDesign e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\nComo posso te chamar?'
     if intencao == 'estrutura_completa':
-        return f'{saudacao}\n\nQuando a empresa busca uma estrutura mais completa, o ideal é olhar tráfego, conteúdo, atendimento e presença digital juntos.\n\nMe fala seu nome para eu organizar melhor seu atendimento?'
+        texto_normalizado = normalizar_linguagem_cliente(mensagem)
+        nome_empresa_normalizado = normalizar_linguagem_cliente(
+            nome_empresa
+        )
+
+        referencia_empresa = any(
+            referencia in texto_normalizado
+            for referencia in (
+                f'estrutura da {nome_empresa_normalizado}',
+                f'estrutura do {nome_empresa_normalizado}',
+                f'estrutura de {nome_empresa_normalizado}',
+            )
+        )
+
+        referencia_resultado = (
+            referencia_empresa
+            and any(
+                termo in texto_normalizado
+                for termo in (
+                    '50k',
+                    '50 k',
+                    '50 mil',
+                    'vendeu',
+                    'vender',
+                    'vendas',
+                )
+            )
+        )
+
+        if referencia_resultado:
+            return (
+                f'{saudacao}\n'
+                'Vi que você quer conhecer melhor a estrutura '
+                'que usamos nesse projeto.\n'
+                'Me conta um pouco do seu negécio para eu entender '
+                'o que faria sentido para você.'
+            )
+
+        return (
+            f'{saudacao}\n'
+            'Vi que você quer conhecer melhor a nossa '
+            'estrutura de marketing.\n'
+            'Me conta um pouco sobre o seu negécio e o que '
+            'você gostaria de melhorar hoje.'
+        )
     if intencao == 'contratacao':
-        return f'{saudacao}\n\nPerfeito 😊\n\nPara eu organizar seu atendimento e encaminhar tudo certinho para {referencia_especialista}, como posso te chamar?'
+        return f'{saudacao}\nPerfeito 😊\nPara eu organizar seu atendimento e encaminhar tudo certinho para {referencia_especialista}, como posso te chamar?'
     if intencao == 'objetivo_comercial':
-        return f'{saudacao}\n\nEntendi 😊\n\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
-    return f'{saudacao}\n\nSou a {nome_agente}, da {nome_empresa}.\n\nComo posso ajudar você hoje?'
+        return f'{saudacao}\nEntendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+    return f'{saudacao}\nSou a {nome_agente}, da {nome_empresa}.\nComo posso ajudar você hoje?'
 
 
 def comentario_segmento(segmento: str):
@@ -1264,12 +1543,12 @@ def comentario_segmento(segmento: str):
 
     if "moda" in texto or "roupa" in texto:
         return (
-            "Que legal 😊\n\n"
+            "Que legal 😊\n"
             "Moda é um segmento onde uma boa presença digital e um posicionamento bem trabalhado podem ajudar bastante a atrair clientes e fortalecer a marca."
         )
 
     return (
-        "Entendi 😊\n\n"
+        "Entendi 😊\n"
         "Agora já consigo ter uma visão melhor do seu cenário."
     )
 
@@ -1329,21 +1608,21 @@ def resposta_apos_encaminhamento(
         return resposta_aleatoria([
             (
                 f"Eu que agradeço pelo contato"
-                f"{(', ' + nome if nome else '')} 😊\n\n"
+                f"{(', ' + nome if nome else '')} 😊\n"
                 f"Já deixei tudo organizado e encaminhei "
                 f"seu atendimento diretamente para "
                 f"{referencia_responsavel}. "
                 f"O contato será feito assim que possível."
             ),
             (
-                f"Obrigado você pela confiança 😊\n\n"
+                f"Obrigado você pela confiança 😊\n"
                 f"Suas informações já estão organizadas "
                 f"e seu atendimento foi encaminhado "
                 f"diretamente para {referencia_destino}. "
                 f"O contato será feito assim que possível."
             ),
             (
-                f"Foi um prazer falar com você 😊\n\n"
+                f"Foi um prazer falar com você 😊\n"
                 f"Seu atendimento já está encaminhado "
                 f"para {referencia_destino}. "
                 f"O contato será feito assim que houver "
@@ -1354,18 +1633,18 @@ def resposta_apos_encaminhamento(
     if interacao == "confirmacao":
         return resposta_aleatoria([
             (
-                "Perfeito 😊\n\n"
+                "Perfeito 😊\n"
                 "Já deixei tudo certo e seu atendimento "
                 "está encaminhado."
             ),
             (
-                f"Combinado 😊\n\n"
+                f"Combinado 😊\n"
                 f"Seu atendimento já está encaminhado "
                 f"para {referencia_destino}. "
                 f"O contato será feito assim que possível."
             ),
             (
-                f"Tudo certo 😊\n\n"
+                f"Tudo certo 😊\n"
                 f"Agora é só aguardar o contato de "
                 f"{referencia_contato}."
             ),
@@ -1374,17 +1653,17 @@ def resposta_apos_encaminhamento(
     if interacao == "despedida":
         return resposta_aleatoria([
             (
-                f"Combinado 😊\n\n"
+                f"Combinado 😊\n"
                 f"Obrigado pelo contato. "
                 f"O contato de {referencia_contato} "
                 f"será feito assim que houver disponibilidade."
             ),
             (
-                "Tudo certo 😊\n\n"
+                "Tudo certo 😊\n"
                 "Foi um prazer te atender."
             ),
             (
-                f"Perfeito 😊\n\n"
+                f"Perfeito 😊\n"
                 f"Seu atendimento já está encaminhado. "
                 f"Agora é só aguardar o contato de "
                 f"{referencia_contato}."
@@ -1394,7 +1673,7 @@ def resposta_apos_encaminhamento(
     return resposta_aleatoria([
         (
             f"Seu atendimento já foi encaminhado "
-            f"diretamente para {referencia_responsavel} 😊\n\n"
+            f"diretamente para {referencia_responsavel} 😊\n"
             f"O contato será feito assim que houver "
             f"disponibilidade."
         ),
@@ -1404,7 +1683,7 @@ def resposta_apos_encaminhamento(
             f"analisar com atenção 😊"
         ),
         (
-            f"Tudo certo por aqui 😊\n\n"
+            f"Tudo certo por aqui 😊\n"
             f"Seu atendimento já está com "
             f"{referencia_destino}. "
             f"O contato será feito assim que possível."
@@ -1443,22 +1722,376 @@ def resposta_base_por_servico(conversa, intencao, contexto_empresa=None):
                 "a equipe comercial"
             )
     if intencao == 'duvida_lead':
-        return 'Lead é um possível cliente 😊\n\nPode ser alguém que chamou no WhatsApp, pediu orçamento, veio pelo Instagram ou demonstrou interesse em algum serviço.'
+        return 'Lead é um possível cliente 😊\nPode ser alguém que chamou no WhatsApp, pediu orçamento, veio pelo Instagram ou demonstrou interesse em algum serviço.'
     if intencao == 'objecao_experiencia_ruim':
-        return f'Entendo seu cuidado.\n\nQuando uma experiência anterior não foi boa, o ideal é olhar o que foi feito, o público, a comunicação e o acompanhamento.\n\nAssim {referencia_especialista} consegue analisar seu cenário e orientar você com mais segurança.'
+        return f'Entendo seu cuidado.\nQuando uma experiência anterior não foi boa, o ideal é olhar o que foi feito, o público, a comunicação e o acompanhamento.\nAssim {referencia_especialista} consegue analisar seu cenário e orientar você com mais segurança.'
     if conversa.servico == 'Gestão de Tráfego Pago':
-        return 'Entendi.\n\nNesse caso, o foco não é só colocar anúncio no ar, mas atrair pessoas com perfil real de compra.'
+        return 'Entendi.\nNesse caso, o foco não é só colocar anúncio no ar, mas atrair pessoas com perfil real de compra.'
     if conversa.servico == 'Estrutura Completa':
-        return 'Entendi.\n\nNesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada.'
+        return 'Entendi.\nNesse cenário, faz sentido trabalhar geração de vendas, fortalecimento da marca e presença digital de forma integrada.'
     if conversa.servico == 'Atendimento com IA':
-        return 'Entendi.\n\nNesse cenário, a automação pode ajudar a organizar o primeiro contato sem perder o tom humano do atendimento.'
+        return 'Entendi.\nNesse cenário, a automação pode ajudar a organizar o primeiro contato sem perder o tom humano do atendimento.'
     if conversa.servico == 'Social Media Estratégico':
-        return 'Entendi.\n\nNesse cenário, faz sentido trabalhar posicionamento, conteúdo e presença digital para fortalecer a marca de forma estratégica.'
+        return 'Entendi.\nNesse cenário, faz sentido trabalhar posicionamento, conteúdo e presença digital para fortalecer a marca de forma estratégica.'
     if conversa.servico == 'Web Design':
-        return 'Entendi.\n\nUm site pode funcionar como uma vitrine mais profissional e também apoiar a geração de contatos.'
+        return 'Entendi.\nUm site pode funcionar como uma vitrine mais profissional e também apoiar a geração de contatos.'
     if conversa.servico == 'Design':
-        return 'Entendi.\n\nA identidade visual influencia muito na percepção de profissionalismo e confiança da empresa.'
-    return 'Entendi.\n\nJá deu para ter uma boa noção do que você busca.'
+        return 'Entendi.\nA identidade visual influencia muito na percepção de profissionalismo e confiança da empresa.'
+    return 'Entendi.\nJá deu para ter uma boa noção do que você busca.'
+
+
+
+def deve_usar_extrator_contexto(texto: str) -> bool:
+    """
+    Decide se a mensagem tem contexto suficiente para justificar
+    uma chamada ao extrator semantico.
+
+    Mensagens curtas e simples permanecem no fluxo deterministico.
+    """
+    valor = (texto or "").strip()
+
+    if not valor:
+        return False
+
+    palavras = re.findall(
+        r"[A-Za-z\u00c0-\u00ff0-9]+",
+        valor,
+    )
+
+    # Respostas curtas normalmente pertencem ao fluxo cadastral
+    # ou a detectores determin\u00edsticos j\u00e1 existentes.
+    if len(palavras) < 5:
+        return False
+
+    normalizado = normalizar_linguagem_cliente(valor)
+
+    # Aberturas comerciais sobre uma estrutura/solucao anunciada
+    # permanecem no fluxo deterministico. O servico exato sera
+    # resolvido depois com o catalogo do tenant.
+    consulta_estrutura = (
+        "estrutura" in normalizado
+        and any(
+            termo in normalizado
+            for termo in (
+                "quero saber",
+                "saber sobre",
+                "saber mais",
+                "informacoes",
+                "conhecer",
+            )
+        )
+    )
+
+    if consulta_estrutura:
+        return False
+
+
+    sinais_contexto = (
+        "meu nome",
+        "me chamo",
+        "sou ",
+        "minha empresa",
+        "minha loja",
+        "meu negocio",
+        "se chama",
+        "trabalho com",
+        "trabalhamos com",
+        "atuo com",
+        "atuamos com",
+        "tenho uma",
+        "tenho um",
+        "vendo ",
+        "vendemos ",
+        "quero ",
+        "preciso ",
+        "gostaria de",
+        "meu objetivo",
+        "minhas vendas",
+        "nossas vendas",
+        "poucos clientes",
+        "poucos contatos",
+        "mais clientes",
+        "mais vendas",
+        "mais contatos",
+        "fortalecer",
+        "aumentar",
+        "melhorar",
+    )
+
+    quantidade_sinais = sum(
+        1
+        for sinal in sinais_contexto
+        if sinal in normalizado
+    )
+
+    sinais_dados_negocio = (
+        "meu nome",
+        "me chamo",
+        "minha empresa",
+        "minha loja",
+        "meu negocio",
+        "se chama",
+        "trabalho com",
+        "trabalhamos com",
+        "atuo com",
+        "atuamos com",
+        "tenho uma",
+        "tenho um",
+        "vendo ",
+        "vendemos ",
+        "meu objetivo",
+        "minhas vendas",
+        "nossas vendas",
+        "poucos clientes",
+        "poucos contatos",
+        "mais clientes",
+        "mais vendas",
+        "mais contatos",
+        "fortalecer",
+        "aumentar",
+        "melhorar",
+    )
+
+    tem_dados_negocio = any(
+        sinal in normalizado
+        for sinal in sinais_dados_negocio
+    )
+
+    intencao_deterministica = detectar_intencao_cliente(valor)
+
+    intencoes_ja_resolvidas_sem_contexto = {
+        "conhecer_servicos",
+        "estrutura_completa",
+        "trafego",
+        "automacao",
+        "social_media",
+        "web_design",
+        "design",
+        "orcamento",
+        "reuniao",
+        "contratacao",
+    }
+
+    if (
+        intencao_deterministica
+        in intencoes_ja_resolvidas_sem_contexto
+        and not tem_dados_negocio
+    ):
+        return False
+
+    # Uma frase mais curta precisa combinar pelo menos dois sinais
+    # comerciais/contextuais para justificar o uso do GPT.
+    if len(palavras) < 10:
+        return quantidade_sinais >= 2
+
+    # Mensagens maiores podem trazer contexto \u00fatil mesmo quando
+    # escritas de forma menos padronizada.
+    return quantidade_sinais >= 1
+
+
+def aplicar_contexto_extraido(conversa, contexto_extraido):
+    """
+    Aproveita somente campos confiaveis ainda vazios da conversa.
+
+    Nao sobrescreve dados existentes.
+    Nao altera servico, origem, etapa ou status.
+    """
+    if not isinstance(contexto_extraido, dict):
+        return []
+
+    campos_permitidos = (
+        "nome",
+        "empresa",
+        "segmento",
+        "objetivo",
+    )
+
+    campos_aplicados = []
+
+    for campo in campos_permitidos:
+        atual = getattr(conversa, campo, None)
+
+        if isinstance(atual, str):
+            atual = atual.strip()
+
+        if atual:
+            continue
+
+        candidato = contexto_extraido.get(campo)
+
+        if not isinstance(candidato, dict):
+            continue
+
+        valor = candidato.get("valor")
+        evidencia = candidato.get("evidencia")
+
+        if not isinstance(valor, str):
+            continue
+
+        if not isinstance(evidencia, str):
+            continue
+
+        valor = valor.strip()
+        evidencia = evidencia.strip()
+
+        if not valor or not evidencia:
+            continue
+
+        setattr(
+            conversa,
+            campo,
+            valor,
+        )
+
+        campos_aplicados.append(campo)
+
+    return campos_aplicados
+
+
+def determinar_proxima_etapa_contextual(conversa) -> str:
+    """
+    Determina o proximo dado realmente ausente depois que
+    uma mensagem contextual foi compreendida.
+
+    Nao altera a conversa.
+    """
+    if not getattr(conversa, "nome", None):
+        return "coletar_nome"
+
+    if not getattr(conversa, "empresa", None):
+        return "coletar_empresa"
+
+    if not getattr(conversa, "segmento", None):
+        return "coletar_segmento"
+
+    if not getattr(conversa, "objetivo", None):
+        return "entender_objetivo"
+
+    if not getattr(conversa, "origem_aquisicao", None):
+        return "coletar_origem"
+
+    canal = (
+        getattr(conversa, "canal", "")
+        or ""
+    ).lower()
+
+    telefone = (
+        getattr(conversa, "telefone", None)
+        or ""
+    ).strip()
+
+    if (
+        canal in {
+            "instagram",
+            "facebook",
+            "messenger",
+        }
+        and not telefone
+    ):
+        return "coletar_whatsapp"
+
+    return "aguardando_humano"
+
+
+def resposta_proxima_etapa_contextual(
+    conversa,
+    proxima_etapa: str,
+    contexto_empresa=None,
+):
+    """
+    Gera uma resposta curta para o proximo dado realmente ausente.
+
+    Nao altera a conversa.
+    """
+    nome_empresa = obter_nome_empresa(
+        contexto_empresa
+    )
+
+    if proxima_etapa == "coletar_nome":
+        return (
+            "Entendi melhor o seu cenário 😊\n"
+            "E como posso te chamar?"
+        )
+
+    if proxima_etapa == "coletar_empresa":
+        return (
+            "Entendi 😊\n"
+            "E qual é o nome da sua empresa?"
+        )
+
+    if proxima_etapa == "coletar_segmento":
+        return (
+            "Perfeito 😊\n"
+            "E qual é a área de atuação da empresa?"
+        )
+
+    if proxima_etapa == "entender_objetivo":
+        return (
+            "Agora já consigo entender melhor o seu cenário 😊\n"
+            "O que você mais gostaria de melhorar hoje no seu negócio?"
+        )
+
+    if proxima_etapa == "coletar_origem":
+        return (
+            "Perfeito, já consegui entender bem o seu cenário 😊\n"
+            f"Só para eu registrar: como você conheceu a {nome_empresa}?"
+        )
+
+    if proxima_etapa == "coletar_whatsapp":
+        return (
+            "Perfeito, já organizei as informaçóes principais 😊\n"
+            "Para dar continuidade ao atendimento, me passa seu WhatsApp?"
+        )
+
+    if proxima_etapa == "aguardando_humano":
+        nome_especialista = obter_nome_especialista(
+            contexto_empresa,
+            nome_servico=getattr(
+                conversa,
+                "servico",
+                None,
+            ),
+        )
+
+        if nome_especialista:
+            referencia = nome_especialista
+        else:
+            especialistas = (
+                getattr(
+                    contexto_empresa,
+                    "especialistas",
+                    (),
+                )
+                if contexto_empresa is not None
+                else ()
+            ) or ()
+
+            if (
+                especialistas
+                and getattr(
+                    conversa,
+                    "servico",
+                    None,
+                )
+            ):
+                referencia = (
+                    "a equipe responsável por esse atendimento"
+                )
+            else:
+                referencia = "a equipe comercial"
+
+        return (
+            "Perfeito 😊\n"
+            "Já organizei as informaçóes principais para "
+            f"{referencia} analisar seu caso com mais calma. "
+            "O contato será feito assim que possível."
+        )
+
+    return (
+        "Entendi 😊\n"
+        "Já consegui ter uma visão melhor do seu cenário."
+    )
+
 
 
 
@@ -1550,7 +2183,54 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         conversa.historico = (conversa.historico or '') + f'\nCliente: {texto}'
         conversa.historico += f'\nAgente: {resposta}'
         return (resposta, analisar_mensagem(montar_texto_comercial_cliente(conversa), contexto_empresa=contexto_empresa))
+    campos_contexto_aplicados = []
+
+    if deve_usar_extrator_contexto(texto):
+        contexto_extraido = extrair_contexto_lead_gpt(
+            texto
+        )
+
+        campos_contexto_aplicados = aplicar_contexto_extraido(
+            conversa,
+            contexto_extraido,
+        )
+
     intencao = detectar_intencao_cliente(texto)
+
+    if not conversa.servico:
+        servico_explicito = identificar_servico_explicito_na_mensagem(
+            texto,
+            contexto_empresa=contexto_empresa,
+        )
+
+        if servico_explicito:
+            conversa.servico = servico_explicito
+
+    # Reconhece de forma dinamica referencias como
+    # "estrutura da Forway", sem fixar o nome da empresa no motor.
+    texto_normalizado_intencao = normalizar_linguagem_cliente(texto)
+    nome_empresa_normalizado = normalizar_linguagem_cliente(nome_empresa)
+
+    referencias_estrutura_empresa = [
+        f"estrutura da {nome_empresa_normalizado}",
+        f"estrutura do {nome_empresa_normalizado}",
+        f"estrutura de {nome_empresa_normalizado}",
+    ]
+
+    if any(
+        referencia in texto_normalizado_intencao
+        for referencia in referencias_estrutura_empresa
+    ):
+        intencao = 'estrutura_completa'
+
+        if not conversa.servico:
+            servico_estrutura = identificar_servico_empresa(
+                'estrutura completa',
+                contexto_empresa,
+            )
+
+            if servico_estrutura:
+                conversa.servico = servico_estrutura
 
     etapas_cadastrais_sem_deteccao_servico = {
         "coletar_nome",
@@ -1569,7 +2249,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             contexto_empresa=contexto_empresa,
         )
 
-        if servico_explicito is None:
+        if (
+            servico_explicito is None
+            and contexto_empresa is None
+        ):
             servico_explicito = servico_por_intencao(
                 intencao
             )
@@ -1586,13 +2269,33 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     if conversa.etapa in etapas_que_podem_identificar_servico and conversa.servico is None and (analise['produto'] != 'não identificado'):
         conversa.servico = analise['produto']
     conversa.historico = (conversa.historico or '') + f'\nCliente: {texto}'
-    if conversa.etapa == 'inicio':
+
+    if campos_contexto_aplicados:
+        classificar_servico_por_objetivo_contextual(
+            conversa,
+            analise=analise,
+            contexto_empresa=contexto_empresa,
+        )
+
+        proxima_etapa = determinar_proxima_etapa_contextual(
+            conversa
+        )
+
+        conversa.etapa = proxima_etapa
+
+        resposta = resposta_proxima_etapa_contextual(
+            conversa,
+            proxima_etapa,
+            contexto_empresa=contexto_empresa,
+        )
+
+    elif conversa.etapa == 'inicio':
         if intencao == 'duvida_lead':
             conversa.etapa = 'coletar_nome'
-            resposta = 'Boa pergunta 😊\n\nLead é um possível cliente, como alguém que chama no WhatsApp, pede orçamento ou vem pelo Instagram.\n\nMe fala seu nome para eu entender melhor seu cenário?'
+            resposta = 'Boa pergunta 😊\nLead é um possível cliente, como alguém que chama no WhatsApp, pede orçamento ou vem pelo Instagram.\nMe fala seu nome para eu entender melhor seu cenário?'
         elif intencao == 'objecao_experiencia_ruim':
             conversa.etapa = 'entender_objetivo_inicial'
-            resposta = f'Entendo seu cuidado.\n\nMuita empresa chega até a {nome_empresa} depois de uma experiência que não funcionou bem.\n\nAntes de indicar qualquer caminho, o ideal é entender o que aconteceu e qual é seu objetivo agora.'
+            resposta = f'Entendo seu cuidado.\nMuita empresa chega até a {nome_empresa} depois de uma experiência que não funcionou bem.\nAntes de indicar qualquer caminho, o ideal é entender o que aconteceu e qual é seu objetivo agora.'
         elif intencao == 'conhecer_servicos':
             conversa.etapa = 'coletar_nome'
             resposta = resposta_inicial_por_servico('conhecer_servicos', texto, contexto_empresa=contexto_empresa)
@@ -1609,31 +2312,81 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             conversa.etapa = 'coletar_nome'
             if sofia_ja_se_apresentou(conversa, contexto_empresa=contexto_empresa):
                 if intencao == 'trafego':
-                    resposta = 'Posso te ajudar com tráfego pago sim.\n\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
+                    resposta = 'Posso te ajudar com tráfego pago sim.\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
                 elif intencao == 'orcamento':
-                    resposta = 'Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\n\nMe fala seu nome?'
+                    resposta = 'Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\nMe fala seu nome?'
                 elif intencao == 'reuniao':
-                    resposta = f'Antes de encaminhar seu atendimento para {obter_referencia_responsavel_atual()}, vou entender rapidamente seu cenário para que o atendimento siga com o contexto certo.\n\nQual é o seu nome?'
+                    resposta = f'Antes de encaminhar seu atendimento para {obter_referencia_responsavel_atual()}, vou entender rapidamente seu cenário para que o atendimento siga com o contexto certo.\nQual é o seu nome?'
                 elif intencao == 'automacao':
-                    resposta = 'Automação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\n\nMe fala seu nome para eu entender seu cenário?'
+                    resposta = 'Automação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\nMe fala seu nome para eu entender seu cenário?'
                 elif intencao == 'social_media':
-                    resposta = f'A {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\n\nComo posso te chamar?'
+                    resposta = f'A {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\nComo posso te chamar?'
                 elif intencao == 'web_design':
-                    resposta = 'Um site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\n\nMe fala seu nome?'
+                    resposta = 'Um site bem estruturado ajuda muito na credibilidade e também na geração de contatos.\nMe fala seu nome?'
                 elif intencao == 'design':
-                    resposta = 'Design e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\n\nComo posso te chamar?'
+                    resposta = 'Design e identidade visual fazem muita diferença na forma como o cliente percebe a empresa.\nComo posso te chamar?'
                 elif intencao == 'estrutura_completa':
-                    resposta = 'Quando a empresa busca uma estrutura mais completa, o ideal é olhar tráfego, conteúdo, atendimento e presença digital juntos.\n\nMe fala seu nome para eu organizar melhor seu atendimento?'
+                    if conversa.servico is None:
+                        servico_estrutura = identificar_servico_empresa(
+                            'estrutura completa',
+                            contexto_empresa,
+                        )
+                        if servico_estrutura:
+                            conversa.servico = servico_estrutura
+
+                    texto_normalizado = normalizar_linguagem_cliente(texto)
+                    nome_empresa_normalizado = normalizar_linguagem_cliente(
+                        nome_empresa
+                    )
+
+                    referencia_empresa = any(
+                        referencia in texto_normalizado
+                        for referencia in (
+                            f'estrutura da {nome_empresa_normalizado}',
+                            f'estrutura do {nome_empresa_normalizado}',
+                            f'estrutura de {nome_empresa_normalizado}',
+                        )
+                    )
+
+                    referencia_resultado = (
+                        referencia_empresa
+                        and any(
+                            termo in texto_normalizado
+                            for termo in (
+                                '50k',
+                                '50 k',
+                                '50 mil',
+                                'vendeu',
+                                'vender',
+                                'vendas',
+                            )
+                        )
+                    )
+
+                    if referencia_resultado:
+                        resposta = (
+                            'Vi que você quer conhecer melhor a estrutura '
+                            'que usamos nesse projeto.\n'
+                            'Me conta um pouco do seu negécio para eu entender '
+                            'o que faria sentido para você.'
+                        )
+                    else:
+                        resposta = (
+                            'Vi que você quer conhecer melhor a nossa '
+                            'estrutura de marketing.\n'
+                            'Me conta um pouco sobre o seu negécio e o que '
+                            'você gostaria de melhorar hoje.'
+                        )
                 elif intencao == 'contratacao':
-                    resposta = f'Perfeito 😊\n\nPara eu organizar seu atendimento e encaminhar tudo certinho para {obter_referencia_responsavel_atual()}, como posso te chamar?'
+                    resposta = f'Perfeito 😊\nPara eu organizar seu atendimento e encaminhar tudo certinho para {obter_referencia_responsavel_atual()}, como posso te chamar?'
                 else:
-                    resposta = 'Entendi 😊\n\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+                    resposta = 'Entendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nPara eu organizar melhor seu atendimento, como posso te chamar?'
             else:
                 resposta = resposta_inicial_por_servico(intencao, texto, contexto_empresa=contexto_empresa)
         else:
             conversa.etapa = 'coletar_nome'
             if sofia_ja_se_apresentou(conversa, contexto_empresa=contexto_empresa):
-                resposta = 'Claro 😊\n\nPara eu entender melhor seu cenário, como posso te chamar?'
+                resposta = 'Claro 😊\nPara eu entender melhor seu cenário, como posso te chamar?'
             else:
                 resposta = resposta_inicial_por_servico('geral', texto, contexto_empresa=contexto_empresa)
         if contexto_aquisicao and intencao != 'geral':
@@ -1654,16 +2407,13 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
         if conversa.servico is None:
-            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
-                conversa.servico = 'Social Media Estratégico'
-            elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif analise['produto'] != 'não identificado':
-                conversa.servico = analise['produto']
+            classificar_servico_por_objetivo_contextual(
+                conversa,
+                analise=analise,
+                contexto_empresa=contexto_empresa,
+            )
         conversa.etapa = 'coletar_nome'
-        resposta = 'Entendi 😊\n\nPara eu organizar melhor esse atendimento, como posso te chamar?'
+        resposta = 'Entendi 😊\nPara eu organizar melhor esse atendimento, como posso te chamar?'
     elif conversa.etapa == 'coletar_nome':
         nova_intencao = detectar_intencao_cliente(texto)
         if nova_intencao == 'conhecer_servicos':
@@ -1675,75 +2425,141 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
             if analise['produto'] != 'não identificado':
                 conversa.servico = analise['produto']
-            resposta = f'{resposta_base_por_servico(conversa, nova_intencao, contexto_empresa=contexto_empresa)}\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+            resposta = f'{resposta_base_por_servico(conversa, nova_intencao, contexto_empresa=contexto_empresa)}\nPara eu organizar melhor seu atendimento, como posso te chamar?'
             conversa.historico += f'\nAgente: {resposta}'
             return (resposta, analise)
+        if parece_contexto_segmento(texto):
+            conversa.segmento = limpar_segmento(texto)
+            resposta = (
+                f'Entendi, voc\u00eas trabalham com {conversa.segmento} \U0001f60a\n'
+                'E como posso te chamar?'
+            )
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
         if not parece_nome(texto):
             resposta = resposta_nome_nao_identificado()
             conversa.historico += f'\nAgente: {resposta}'
             return (resposta, analise)
         conversa.nome = limpar_nome_cliente(texto)
         conversa.etapa = 'coletar_empresa'
-        resposta = f'Prazer, {conversa.nome} 😊\n\nQual é o nome da sua empresa?'
+        resposta = f'Prazer, {conversa.nome} 😊\nQual é o nome da sua empresa?'
     elif conversa.etapa == 'coletar_empresa':
         conversa.empresa = limpar_nome_empresa(texto)
-        conversa.etapa = 'coletar_segmento'
-        resposta = 'Legal 😊\n\nE qual é a área de atuação da empresa?'
+
+        if conversa.segmento:
+            if conversa.objetivo:
+                if not conversa.origem_aquisicao:
+                    conversa.etapa = 'coletar_origem'
+                    resposta = f'Legal \U0001f60a\nE s\u00f3 para eu registrar uma informa\u00e7\u00e3o: como voc\u00ea conheceu a {nome_empresa}?'
+                elif canal in ['instagram', 'facebook', 'messenger']:
+                    conversa.etapa = 'coletar_whatsapp'
+                    resposta = f'Legal \U0001f60a\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                else:
+                    conversa.etapa = 'aguardando_humano'
+                    resposta = f'Legal \U0001f60a\nJ\u00e1 organizei as informa\u00e7\u00f5es principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato ser\u00e1 feito assim que poss\u00edvel.'
+            else:
+                conversa.etapa = 'entender_objetivo'
+                resposta = 'Legal \U0001f60a\nHoje o que voc\u00ea mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presen\u00e7a da marca?'
+        else:
+            conversa.etapa = 'coletar_segmento'
+            resposta = 'Legal \U0001f60a\nE qual \u00e9 a \u00e1rea de atua\u00e7\u00e3o da empresa?'
     elif conversa.etapa == 'coletar_segmento':
         conversa.segmento = limpar_segmento(texto)
         if conversa.objetivo:
             if not conversa.origem_aquisicao:
                 conversa.etapa = 'coletar_origem'
-                resposta = f'{comentario_segmento(conversa.segmento)}\n\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
             elif canal in ['instagram', 'facebook', 'messenger']:
                 conversa.etapa = 'coletar_whatsapp'
-                resposta = f'{comentario_segmento(conversa.segmento)}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'{comentario_segmento(conversa.segmento)}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
         else:
             conversa.etapa = 'entender_objetivo'
-            resposta = f'{comentario_segmento(conversa.segmento)}\n\nHoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?'
+            resposta = f'{comentario_segmento(conversa.segmento)}\nHoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?'
     elif conversa.etapa == 'entender_objetivo':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
         if conversa.servico is None:
-            if objetivo_multiplo_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif objetivo_marca_para_social_media(conversa.objetivo or ''):
-                conversa.servico = 'Social Media Estratégico'
-            elif objetivo_vendas_para_estrutura(conversa.objetivo or ''):
-                conversa.servico = 'Estrutura Completa'
-            elif analise['produto'] != 'não identificado':
-                conversa.servico = analise['produto']
+            classificar_servico_por_objetivo_contextual(
+                conversa,
+                analise=analise,
+                contexto_empresa=contexto_empresa,
+            )
         resposta_base = resposta_base_por_servico(conversa, intencao, contexto_empresa=contexto_empresa)
         if not conversa.origem_aquisicao:
             conversa.etapa = 'coletar_origem'
-            resposta = f'{resposta_base}\n\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
+            resposta = f'{resposta_base}\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
         elif canal in ['instagram', 'facebook', 'messenger']:
             conversa.etapa = 'coletar_whatsapp'
-            resposta = f'{resposta_base}\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+            resposta = f'{resposta_base}\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
         else:
             conversa.etapa = 'aguardando_humano'
-            resposta = f'{resposta_base}\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+            resposta = f'{resposta_base}\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
     elif conversa.etapa == 'coletar_origem':
         origem = detectar_origem_aquisicao_resposta(texto)
+
         if origem:
             if not conversa.origem_aquisicao:
                 conversa.origem_aquisicao = origem
+
             if canal in ['instagram', 'facebook', 'messenger']:
                 conversa.etapa = 'coletar_whatsapp'
-                resposta = f'Perfeito, obrigado 😊\n\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                resposta = f'Perfeito, obrigado 😊\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'Perfeito, obrigado 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+                resposta = f'Perfeito, obrigado 😊\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
         else:
-            conversa.etapa = 'coletar_origem'
-            resposta = f'Só para eu registrar certinho: você conheceu a {nome_empresa} por indicação, Instagram, Facebook ou algum anúncio?'
+            parece_complemento_objetivo = (
+                objetivo_multiplo_para_estrutura(texto)
+                or objetivo_vendas_para_estrutura(texto)
+                or objetivo_marca_para_social_media(texto)
+            )
+
+            if parece_complemento_objetivo:
+                objetivo_anterior = (conversa.objetivo or '').strip()
+
+                if objetivo_anterior:
+                    conversa.objetivo = f'{objetivo_anterior}. {texto}'
+                else:
+                    conversa.objetivo = texto
+
+                servico_estrutura = identificar_servico_empresa(
+                    "estrutura completa",
+                    contexto_empresa,
+                )
+                servico_social = identificar_servico_empresa(
+                    "social media",
+                    contexto_empresa,
+                )
+
+                if objetivo_multiplo_para_estrutura(conversa.objetivo):
+                    if (
+                        servico_estrutura
+                        and conversa.servico in [None, servico_social]
+                    ):
+                        conversa.servico = servico_estrutura
+
+                elif conversa.servico is None:
+                    classificar_servico_por_objetivo_contextual(
+                        conversa,
+                        contexto_empresa=contexto_empresa,
+                    )
+
+                conversa.etapa = 'coletar_origem'
+                resposta = (
+                    'Perfeito, entendi melhor agora \U0001f60a\n'
+                    f'E s\u00f3 para eu registrar: como voc\u00ea conheceu a {nome_empresa}?'
+                )
+            else:
+                conversa.etapa = 'coletar_origem'
+                resposta = f'S\u00f3 para eu registrar certinho: voc\u00ea conheceu a {nome_empresa} por indica\u00e7\u00e3o, Instagram, Facebook ou algum an\u00fancio?'
     elif conversa.etapa == 'coletar_whatsapp':
         conversa.telefone = texto
         conversa.etapa = 'aguardando_humano'
-        resposta = f'Perfeito 😊\n\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+        resposta = f'Perfeito 😊\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
     else:
         resposta = resposta_apos_encaminhamento(texto, conversa.nome, contexto_empresa=contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
     conversa.historico += f'\nAgente: {resposta}'
