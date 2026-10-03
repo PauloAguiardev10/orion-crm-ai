@@ -376,20 +376,48 @@ def calcular_metricas(
     total = len(leads)
 
     quentes = 0
+    mornas = 0
+    frias = 0
     em_atendimento = 0
-    aguardando = 0
+    aguardando_resposta = 0
+    aguardando_atendimento = 0
     fechados = 0
     nao_fechados = 0
 
     if not leads.empty:
 
         if "temperatura" in leads.columns:
+            temperatura = (
+                leads["temperatura"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+            )
+
             quentes = len(
-                leads[
-                    leads["temperatura"]
-                    .astype(str)
-                    .str.lower()
-                    .str.contains("quente", na=False)
+                temperatura[
+                    temperatura.str.contains(
+                        "quente",
+                        na=False,
+                    )
+                ]
+            )
+
+            mornas = len(
+                temperatura[
+                    temperatura.str.contains(
+                        "morna",
+                        na=False,
+                    )
+                ]
+            )
+
+            frias = len(
+                temperatura[
+                    temperatura.str.contains(
+                        "fria",
+                        na=False,
+                    )
                 ]
             )
 
@@ -410,10 +438,19 @@ def calcular_metricas(
                 ]
             )
 
-            aguardando = len(
+            aguardando_resposta = len(
                 status[
                     status.str.contains(
-                        "aguardando",
+                        "aguardando resposta",
+                        na=False,
+                    )
+                ]
+            )
+
+            aguardando_atendimento = len(
+                status[
+                    status.str.contains(
+                        "aguardando atendimento",
                         na=False,
                     )
                 ]
@@ -456,8 +493,11 @@ def calcular_metricas(
     return {
         "total": total,
         "quentes": quentes,
+        "mornas": mornas,
+        "frias": frias,
         "em_atendimento": em_atendimento,
-        "aguardando": aguardando,
+        "aguardando_resposta": aguardando_resposta,
+        "aguardando_atendimento": aguardando_atendimento,
         "fechados": fechados,
         "nao_fechados": nao_fechados,
         "pedidos": len(pedidos),
@@ -532,7 +572,7 @@ def render_dados_atualizados():
         produtos,
     )
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         card(
@@ -543,35 +583,63 @@ def render_dados_atualizados():
 
     with c2:
         card(
-            "🔥 Quentes",
+            "\U0001F525 Quentes",
             m["quentes"],
             "pink",
         )
 
     with c3:
         card(
-            "🕘 Atendimento",
-            m["em_atendimento"],
+            "\U0001F7E3 Mornas",
+            m["mornas"],
             "purple",
         )
 
     with c4:
         card(
-            "⏳ Aguardando",
-            m["aguardando"],
-            "amber",
+            "\U0001F535 Frias",
+            m["frias"],
+            "cyan",
         )
+
+    st.markdown(
+        '<div style="height: 18px;"></div>',
+        unsafe_allow_html=True,
+    )
+
+    c5, c6, c7, c8, c9 = st.columns(5)
 
     with c5:
         card(
-            "✅ Fechados",
-            m["fechados"],
-            "green",
+            "\U0001F4AC Aguardando resposta",
+            m["aguardando_resposta"],
+            "cyan",
         )
 
     with c6:
         card(
-            "⚪ Não fechados",
+            "\u23F3 Aguardando atendimento",
+            m["aguardando_atendimento"],
+            "amber",
+        )
+
+    with c7:
+        card(
+            "\U0001F550 Em atendimento",
+            m["em_atendimento"],
+            "purple",
+        )
+
+    with c8:
+        card(
+            "\u2705 Fechados",
+            m["fechados"],
+            "green",
+        )
+
+    with c9:
+        card(
+            "\u26AA N\u00e3o fechados",
             m["nao_fechados"],
             "red",
         )
@@ -603,23 +671,37 @@ def render_dados_atualizados():
     else:
         total_leads = m["total"]
         quentes = m["quentes"]
-        aguardando = m["aguardando"]
+        mornas = m["mornas"]
+        frias = m["frias"]
+        aguardando_resposta = m["aguardando_resposta"]
+        aguardando_atendimento = m["aguardando_atendimento"]
 
         texto = (
             f"A operação possui "
             f"<strong>{total_leads}</strong> "
             f"{'lead registrada' if total_leads == 1 else 'leads registradas'}."
             f"<br><br>"
-            f"A IA gerou "
+            f"Distribuição por temperatura: "
             f"<strong>{quentes}</strong> "
-            f"{'lead quente' if quentes == 1 else 'leads quentes'}."
+            f"{'quente' if quentes == 1 else 'quentes'}, "
+            f"<strong>{mornas}</strong> "
+            f"{'morna' if mornas == 1 else 'mornas'} e "
+            f"<strong>{frias}</strong> "
+            f"{'fria' if frias == 1 else 'frias'}."
         )
 
-        if aguardando > 0:
+        if aguardando_resposta > 0:
             texto += (
                 f"<br><br>"
-                f"<strong>{aguardando}</strong> "
-                f"{'lead está aguardando atendimento humano' if aguardando == 1 else 'leads estão aguardando atendimento humano'}."
+                f"<strong>{aguardando_resposta}</strong> "
+                f"{'lead está aguardando resposta do cliente' if aguardando_resposta == 1 else 'leads estão aguardando resposta do cliente'}."
+            )
+
+        if aguardando_atendimento > 0:
+            texto += (
+                f"<br>"
+                f"<strong>{aguardando_atendimento}</strong> "
+                f"{'lead está aguardando atendimento humano' if aguardando_atendimento == 1 else 'leads estão aguardando atendimento humano'}."
             )
 
         texto += (
