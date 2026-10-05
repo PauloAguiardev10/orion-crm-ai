@@ -127,7 +127,7 @@ def resposta_servicos_empresa(contexto_empresa, saudacao=None):
     nome_empresa = obter_nome_empresa(contexto_empresa)
     servicos = contexto_empresa.servicos if contexto_empresa is not None else ()
     if not servicos:
-        return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+        return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nComo posso te chamar?'
 
     nomes_servicos = [
         servico.nome.strip()
@@ -158,7 +158,7 @@ def resposta_servicos_empresa(contexto_empresa, saudacao=None):
     )
 
     if not lista_servicos and not estrutura_completa:
-        return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+        return f'{inicio}No momento, os serviços desta empresa ainda não estão configurados no sistema.\n\nComo posso te chamar?'
 
     resposta = (
         f'{inicio}Hoje a {nome_empresa} trabalha com:\n\n'
@@ -322,6 +322,113 @@ def resposta_aleatoria(lista):
     return random.choice(lista)
 
 
+def resposta_sem_conteudo_util(texto: str) -> bool:
+    """
+    Identifica respostas que nao carregam informacao suficiente
+    para preencher campos de qualificacao.
+    """
+    valor = normalizar_linguagem_cliente(texto or "").strip()
+
+    if not valor:
+        return True
+
+    quantidade_letras = sum(
+        1
+        for caractere in valor
+        if caractere.isalpha()
+    )
+
+    if quantidade_letras == 0:
+        return True
+
+    respostas_genericas = {
+        "sim",
+        "nao",
+        "ok",
+        "okay",
+        "certo",
+        "beleza",
+        "show",
+        "perfeito",
+        "entendi",
+        "isso",
+        "isso mesmo",
+        "aham",
+        "uhum",
+        "blz",
+        "ta",
+        "esta bem",
+        "tudo bem",
+    }
+
+    return valor in respostas_genericas
+
+
+def cliente_informa_nao_ter_empresa(texto: str) -> bool:
+    """
+    Identifica quando a pessoa informa que nao possui empresa ou negocio formal.
+    """
+    valor = normalizar_linguagem_cliente(texto or "").strip()
+
+    expressoes = [
+        "nao tenho empresa",
+        "nao tenho uma empresa",
+        "nao tenho negocio",
+        "nao tenho um negocio",
+        "nao tenho cnpj",
+        "sem empresa",
+        "nao tei empresa",
+    ]
+
+    return any(
+        expressao in valor
+        for expressao in expressoes
+    )
+
+
+def parece_segmento_valido(texto: str) -> bool:
+    """
+    Evita registrar confirmacoes, emojis e cargos isolados
+    como segmento de uma empresa.
+    """
+    valor = normalizar_linguagem_cliente(texto or "").strip()
+
+    if resposta_sem_conteudo_util(valor):
+        return False
+
+    cargos_isolados = {
+        "vendedor",
+        "vendedora",
+        "gerente",
+        "diretor",
+        "diretora",
+        "dono",
+        "dona",
+        "proprietario",
+        "proprietaria",
+        "socio",
+        "socia",
+        "ceo",
+    }
+
+    if valor in cargos_isolados:
+        return False
+
+    return True
+
+
+def parece_objetivo_valido(texto: str) -> bool:
+    """
+    Exige informacao comercial minimamente util antes de
+    considerar o objetivo respondido.
+    """
+    valor = normalizar_linguagem_cliente(texto or "").strip()
+
+    if resposta_sem_conteudo_util(valor):
+        return False
+
+    return True
+
 def parece_nome(texto: str):
     texto = texto.strip()
 
@@ -363,9 +470,34 @@ def parece_nome(texto: str):
         "contato",
         "contatos",
         "marca",
+        "entrar",
+        "vendedor",
+        "vendedora",
     }
 
     if texto_lower in respostas_comerciais_curtas:
+        return False
+
+    # Evita interpretar perguntas ou frases conversacionais como nome.
+    # Ex.: "Vose trabalha com oq", "Quanto custa", "Como funciona".
+    palavras_conversacionais = {
+        "trabalha",
+        "trabalham",
+        "faz",
+        "fazem",
+        "oferece",
+        "oferecem",
+        "quanto",
+        "qual",
+        "quais",
+        "como",
+    }
+
+    palavras_normalizadas = set(
+        normalizar_linguagem_cliente(texto).split()
+    )
+
+    if palavras_normalizadas & palavras_conversacionais:
         return False
 
     frases_bloqueadas = [
@@ -430,20 +562,10 @@ def parece_nome(texto: str):
 
 def resposta_nome_nao_identificado():
     return resposta_aleatoria([
-        (
-            "Acho que não peguei seu nome direitinho 😅\n\n"
-            "Como você prefere que eu te chame?"
-        ),
-        (
-            "Desculpa, acho que entendi outra coisa 😊\n\n"
-            "Me fala só seu nome para eu continuar?"
-        ),
-        (
-            "Só para eu não registrar errado 😊\n\n"
-            "Qual é o seu nome?"
-        ),
+        "Como posso te chamar? \U0001f60a",
+        "Me fala seu nome? \U0001f60a",
+        "E qual \u00e9 o seu nome? \U0001f60a",
     ])
-
 
 def limpar_nome_cliente(texto: str):
     nome = texto.strip()
@@ -767,6 +889,28 @@ def eh_resposta_cadastral(texto: str, conversa) -> bool:
     return False
 
 
+
+def obter_ultima_fala_cliente(historico: str):
+    """
+    Retorna a ultima fala do cliente registrada no historico.
+    """
+    if not historico:
+        return None
+
+    for linha in reversed(historico.splitlines()):
+        linha = linha.strip()
+
+        if not linha.lower().startswith("cliente:"):
+            continue
+
+        fala = linha.split(":", 1)[1].strip()
+
+        if fala:
+            return fala
+
+    return None
+
+
 def extrair_falas_cliente_comerciais(
     historico: str,
     conversa,
@@ -1007,7 +1151,7 @@ def detectar_origem_aquisicao_resposta(mensagem):
 
         if contem_termo(
             texto_normalizado,
-            ["facebook", "face"],
+            ["facebook", "face", "facebok"],
         ):
             return "anuncio_facebook"
 
@@ -1021,7 +1165,7 @@ def detectar_origem_aquisicao_resposta(mensagem):
 
     if contem_termo(
         texto_normalizado,
-        ["facebook", "face"],
+        ["facebook", "face", "facebok"],
     ):
         return "organico_facebook"
 
@@ -1472,13 +1616,13 @@ def resposta_inicial_por_servico(intencao, mensagem='', contexto_empresa=None):
     if intencao == 'conhecer_servicos':
         return resposta_servicos_empresa(contexto_empresa=contexto_empresa)
     if intencao == 'trafego':
-        return f'{saudacao}\nPosso te ajudar com tráfego pago sim.\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
+        return f'{saudacao}\nPosso te ajudar com tr\u00e1fego pago sim \U0001f60a\nComo posso te chamar?'
     if intencao == 'orcamento':
         return f'{saudacao}\nPara falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\nMe fala seu nome?'
     if intencao == 'reuniao':
-        return f'{saudacao}\nAntes de encaminhar seu atendimento para {referencia_especialista}, vou entender rapidamente seu cenário para que o responsável receba seu caso com o contexto certo.\nQual é o seu nome?'
+        return f'{saudacao}\nClaro \U0001f60a Vou entender rapidinho seu cen\u00e1rio antes de falar com {referencia_especialista}.\nQual \u00e9 o seu nome?'
     if intencao == 'automacao':
-        return f'{saudacao}\nAutomação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\nMe fala seu nome para eu entender seu cenário?'
+        return f'{saudacao}\nAutoma\u00e7\u00e3o com IA pode ajudar bastante quando a empresa recebe muitos contatos e quer responder com mais agilidade.\nMe fala seu nome para eu entender seu cen\u00e1rio?'
     if intencao == 'social_media':
         return f'{saudacao}\nA {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\nComo posso te chamar?'
     if intencao == 'web_design':
@@ -1518,23 +1662,21 @@ def resposta_inicial_por_servico(intencao, mensagem='', contexto_empresa=None):
         if referencia_resultado:
             return (
                 f'{saudacao}\n'
-                'Vi que você quer conhecer melhor a estrutura '
-                'que usamos nesse projeto.\n'
-                'Me conta um pouco do seu negécio para eu entender '
-                'o que faria sentido para você.'
+                'Vi que voc\u00ea quer conhecer melhor a estrutura '
+                'que usamos nesse projeto. \U0001f60a\n'
+                'Para eu entender melhor seu cen\u00e1rio, como posso te chamar?'
             )
 
         return (
             f'{saudacao}\n'
-            'Vi que você quer conhecer melhor a nossa '
-            'estrutura de marketing.\n'
-            'Me conta um pouco sobre o seu negécio e o que '
-            'você gostaria de melhorar hoje.'
+            'Vi que voc\u00ea quer conhecer melhor a nossa '
+            'estrutura de marketing. \U0001f60a\n'
+            'Para eu entender melhor seu cen\u00e1rio, como posso te chamar?'
         )
     if intencao == 'contratacao':
-        return f'{saudacao}\nPerfeito 😊\nPara eu organizar seu atendimento e encaminhar tudo certinho para {referencia_especialista}, como posso te chamar?'
+        return f'{saudacao}\nPerfeito \U0001f60a\nComo posso te chamar?'
     if intencao == 'objetivo_comercial':
-        return f'{saudacao}\nEntendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+        return f'{saudacao}\nEntendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nComo posso te chamar?'
     return f'{saudacao}\nSou a {nome_agente}, da {nome_empresa}.\nComo posso ajudar você hoje?'
 
 
@@ -1588,6 +1730,7 @@ def resposta_apos_encaminhamento(
             f"responsável pela {nome_empresa}"
         )
 
+        referencia_contato_de = f"de {nome_especialista}"
     elif especialistas and nome_servico:
         referencia_contato = (
             "a equipe responsável por esse atendimento"
@@ -1599,94 +1742,64 @@ def resposta_apos_encaminhamento(
             "a equipe responsável por esse atendimento"
         )
 
+        referencia_contato_de = "da equipe respons\u00e1vel por esse atendimento"
     else:
         referencia_contato = "a equipe comercial"
         referencia_destino = "a equipe comercial"
         referencia_responsavel = "a equipe comercial"
 
+        referencia_contato_de = "da equipe comercial"
     if interacao == "agradecimento":
         return resposta_aleatoria([
             (
-                f"Eu que agradeço pelo contato"
-                f"{(', ' + nome if nome else '')} 😊\n"
-                f"Já deixei tudo organizado e encaminhei "
-                f"seu atendimento diretamente para "
-                f"{referencia_responsavel}. "
-                f"O contato será feito assim que possível."
+                f"Eu que agrade\u00e7o"
+                f"{(', ' + nome if nome else '')} \U0001f60a "
+                f"{referencia_contato.capitalize()} vai falar com voc\u00ea "
+                f"assim que poss\u00edvel."
             ),
             (
-                f"Obrigado você pela confiança 😊\n"
-                f"Suas informações já estão organizadas "
-                f"e seu atendimento foi encaminhado "
-                f"diretamente para {referencia_destino}. "
-                f"O contato será feito assim que possível."
-            ),
-            (
-                f"Foi um prazer falar com você 😊\n"
-                f"Seu atendimento já está encaminhado "
-                f"para {referencia_destino}. "
-                f"O contato será feito assim que houver "
-                f"disponibilidade."
+                f"Obrigado pelo contato"
+                f"{(', ' + nome if nome else '')} \U0001f60a "
+                f"Agora \u00e9 s\u00f3 aguardar o contato "
+                f"{referencia_contato_de}."
             ),
         ])
 
     if interacao == "confirmacao":
         return resposta_aleatoria([
             (
-                "Perfeito 😊\n"
-                "Já deixei tudo certo e seu atendimento "
-                "está encaminhado."
+                f"Combinado \U0001f60a "
+                f"Agora \u00e9 s\u00f3 aguardar o contato "
+                f"{referencia_contato_de}."
             ),
             (
-                f"Combinado 😊\n"
-                f"Seu atendimento já está encaminhado "
-                f"para {referencia_destino}. "
-                f"O contato será feito assim que possível."
-            ),
-            (
-                f"Tudo certo 😊\n"
-                f"Agora é só aguardar o contato de "
-                f"{referencia_contato}."
+                f"Perfeito \U0001f60a "
+                f"{referencia_contato.capitalize()} vai falar com voc\u00ea "
+                f"assim que poss\u00edvel."
             ),
         ])
 
     if interacao == "despedida":
         return resposta_aleatoria([
             (
-                f"Combinado 😊\n"
-                f"Obrigado pelo contato. "
-                f"O contato de {referencia_contato} "
-                f"será feito assim que houver disponibilidade."
+                f"Combinado \U0001f60a "
+                f"Obrigado pelo contato."
             ),
             (
-                "Tudo certo 😊\n"
-                "Foi um prazer te atender."
-            ),
-            (
-                f"Perfeito 😊\n"
-                f"Seu atendimento já está encaminhado. "
-                f"Agora é só aguardar o contato de "
-                f"{referencia_contato}."
+                f"Tudo certo \U0001f60a "
+                f"Foi um prazer te atender."
             ),
         ])
 
     return resposta_aleatoria([
         (
-            f"Seu atendimento já foi encaminhado "
-            f"diretamente para {referencia_responsavel} 😊\n"
-            f"O contato será feito assim que houver "
-            f"disponibilidade."
+            f"{referencia_contato.capitalize()} vai te passar esses detalhes "
+            f"assim que falar com voc\u00ea \U0001f60a"
         ),
         (
-            f"Já deixei suas informações organizadas "
-            f"e encaminhadas para {referencia_destino} "
-            f"analisar com atenção 😊"
-        ),
-        (
-            f"Tudo certo por aqui 😊\n"
-            f"Seu atendimento já está com "
-            f"{referencia_destino}. "
-            f"O contato será feito assim que possível."
+            f"Seu atendimento j\u00e1 est\u00e1 com {referencia_destino}. "
+            f"{referencia_contato.capitalize()} vai falar com voc\u00ea "
+            f"assim que poss\u00edvel \U0001f60a"
         ),
     ])
 
@@ -1937,6 +2050,21 @@ def aplicar_contexto_extraido(conversa, contexto_extraido):
         if not valor or not evidencia:
             continue
 
+        # A IA ajuda a extrair o contexto, mas a validacao
+        # deterministica continua sendo a barreira final antes
+        # de gravar dados na conversa.
+        if campo == "nome" and not parece_nome(valor):
+            continue
+
+        if campo == "empresa" and resposta_sem_conteudo_util(valor):
+            continue
+
+        if campo == "segmento" and not parece_segmento_valido(valor):
+            continue
+
+        if campo == "objetivo" and not parece_objetivo_valido(valor):
+            continue
+
         setattr(
             conversa,
             campo,
@@ -2033,14 +2161,14 @@ def resposta_proxima_etapa_contextual(
 
     if proxima_etapa == "coletar_origem":
         return (
-            "Perfeito, já consegui entender bem o seu cenário 😊\n"
-            f"Só para eu registrar: como você conheceu a {nome_empresa}?"
+            "Perfeito, entendi \U0001f60a\n"
+            f"E como voc\u00ea conheceu a {nome_empresa}?"
         )
 
     if proxima_etapa == "coletar_whatsapp":
         return (
-            "Perfeito, já organizei as informaçóes principais 😊\n"
-            "Para dar continuidade ao atendimento, me passa seu WhatsApp?"
+            "Perfeito \U0001f60a\n"
+            "Me passa seu WhatsApp para a gente seguir por l\u00e1?"
         )
 
     if proxima_etapa == "aguardando_humano":
@@ -2081,9 +2209,9 @@ def resposta_proxima_etapa_contextual(
                 referencia = "a equipe comercial"
 
         return (
-            "Perfeito 😊\n"
-            "Já organizei as informaçóes principais para "
-            f"{referencia} analisar seu caso com mais calma. "
+            "Perfeito \U0001f60a "
+            "J\u00e1 passei as informa\u00e7\u00f5es para "
+            f"{referencia}. "
             "O contato será feito assim que possível."
         )
 
@@ -2179,10 +2307,46 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     texto = mensagem.strip()
     canal = conversa.canal.lower()
     if conversa.etapa == 'aguardando_humano':
-        resposta = resposta_apos_encaminhamento(texto, conversa.nome, contexto_empresa=contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
-        conversa.historico = (conversa.historico or '') + f'\nCliente: {texto}'
+        ultima_fala_cliente = obter_ultima_fala_cliente(
+            conversa.historico or ""
+        )
+        interacao_atual = detectar_interacao_social(texto)
+        interacao_anterior = detectar_interacao_social(
+            ultima_fala_cliente or ""
+        )
+
+        if (
+            interacao_atual == "confirmacao"
+            and interacao_anterior == "confirmacao"
+        ):
+            conversa.historico = (
+                conversa.historico or ""
+            ) + f'\nCliente: {texto}'
+            return (
+                None,
+                analisar_mensagem(
+                    montar_texto_comercial_cliente(conversa),
+                    contexto_empresa=contexto_empresa,
+                ),
+            )
+
+        resposta = resposta_apos_encaminhamento(
+            texto,
+            conversa.nome,
+            contexto_empresa=contexto_empresa,
+            nome_servico=getattr(conversa, 'servico', None),
+        )
+        conversa.historico = (
+            conversa.historico or ""
+        ) + f'\nCliente: {texto}'
         conversa.historico += f'\nAgente: {resposta}'
-        return (resposta, analisar_mensagem(montar_texto_comercial_cliente(conversa), contexto_empresa=contexto_empresa))
+        return (
+            resposta,
+            analisar_mensagem(
+                montar_texto_comercial_cliente(conversa),
+                contexto_empresa=contexto_empresa,
+            ),
+        )
     campos_contexto_aplicados = []
 
     if deve_usar_extrator_contexto(texto):
@@ -2312,13 +2476,13 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             conversa.etapa = 'coletar_nome'
             if sofia_ja_se_apresentou(conversa, contexto_empresa=contexto_empresa):
                 if intencao == 'trafego':
-                    resposta = 'Posso te ajudar com tráfego pago sim.\nAntes de encaminhar seu atendimento para a equipe comercial, me fala seu nome?'
+                    resposta = 'Posso te ajudar com tr\u00e1fego pago sim \U0001f60a\nComo posso te chamar?'
                 elif intencao == 'orcamento':
                     resposta = 'Para falar de valores sem te passar algo genérico, o ideal é entender primeiro seu cenário.\nMe fala seu nome?'
                 elif intencao == 'reuniao':
-                    resposta = f'Antes de encaminhar seu atendimento para {obter_referencia_responsavel_atual()}, vou entender rapidamente seu cenário para que o atendimento siga com o contexto certo.\nQual é o seu nome?'
+                    resposta = f'Claro \U0001f60a Vou entender rapidinho seu cen\u00e1rio antes de falar com {obter_referencia_responsavel_atual()}.\nQual \u00e9 o seu nome?'
                 elif intencao == 'automacao':
-                    resposta = 'Automação com IA pode ajudar bastante quando a empresa recebe contatos e precisa organizar melhor o primeiro atendimento.\nMe fala seu nome para eu entender seu cenário?'
+                    resposta = 'Automa\u00e7\u00e3o com IA pode ajudar bastante quando a empresa recebe muitos contatos e quer responder com mais agilidade.\nMe fala seu nome para eu entender seu cen\u00e1rio?'
                 elif intencao == 'social_media':
                     resposta = f'A {nome_empresa} trabalha social media de forma estratégica, pensando em posicionamento e resultado, não só postagem.\nComo posso te chamar?'
                 elif intencao == 'web_design':
@@ -2366,21 +2530,19 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                     if referencia_resultado:
                         resposta = (
                             'Vi que você quer conhecer melhor a estrutura '
-                            'que usamos nesse projeto.\n'
-                            'Me conta um pouco do seu negécio para eu entender '
-                            'o que faria sentido para você.'
+                            'que usamos nesse projeto. 😊\n'
+                            'Para eu entender melhor seu cenário, como posso te chamar?'
                         )
                     else:
                         resposta = (
                             'Vi que você quer conhecer melhor a nossa '
-                            'estrutura de marketing.\n'
-                            'Me conta um pouco sobre o seu negécio e o que '
-                            'você gostaria de melhorar hoje.'
+                            'estrutura de marketing. 😊\n'
+                            'Para eu entender melhor seu cenário, como posso te chamar?'
                         )
                 elif intencao == 'contratacao':
-                    resposta = f'Perfeito 😊\nPara eu organizar seu atendimento e encaminhar tudo certinho para {obter_referencia_responsavel_atual()}, como posso te chamar?'
+                    resposta = f'Perfeito \U0001f60a\nComo posso te chamar?'
                 else:
-                    resposta = 'Entendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+                    resposta = 'Entendi 😊\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nComo posso te chamar?'
             else:
                 resposta = resposta_inicial_por_servico(intencao, texto, contexto_empresa=contexto_empresa)
         else:
@@ -2413,7 +2575,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 contexto_empresa=contexto_empresa,
             )
         conversa.etapa = 'coletar_nome'
-        resposta = 'Entendi 😊\nPara eu organizar melhor esse atendimento, como posso te chamar?'
+        resposta = 'Entendi \U0001f60a\nComo posso te chamar?'
     elif conversa.etapa == 'coletar_nome':
         nova_intencao = detectar_intencao_cliente(texto)
         if nova_intencao == 'conhecer_servicos':
@@ -2425,7 +2587,7 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
             if analise['produto'] != 'não identificado':
                 conversa.servico = analise['produto']
-            resposta = f'{resposta_base_por_servico(conversa, nova_intencao, contexto_empresa=contexto_empresa)}\nPara eu organizar melhor seu atendimento, como posso te chamar?'
+            resposta = f'{resposta_base_por_servico(conversa, nova_intencao, contexto_empresa=contexto_empresa)}\nComo posso te chamar?'
             conversa.historico += f'\nAgente: {resposta}'
             return (resposta, analise)
         if parece_contexto_segmento(texto):
@@ -2445,41 +2607,106 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         conversa.etapa = 'coletar_empresa'
         resposta = f'Prazer, {conversa.nome} 😊\nQual é o nome da sua empresa?'
     elif conversa.etapa == 'coletar_empresa':
+        if resposta_sem_conteudo_util(texto):
+            resposta = (
+                "Me conta uma coisa \U0001f60a\n"
+                "Qual \u00e9 o nome da sua empresa ou neg\u00f3cio?"
+            )
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
+        if cliente_informa_nao_ter_empresa(texto):
+            conversa.empresa = "Sem empresa formal"
+
+            if conversa.segmento:
+                conversa.etapa = 'entender_objetivo'
+                resposta = (
+                    "Sem problema 😊\n"
+                    "E o que voc\u00ea mais busca hoje: gerar mais vendas, "
+                    "receber mais contatos ou fortalecer sua presen\u00e7a?"
+                )
+            else:
+                conversa.etapa = 'coletar_segmento'
+                resposta = (
+                    "Sem problema 😊\n"
+                    "E hoje voc\u00ea trabalha com o qu\u00ea?"
+                )
+
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
         conversa.empresa = limpar_nome_empresa(texto)
 
         if conversa.segmento:
             if conversa.objetivo:
                 if not conversa.origem_aquisicao:
                     conversa.etapa = 'coletar_origem'
-                    resposta = f'Legal \U0001f60a\nE s\u00f3 para eu registrar uma informa\u00e7\u00e3o: como voc\u00ea conheceu a {nome_empresa}?'
+                    resposta = f'Legal \U0001f60a\nE como voc\u00ea conheceu a {nome_empresa}?'
                 elif canal in ['instagram', 'facebook', 'messenger']:
                     conversa.etapa = 'coletar_whatsapp'
-                    resposta = f'Legal \U0001f60a\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                    resposta = f'Legal \U0001f60a\nMe passa seu WhatsApp para {obter_referencia_especialista_atual()} falar com voc\u00ea?'
                 else:
                     conversa.etapa = 'aguardando_humano'
-                    resposta = f'Legal \U0001f60a\nJ\u00e1 organizei as informa\u00e7\u00f5es principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato ser\u00e1 feito assim que poss\u00edvel.'
+                    resposta = f'Legal \U0001f60a J\u00e1 passei as informa\u00e7\u00f5es para {obter_referencia_especialista_atual()}. O contato ser\u00e1 feito assim que poss\u00edvel.'
             else:
                 conversa.etapa = 'entender_objetivo'
                 resposta = 'Legal \U0001f60a\nHoje o que voc\u00ea mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presen\u00e7a da marca?'
         else:
             conversa.etapa = 'coletar_segmento'
-            resposta = 'Legal \U0001f60a\nE qual \u00e9 a \u00e1rea de atua\u00e7\u00e3o da empresa?'
+            resposta = 'Legal! E voc\u00eas trabalham com o qu\u00ea?'
     elif conversa.etapa == 'coletar_segmento':
+        if not parece_segmento_valido(texto):
+            if conversa.empresa == "Sem empresa formal":
+                resposta = (
+                    "Entendi \U0001f60a E hoje voc\u00ea trabalha com o qu\u00ea?"
+                )
+            else:
+                resposta = (
+                    "Entendi \U0001f60a E qual \u00e9 o ramo da empresa?"
+                )
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
         conversa.segmento = limpar_segmento(texto)
         if conversa.objetivo:
             if not conversa.origem_aquisicao:
                 conversa.etapa = 'coletar_origem'
-                resposta = f'{comentario_segmento(conversa.segmento)}\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nE como voc\u00ea conheceu a {nome_empresa}?'
             elif canal in ['instagram', 'facebook', 'messenger']:
                 conversa.etapa = 'coletar_whatsapp'
-                resposta = f'{comentario_segmento(conversa.segmento)}\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nMe passa seu WhatsApp para {obter_referencia_especialista_atual()} falar com voc\u00ea?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'{comentario_segmento(conversa.segmento)}\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+                resposta = f'{comentario_segmento(conversa.segmento)}\nPerfeito \U0001f60a J\u00e1 passei as informa\u00e7\u00f5es para {obter_referencia_especialista_atual()}. O contato ser\u00e1 feito assim que poss\u00edvel.'
         else:
             conversa.etapa = 'entender_objetivo'
-            resposta = f'{comentario_segmento(conversa.segmento)}\nHoje o que você mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presença da marca?'
+            if conversa.empresa == "Sem empresa formal":
+                resposta = (
+                    f'{comentario_segmento(conversa.segmento)}\n'
+                    'E o que voc\u00ea mais quer melhorar hoje: vendas, '
+                    'n\u00famero de contatos ou presen\u00e7a da marca?'
+                )
+            else:
+                resposta = (
+                    f'{comentario_segmento(conversa.segmento)}\n'
+                    'E o que voc\u00eas mais querem melhorar hoje: vendas, '
+                    'n\u00famero de contatos ou presen\u00e7a da marca?'
+                )
     elif conversa.etapa == 'entender_objetivo':
+        if not parece_objetivo_valido(texto):
+            if conversa.empresa == "Sem empresa formal":
+                resposta = (
+                    "Entendi \U0001f60a E o que voc\u00ea quer melhorar hoje: "
+                    "vendas, n\u00famero de contatos ou presen\u00e7a da marca?"
+                )
+            else:
+                resposta = (
+                    "Entendi \U0001f60a E o que voc\u00eas querem melhorar hoje: "
+                    "vendas, n\u00famero de contatos ou presen\u00e7a da marca?"
+                )
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
         if conversa.servico is None:
@@ -2491,13 +2718,13 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
         resposta_base = resposta_base_por_servico(conversa, intencao, contexto_empresa=contexto_empresa)
         if not conversa.origem_aquisicao:
             conversa.etapa = 'coletar_origem'
-            resposta = f'{resposta_base}\nE só para eu registrar uma informação: como você conheceu a {nome_empresa}?'
+            resposta = f'{resposta_base}\nE como voc\u00ea conheceu a {nome_empresa}?'
         elif canal in ['instagram', 'facebook', 'messenger']:
             conversa.etapa = 'coletar_whatsapp'
-            resposta = f'{resposta_base}\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+            resposta = f'{resposta_base}\nMe passa seu WhatsApp para {obter_referencia_especialista_atual()} falar com voc\u00ea?'
         else:
             conversa.etapa = 'aguardando_humano'
-            resposta = f'{resposta_base}\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+            resposta = f'{resposta_base}\nPerfeito \U0001f60a J\u00e1 passei as informa\u00e7\u00f5es para {obter_referencia_especialista_atual()}. O contato ser\u00e1 feito assim que poss\u00edvel.'
     elif conversa.etapa == 'coletar_origem':
         origem = detectar_origem_aquisicao_resposta(texto)
 
@@ -2507,10 +2734,10 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
 
             if canal in ['instagram', 'facebook', 'messenger']:
                 conversa.etapa = 'coletar_whatsapp'
-                resposta = f'Perfeito, obrigado 😊\nPara eu encaminhar seu atendimento para {obter_referencia_especialista_atual()} e dar continuidade, me passa seu WhatsApp?'
+                resposta = f'Perfeito \U0001f60a\nMe passa seu WhatsApp para {obter_referencia_especialista_atual()} falar com voc\u00ea?'
             else:
                 conversa.etapa = 'aguardando_humano'
-                resposta = f'Perfeito, obrigado 😊\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+                resposta = f'Perfeito \U0001f60a J\u00e1 passei as informa\u00e7\u00f5es para {obter_referencia_especialista_atual()}. O contato ser\u00e1 feito assim que poss\u00edvel.'
         else:
             parece_complemento_objetivo = (
                 objetivo_multiplo_para_estrutura(texto)
@@ -2551,15 +2778,15 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 conversa.etapa = 'coletar_origem'
                 resposta = (
                     'Perfeito, entendi melhor agora \U0001f60a\n'
-                    f'E s\u00f3 para eu registrar: como voc\u00ea conheceu a {nome_empresa}?'
+                    f'E como voc\u00ea conheceu a {nome_empresa}?'
                 )
             else:
                 conversa.etapa = 'coletar_origem'
-                resposta = f'S\u00f3 para eu registrar certinho: voc\u00ea conheceu a {nome_empresa} por indica\u00e7\u00e3o, Instagram, Facebook ou algum an\u00fancio?'
+                resposta = f'E como voc\u00ea conheceu a {nome_empresa}? Foi por indica\u00e7\u00e3o, Instagram, Facebook ou algum an\u00fancio?'
     elif conversa.etapa == 'coletar_whatsapp':
         conversa.telefone = texto
         conversa.etapa = 'aguardando_humano'
-        resposta = f'Perfeito 😊\nJá organizei as informações principais para {obter_referencia_especialista_atual()} analisar seu caso com mais calma. O contato será feito assim que possível.'
+        resposta = f'Perfeito \U0001f60a J\u00e1 passei as informa\u00e7\u00f5es para {obter_referencia_especialista_atual()}. O contato ser\u00e1 feito assim que poss\u00edvel.'
     else:
         resposta = resposta_apos_encaminhamento(texto, conversa.nome, contexto_empresa=contexto_empresa, nome_servico=getattr(conversa, 'servico', None))
     conversa.historico += f'\nAgente: {resposta}'
