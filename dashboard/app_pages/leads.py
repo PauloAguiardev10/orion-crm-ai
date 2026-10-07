@@ -120,6 +120,20 @@ def render_leads(leads):
         )
 
     with f2:
+        temperaturas_opcoes = [
+            "Todas",
+            "Quentes",
+            "Mornas",
+            "Frias",
+        ]
+
+        filtro_temperatura = st.selectbox(
+            "Temperatura",
+            temperaturas_opcoes,
+            key="leads_filtro_temperatura",
+        )
+
+    with f3:
         canais = sorted(
             leads["canal"]
             .fillna("Não informado")
@@ -133,14 +147,13 @@ def render_leads(leads):
             ["Todos"] + canais
         )
 
-    with f3:
+    with f4:
         filtro_responsavel = st.selectbox(
             "Responsável",
             ["Todos"] + responsaveis
         )
 
-    with f4:
-        busca = st.text_input("Buscar nome/empresa/produto")
+    busca = st.text_input("Buscar nome/empresa/produto")
 
     leads_filtradas = leads.copy()
 
@@ -152,6 +165,24 @@ def render_leads(leads):
                 filtro_status_normalizado,
                 na=False
             )
+        ]
+
+    if filtro_temperatura != "Todas":
+        mapa_temperaturas = {
+            "Quentes": "quente",
+            "Mornas": "morna",
+            "Frias": "fria",
+        }
+
+        temperatura_selecionada = mapa_temperaturas[filtro_temperatura]
+
+        leads_filtradas = leads_filtradas[
+            leads_filtradas["temperatura"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            == temperatura_selecionada
         ]
 
     if filtro_canal != "Todos":
