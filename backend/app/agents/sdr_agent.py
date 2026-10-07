@@ -826,6 +826,8 @@ def objetivo_marca_para_social_media(texto: str) -> bool:
             "fortalecer a presença",
             "presença da marca",
             "presenca da marca",
+            "presença de marca",
+            "presenca de marca",
             "fortalecer presença da marca",
             "fortalecer a presença da marca",
             "melhorar minha presença digital",
@@ -1481,6 +1483,7 @@ def analisar_mensagem(
 
     sinal_objetivo = (
         sinal_objetivo
+        or objetivo_marca_para_social_media(texto)
         or objetivo_multiplo_para_estrutura(mensagem)
     )
 
@@ -2793,3 +2796,4 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     analise = analisar_mensagem(montar_texto_comercial_cliente(conversa), contexto_empresa=contexto_empresa)
     sincronizar_status_atendimento(conversa)
     return (resposta, analise)
+
