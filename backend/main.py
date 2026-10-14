@@ -162,6 +162,10 @@ class MensagemRequest(BaseModel):
     canal: str
     identificador: str
     mensagem: str
+    mensagem_id_externo: str | None = None
+
+
+from app.agents.detector_atendimento_humano import detectar_pedido_atendimento_humano
 
 
 def obter_empresa_id_por_sessao(sessao: str) -> int | None:
@@ -215,6 +219,95 @@ def obter_chat_id_whatsapp(telefone: str | None) -> str | None:
         return None
 
     return f"{numero}@c.us"
+
+
+
+
+def montar_alerta_atendimento_humano(conversa, nome_empresa):
+    """
+    Monta o alerta interno quando o cliente solicita
+    atendimento humano antes de concluir a qualificacao.
+    """
+    def campo(valor, padrao="Nao informado"):
+        valor = str(valor).strip() if valor is not None else ""
+        return valor or padrao
+
+    return (
+        f"Solicitacao de atendimento humano - {nome_empresa}\n\n"
+        f"Nome: {campo(conversa.nome)}\n"
+        f"Empresa: {campo(conversa.empresa, 'Nao informada')}\n"
+        f"Segmento: {campo(conversa.segmento)}\n"
+        f"Canal: {campo(conversa.canal)}\n"
+        f"Contato: {campo(conversa.telefone)}\n\n"
+        "Motivo: Cliente solicitou atendimento humano.\n"
+        "Proxima acao: Assumir a conversa no CRM."
+    )
+
+
+
+
+def montar_alerta_lead_comercial(conversa, analise, nome_empresa):
+    """Monta notificacao comercial com contato validado."""
+    import re
+
+    contato = str(conversa.telefone or "").strip()
+    numero = re.sub(r"\D", "", contato)
+
+    link = ""
+    if (
+        contato
+        and "@" not in contato
+        and numero == contato.lstrip("+")
+        and 10 <= len(numero) <= 15
+    ):
+        link = f"Abrir conversa: https://wa.me/{numero}\n"
+
+    def campo(valor, padrao="Nao informado"):
+        return str(valor).strip() if valor else padrao
+
+    return (
+        f"Nova lead qualificada - {nome_empresa}\n\n"
+        f"Nome: {campo(conversa.nome)}\n"
+        f"Empresa: {campo(conversa.empresa, 'Nao informada')}\n"
+        f"Segmento: {campo(conversa.segmento)}\n"
+        f"WhatsApp: {campo(conversa.telefone)}\n"
+        f"{link}"
+        f"Servi\u00e7o: {campo(conversa.servico, 'Nao identificado')}\n"
+        f"Temperatura: {analise['temperatura'].capitalize()}\n"
+        f"Prioridade: {analise['prioridade'].capitalize()}\n"
+        f"Score: {analise['score']}\n\n"
+        "Lead aguardando atendimento no CRM."
+    )
+
+
+
+def obter_destinatario_notificacao(db, empresa_id):
+    """
+    Retorna o destinatario interno da empresa.
+    Preserva o LID existente da Forway e isola tenants.
+    """
+    if empresa_id == 1:
+        lid_forway = obter_lid_luciano()
+        if lid_forway:
+            return lid_forway
+
+    from app.models.models import EmpresaAtendimentoConfig
+
+    config = (
+        db.query(EmpresaAtendimentoConfig)
+        .filter(
+            EmpresaAtendimentoConfig.empresa_id == empresa_id
+        )
+        .one_or_none()
+    )
+
+    if config is None or not config.whatsapp_notificacao:
+        return None
+
+    return obter_chat_id_whatsapp(
+        config.whatsapp_notificacao
+    )
+
 
 
 def obter_lid_luciano() -> str | None:
@@ -468,8 +561,95 @@ def receber_mensagem(dados: MensagemRequest):
 
         # Se o especialista já assumiu esta conversa no CRM,
         # a Sofia permanece em silêncio e não executa o fluxo da IA.
-        if conversa.humano_assumiu is True:
+
+        from app.services.mensagem_service import (
+            persistir_mensagem_segura,
+        )
+
+        resultado_persistencia, mensagem_interna_id = persistir_mensagem_segura(
+            empresa_id=dados.empresa_id,
+            conversa_id=conversa.id,
+            cliente_id=conversa.cliente_id,
+            remetente="cliente",
+            texto=dados.mensagem,
+            from_me=False,
+            mensagem_id_externo=dados.mensagem_id_externo,
+            retornar_id=True,
+        )
+
+        if resultado_persistencia == "erro":
+            raise RuntimeError(
+                "Falha ao registrar mensagem recebida no CRM."
+            )
+
+        if resultado_persistencia == "criada":
+            from app.services.mensagem_service import (
+                assumir_processamento_mensagem,
+            )
+
+            reservado = assumir_processamento_mensagem(
+                db,
+                empresa_id=dados.empresa_id,
+                conversa_id=conversa.id,
+                mensagem_id=mensagem_interna_id,
+            )
+
+            if not reservado:
+                raise RuntimeError(
+                    "Nao foi possivel reservar a mensagem."
+                )
+
+            db.commit()
+
+        if (
+            dados.mensagem_id_externo
+            and resultado_persistencia == "duplicada"
+        ):
+            from app.services.mensagem_service import (
+                consultar_estado_mensagem,
+            )
+
+            estado_mensagem = consultar_estado_mensagem(
+                db,
+                empresa_id=dados.empresa_id,
+                conversa_id=conversa.id,
+                mensagem_id_externo=dados.mensagem_id_externo,
+            )
+
             return {
+                "conversa_id": conversa.id,
+                "cliente_id": conversa.cliente_id,
+                "empresa_id": dados.empresa_id,
+                "resposta_agente": None,
+                "nova_lead": False,
+                "alerta_atendimento_humano": False,
+                "notificacao_luciano": None,
+                "status": "mensagem_duplicada",
+                "estado_processamento": estado_mensagem,
+            }
+
+        if conversa.humano_assumiu is True:
+            from app.services.mensagem_service import (
+                concluir_processamento_mensagem,
+            )
+
+            concluido = concluir_processamento_mensagem(
+                db,
+                empresa_id=dados.empresa_id,
+                conversa_id=conversa.id,
+                mensagem_id=mensagem_interna_id,
+            )
+
+            if not concluido:
+                raise RuntimeError(
+                    "Falha ao concluir mensagem em atendimento humano."
+                )
+
+            db.commit()
+
+            return {
+                "conversa_id": conversa.id,
+                "cliente_id": conversa.cliente_id,
                 "empresa_id": dados.empresa_id,
                 "canal": conversa.canal,
                 "etapa_atual": conversa.etapa,
@@ -489,10 +669,22 @@ def receber_mensagem(dados: MensagemRequest):
             conversa.empresa_id,
         )
 
+        etapa_anterior = conversa.etapa
+
         resposta, analise = conduzir_conversa(
             conversa,
             dados.mensagem,
             contexto_empresa=contexto_empresa,
+        )
+
+        primeiro_encaminhamento_humano = (
+            etapa_anterior != 'aguardando_humano'
+            and conversa.etapa == 'aguardando_humano'
+        )
+
+        pedido_humano_explicito = (
+            primeiro_encaminhamento_humano
+            and detectar_pedido_atendimento_humano(dados.mensagem)
         )
         
 
@@ -502,6 +694,12 @@ def receber_mensagem(dados: MensagemRequest):
         lead_id = None
         nova_lead = False
         notificacao_luciano = None
+
+        if pedido_humano_explicito:
+            notificacao_luciano = montar_alerta_atendimento_humano(
+                conversa,
+                contexto_empresa.nome_empresa,
+            )
 
         # Registra no CRM contatos comerciais que ainda não concluíram
         # a qualificação. A lead provisória não dispara notificação
@@ -715,19 +913,12 @@ def receber_mensagem(dados: MensagemRequest):
                 lead_id = lead.id
                 nova_lead = True
 
-                notificacao_luciano = (
-                    "🔥 Nova lead qualificada — Forway\n\n"
-                    f"Nome: {conversa.nome or 'Não informado'}\n"
-                    f"Empresa: {conversa.empresa or 'Não informada'}\n"
-                    f"Segmento: {conversa.segmento or 'Não informado'}\n"
-                    f"WhatsApp: +{conversa.telefone}\n"
-                    f"Abrir conversa: https://wa.me/{conversa.telefone}\n"
-                    f"Serviço: {conversa.servico or 'Não identificado'}\n"
-                    f"Temperatura: {analise['temperatura'].capitalize()}\n"
-                    f"Prioridade: {analise['prioridade'].capitalize()}\n"
-                    f"Score: {analise['score']}\n\n"
-                    "Lead aguardando atendimento no CRM."
-                )
+                if not pedido_humano_explicito:
+                    notificacao_luciano = montar_alerta_lead_comercial(
+                        conversa,
+                        analise,
+                        contexto_empresa.nome_empresa,
+                    )
 
             else:
                 era_lead_provisoria = (
@@ -812,21 +1003,34 @@ def receber_mensagem(dados: MensagemRequest):
                     lead_id = lead_existente.id
                     nova_lead = True
 
-                    notificacao_luciano = (
-                        "🔥 Nova lead qualificada — Forway\n\n"
-                        f"Nome: {conversa.nome or 'Não informado'}\n"
-                        f"Empresa: {conversa.empresa or 'Não informada'}\n"
-                        f"Segmento: {conversa.segmento or 'Não informado'}\n"
-                        f"WhatsApp: +{conversa.telefone}\n"
-                        f"Abrir conversa: https://wa.me/{conversa.telefone}\n"
-                        f"Serviço: {conversa.servico or 'Não identificado'}\n"
-                        f"Temperatura: {analise['temperatura'].capitalize()}\n"
-                        f"Prioridade: {analise['prioridade'].capitalize()}\n"
-                        f"Score: {analise['score']}\n\n"
-                        "Lead aguardando atendimento no CRM."
-                    )
+                    if not pedido_humano_explicito:
+                        notificacao_luciano = montar_alerta_lead_comercial(
+                            conversa,
+                            analise,
+                            contexto_empresa.nome_empresa,
+                        )
+
+        from app.services.mensagem_service import (
+            concluir_processamento_mensagem,
+        )
+
+        concluido = concluir_processamento_mensagem(
+            db,
+            empresa_id=dados.empresa_id,
+            conversa_id=conversa.id,
+            mensagem_id=mensagem_interna_id,
+        )
+
+        if not concluido:
+            raise RuntimeError(
+                "Falha ao concluir processamento da mensagem."
+            )
+
+        db.commit()
 
         return {
+            "conversa_id": conversa.id,
+            "cliente_id": conversa.cliente_id,
             "empresa_id": dados.empresa_id,
             "canal": conversa.canal,
             "etapa_atual": conversa.etapa,
@@ -847,6 +1051,7 @@ def receber_mensagem(dados: MensagemRequest):
             "lead_id": lead_id,
             "nova_lead": nova_lead,
             "notificacao_luciano": notificacao_luciano,
+            "alerta_atendimento_humano": pedido_humano_explicito,
         }
 
     except Exception as erro:
@@ -1045,6 +1250,7 @@ async def webhook_waha(payload: dict):
         canal="whatsapp",
         identificador=chat_id,
         mensagem=texto,
+        mensagem_id_externo=mensagem_id,
     )
 
     resultado = receber_mensagem(dados)
@@ -1058,15 +1264,44 @@ async def webhook_waha(payload: dict):
             **resultado,
         }
 
+    if resultado.get("status") == "mensagem_duplicada":
+        return {
+            "status": "ignorado",
+            "motivo": "mensagem_duplicada",
+            "estado_processamento": resultado.get(
+                "estado_processamento"
+            ),
+            "empresa_id": empresa_id,
+            "message_id": mensagem_id,
+        }
+
     resposta = resultado.get("resposta_agente")
 
     if (
-        resultado.get("nova_lead") is True
+        (
+            resultado.get("nova_lead") is True
+            or resultado.get("alerta_atendimento_humano") is True
+        )
         and resultado.get("notificacao_luciano")
     ):
-        chat_id_luciano = obter_lid_luciano()
+        chat_id_destinatario = None
+        db_notificacao = None
+        try:
+            db_notificacao = SessionLocal()
+            chat_id_destinatario = obter_destinatario_notificacao(
+                db_notificacao,
+                empresa_id,
+            )
+        except Exception as erro_notificacao:
+            print(
+                f"Falha ao consultar destinatario de notificacao "
+                f"da empresa {empresa_id}: {erro_notificacao}"
+            )
+        finally:
+            if db_notificacao is not None:
+                db_notificacao.close()
 
-        if chat_id_luciano:
+        if chat_id_destinatario:
             headers_notificacao = {
                 "Content-Type": "application/json",
                 "X-Api-Key": os.getenv(
@@ -1081,7 +1316,7 @@ async def webhook_waha(payload: dict):
                     headers=headers_notificacao,
                     json={
                         "session": sessao,
-                        "chatId": chat_id_luciano,
+                        "chatId": chat_id_destinatario,
                         "text": resultado["notificacao_luciano"],
                     },
                     timeout=15,
@@ -1091,10 +1326,45 @@ async def webhook_waha(payload: dict):
 
             except requests.RequestException:
                 traceback.print_exc()
+        else:
+            print(
+                f"ALERTA: notificacao nao enviada para empresa "
+                f"{empresa_id}: destinatario nao configurado."
+            )
 
     status_envio = None
+    resposta_mensagem_id = None
 
     if resposta:
+        from app.services.mensagem_service import (
+            registrar_resposta_agente,
+        )
+
+        db_resposta = SessionLocal()
+        try:
+            id_resposta_externo = (
+                "sofia:" + mensagem_id
+                if mensagem_id and len(mensagem_id) <= 174
+                else None
+            )
+
+            registro_resposta = registrar_resposta_agente(
+                db_resposta,
+                empresa_id=empresa_id,
+                conversa_id=resultado["conversa_id"],
+                cliente_id=resultado.get("cliente_id"),
+                texto=resposta,
+                mensagem_id_externo=id_resposta_externo,
+            )
+
+            resposta_mensagem_id = registro_resposta.id
+            db_resposta.commit()
+        except Exception:
+            db_resposta.rollback()
+            raise
+        finally:
+            db_resposta.close()
+
         delay = calcular_delay_resposta(resposta)
 
         headers = {
@@ -1124,6 +1394,46 @@ async def webhook_waha(payload: dict):
             resposta,
             headers,
         )
+
+        from app.services.mensagem_service import (
+            registrar_resultado_envio,
+        )
+        from app.services.estados_mensagem import (
+            classificar_resultado_envio,
+        )
+
+        db_envio = SessionLocal()
+        try:
+            atualizado = registrar_resultado_envio(
+                db_envio,
+                empresa_id=empresa_id,
+                conversa_id=resultado["conversa_id"],
+                mensagem_id=resposta_mensagem_id,
+                status_envio=classificar_resultado_envio(
+                    envio_ok,
+                    status_envio,
+                ),
+            )
+
+            if not atualizado:
+                raise RuntimeError(
+                    "Nao foi possivel registrar resultado do WAHA."
+                )
+
+            db_envio.commit()
+        except Exception as erro_registro_envio:
+            db_envio.rollback()
+            print(
+                "[WAHA WEBHOOK] falha ao registrar resultado "
+                f"do envio: {erro_registro_envio}",
+                flush=True,
+            )
+            status_envio = (
+                status_envio
+                or "registro_resultado_pendente"
+            )
+        finally:
+            db_envio.close()
 
         if not envio_ok:
             print(

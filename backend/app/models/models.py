@@ -818,3 +818,39 @@ class ConexaoCanal(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class Mensagem(Base):
+    __tablename__ = "mensagens"
+
+    id = Column(Integer, primary_key=True)
+
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    conversa_id = Column(
+        Integer,
+        ForeignKey("conversas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    cliente_id = Column(
+        Integer,
+        ForeignKey("clientes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    remetente = Column(String(50), nullable=False)
+    texto = Column(Text, nullable=True)
+    tipo = Column(String(50), nullable=True, server_default="texto")
+    midia_url = Column(Text, nullable=True)
+    midia_tipo = Column(String(50), nullable=True)
+    from_me = Column(Boolean, nullable=True, server_default="false")
+    mensagem_id_externo = Column(String(180), nullable=True)
+    criado_em = Column(DateTime, nullable=True, server_default=func.now())
+    status_processamento = Column(String(30), nullable=True)
+    processado_em = Column(DateTime, nullable=True)
+    status_envio = Column(String(40), nullable=True)
