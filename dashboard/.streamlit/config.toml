@@ -1,2 +1,2 @@
-﻿[server]
-enableStaticFileServing = true
+[server]
+enableStaticServing = true
