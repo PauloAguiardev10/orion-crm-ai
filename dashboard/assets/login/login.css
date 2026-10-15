@@ -1,0 +1,180 @@
+﻿
+/* ORION CRM AI — LOGIN OFICIAL
+   Imagem aprovada: Inteligência Conectada
+   Campos funcionais do Streamlit
+*/
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker) {
+    background-color: #020817 !important;
+    background-image: url("/app/static/login_orion_final.png") !important;
+    background-position: center top !important;
+    background-size: 100% 100vh !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    position: relative;
+}
+
+/* Ocultar elementos do Streamlit apenas no login */
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stHeader"] {
+    display: none !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stMain"],
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stMainBlockContainer"] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stMain"] {
+    padding-top: 0 !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stToolbar"],
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+.block-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+/* Posicionamento do formulário */
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stColumn"]:has(.orion-login-marker) {
+    position: fixed !important;
+    z-index: 10 !important;
+
+    top: 59vh !important;
+    left: 4.6vw !important;
+
+    width: 24vw !important;
+    min-width: 0 !important;
+
+    background: transparent !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stColumn"]:has(.orion-login-marker)
+[data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+}
+
+.orion-login-marker {
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Campos de usuário e senha */
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stTextInput"] {
+    margin-bottom: 12px !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stTextInput"]
+[data-baseweb="input"] {
+    height: 60px !important;
+    min-height: 60px !important;
+
+    border: 1px solid rgba(48, 166, 255, .65) !important;
+    border-radius: 12px !important;
+    background: #102136 !important;
+
+    overflow: hidden !important;
+    box-shadow: 0 0 10px rgba(0, 174, 255, .08);
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stTextInput"] input {
+    height: 60px !important;
+    min-height: 60px !important;
+
+    background: #102136 !important;
+    color: #ffffff !important;
+
+    border: none !important;
+    font-size: 16px !important;
+    padding: 0 16px !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stTextInput"] input::placeholder {
+    color: #b9c8da !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+[data-testid="stTextInput"] button {
+    background: #102136 !important;
+    color: #ffffff !important;
+    border: none !important;
+    height: 100% !important;
+}
+
+/* Botão Entrar */
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+.stButton {
+    margin-top: 14px !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+.stButton > button {
+    width: 100% !important;
+    height: 56px !important;
+    min-height: 56px !important;
+
+    border: none !important;
+    border-radius: 12px !important;
+
+    background: linear-gradient(
+        95deg,
+        #00baf3 0%,
+        #1469f5 55%,
+        #0d0254 100%
+    ) !important;
+
+    color: #ffffff !important;
+    font-size: 17px !important;
+    font-weight: 700 !important;
+
+    box-shadow: 0 5px 18px rgba(0, 153, 255, .2);
+    transition: filter .2s ease;
+}
+
+[data-testid="stAppViewContainer"]:has(.orion-login-marker)
+.stButton > button:hover {
+    filter: brightness(1.12);
+}
+
+/* Telas menores */
+
+@media (max-width: 750px) {
+    [data-testid="stAppViewContainer"]:has(.orion-login-marker) {
+        background-size: cover !important;
+        background-position: 30% center !important;
+    }
+
+    [data-testid="stAppViewContainer"]:has(.orion-login-marker)
+    [data-testid="stColumn"]:has(.orion-login-marker) {
+        left: 6vw !important;
+        width: 88vw !important;
+        top: 60vh !important;
+
+        background: rgba(3, 12, 31, .9) !important;
+        padding: 12px !important;
+        border-radius: 14px !important;
+    }
+}

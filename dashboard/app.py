@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -207,154 +208,127 @@ def render_titulo_pagina(pagina):
 
 
 def tela_login():
-    st.markdown(
-        """
-        <style>
-        .main .block-container {
-            max-width: 100%;
-            padding-top: 6vh;
-        }
+    """
+    Login principal do Orion CRM AI.
 
-        div[data-testid="stTextInput"] input {
-            background-color: #111827;
-            border: 1px solid rgba(0,229,255,.18);
-            border-radius: 14px;
-            color: white;
-            height: 52px;
-        }
+    A imagem estática apresenta:
+    - Identidade Orion Systems
+    - IA robótica
+    - Planeta Terra e redes neurais
+    - Dashboard demonstrativo da Forway
 
-        div[data-testid="stTextInput"] label {
-            color: #E2E8F0 !important;
-            font-weight: 600;
-        }
+    Os campos e o botão são reais.
+    A autenticação multiempresa é preservada.
+    """
 
-        div.stButton {
-            margin-top: 18px;
-        }
-
-        div.stButton > button {
-            background: linear-gradient(90deg, #06B6D4, #7C3AED);
-            border: none;
-            color: white;
-            font-weight: 700;
-            border-radius: 14px;
-            height: 56px;
-            font-size: 18px;
-            transition: .3s;
-        }
-
-        div.stButton > button:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 18px rgba(0,229,255,.22);
-        }
-
-        .titulo-orion {
-            text-align: center;
-            font-size: 58px;
-            font-weight: 900;
-            letter-spacing: 2px;
-            color: white;
-            margin-top: -10px;
-            margin-bottom: 4px;
-        }
-
-        .subtitulo-orion {
-            text-align: center;
-            color: #00E5FF;
-            font-size: 18px;
-            letter-spacing: 1px;
-            margin-bottom: 4px;
-        }
-
-        .powered-orion {
-            text-align: center;
-            color: #64748B;
-            font-size: 12px;
-            margin-bottom: 38px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
+    css_path = (
+        Path(__file__).resolve().parent
+        / "assets"
+        / "login"
+        / "login.css"
     )
 
-    col1, col2, col3 = st.columns([1, 1.1, 1])
-
-    with col2:
-        logo1, logo2, logo3 = st.columns([1, 0.8, 1])
-
-        with logo2:
-            try:
-                st.image(
-                    "assets/logo_orion_symbol.png",
-                    width=240,
-                )
-            except Exception:
-                pass
-
-        st.markdown(
-            """
-            <div class="titulo-orion">
-                ORION SYSTEMS
-            </div>
-            """,
-            unsafe_allow_html=True,
+    if css_path.is_file():
+        css_login = css_path.read_text(
+            encoding="utf-8-sig"
         )
 
         st.markdown(
-            """
-            <div class="subtitulo-orion">
-                Inteligência Comercial Automatizada
-            </div>
-            """,
+            f"<style>{css_login}</style>",
             unsafe_allow_html=True,
         )
 
+    # A imagem aprovada já contém:
+    # logo, títulos, painel Forway e elementos decorativos.
+    #
+    # Não renderizamos novamente esses elementos.
+    # Apenas os controles funcionais do login.
+
+    esquerda, direita = st.columns(
+        [1, 2],
+        gap="small",
+    )
+
+    with esquerda:
+
         st.markdown(
-            """
-            <div class="powered-orion">
-                Powered by Orion Intelligence
-            </div>
-            """,
+            '<div class="orion-login-marker"></div>',
             unsafe_allow_html=True,
         )
 
         usuario = st.text_input(
-            "Usuário",
+            "Usuário ou empresa",
+            placeholder="Usuário ou empresa",
+            label_visibility="collapsed",
             key="login_usuario",
         )
 
         senha = st.text_input(
             "Senha",
+            placeholder="Senha",
             type="password",
+            label_visibility="collapsed",
             key="login_senha",
         )
 
         if st.button(
-            "Entrar",
+            "Entrar  →",
             use_container_width=True,
         ):
+
             if validar_login(usuario, senha):
+
                 usuario_id = obter_usuario_id(usuario)
+
                 empresa = obter_empresa_usuario(usuario)
-                empresa_id = obter_empresa_id_usuario(usuario)
+
+                empresa_id = obter_empresa_id_usuario(
+                    usuario
+                )
+
                 nivel = obter_nivel_usuario(usuario)
 
+                # Estado de autenticação
+
                 st.session_state.logado = True
+
                 st.session_state.usuario = usuario
+
                 st.session_state.usuario_id = usuario_id
+
                 st.session_state.empresa = empresa
+
                 st.session_state.empresa_id = empresa_id
+
                 st.session_state.nivel = nivel
 
-                st.session_state.empresa_login_id = empresa_id
-                st.session_state.empresa_login_nome = empresa
-                st.session_state.empresa_ativa_id = empresa_id
-                st.session_state.empresa_ativa_nome = empresa
+                # Empresa vinculada ao login
+
+                st.session_state.empresa_login_id = (
+                    empresa_id
+                )
+
+                st.session_state.empresa_login_nome = (
+                    empresa
+                )
+
+                # Empresa ativa no CRM
+
+                st.session_state.empresa_ativa_id = (
+                    empresa_id
+                )
+
+                st.session_state.empresa_ativa_nome = (
+                    empresa
+                )
 
                 st.rerun()
 
             else:
-                st.error("Usuário ou senha inválidos.")
+
+                st.error(
+                    "Usuário ou senha inválidos."
+                )
 
 
 if not st.session_state.logado:
