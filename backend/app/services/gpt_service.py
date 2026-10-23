@@ -687,6 +687,24 @@ Próxima ação recomendada:
             if resumo_comercial_valido(
                 resumo_sanitizado
             ):
+                servico_esperado = str(servico).strip()
+
+                padrao_servico = re.search(
+                    r"(?im)^Servi\u00e7o de interesse:\s*(.+)$",
+                    resumo_sanitizado,
+                )
+
+                servico_retornado = (
+                    padrao_servico.group(1).strip()
+                    if padrao_servico
+                    else None
+                )
+
+                if servico_retornado != servico_esperado:
+                    raise ValueError(
+                        "Resumo GPT alterou o servico de interesse."
+                    )
+
                 return resumo_sanitizado
 
             raise ValueError(

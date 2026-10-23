@@ -111,6 +111,49 @@ def persistir_mensagem_segura(
             except Exception:
                 pass
 
+        from sqlalchemy.exc import IntegrityError
+
+        causa = getattr(erro, "orig", None)
+        sqlstate = (
+            getattr(causa, "sqlstate", None)
+            or getattr(causa, "pgcode", None)
+        )
+
+        diagnostico = getattr(causa, "diag", None)
+        restricao = getattr(
+            diagnostico, "constraint_name", None
+        )
+
+        if (
+            isinstance(erro, IntegrityError)
+            and sqlstate == "23505"
+            and restricao == "ux_mensagens_empresa_conversa_externo"
+            and mensagem_id_externo
+        ):
+            try:
+                existente = (
+                    db.query(Mensagem)
+                    .filter(
+                        Mensagem.empresa_id == empresa_id,
+                        Mensagem.conversa_id == conversa_id,
+                        Mensagem.mensagem_id_externo == mensagem_id_externo,
+                    )
+                    .first()
+                )
+
+                if existente is not None:
+                    if retornar_id:
+                        return "duplicada", existente.id
+                    return "duplicada"
+
+            except Exception as consulta_erro:
+                db.rollback()
+                print(
+                    "[CRM MENSAGENS] falha ao consultar duplicada: "
+                    f"{type(consulta_erro).__name__}: {consulta_erro}",
+                    flush=True,
+                )
+
         print(
             "[CRM MENSAGENS] falha ao persistir: "
             f"{type(erro).__name__}: {erro}",
@@ -295,3 +338,67 @@ def registrar_resposta_agente(
     registro.status_processamento = "concluida"
 
     return registro
+
+def listar_mensagens_pendentes(
+    db: Session,
+    empresa_id: int,
+    limite: int = 100,
+):
+    """Consulta mensagens potencialmente interrompidas sem alterar o banco."""
+
+    from sqlalchemy import func, text
+
+    if empresa_id < 1:
+        raise ValueError("Empresa invalida.")
+
+    if not 1 <= limite <= 500:
+        raise ValueError("Limite deve estar entre 1 e 500.")
+
+    limite_tempo = func.now() - text("INTERVAL '5 minutes'")
+
+    return (
+        db.query(Mensagem)
+        .filter(
+            Mensagem.empresa_id == empresa_id,
+            Mensagem.remetente == "cliente",
+            Mensagem.status_processamento.in_(
+                ["recebida", "processando", "falha"]
+            ),
+            Mensagem.criado_em < limite_tempo,
+        )
+        .order_by(Mensagem.criado_em.asc())
+        .limit(limite)
+        .all()
+    )
+
+
+def listar_respostas_sem_resultado_envio(
+    db: Session,
+    empresa_id: int,
+    limite: int = 100,
+):
+    """Lista respostas sem resultado de envio, sem modificar registros."""
+
+    from sqlalchemy import func, text
+
+    if empresa_id < 1:
+        raise ValueError("Empresa invalida.")
+
+    if not 1 <= limite <= 500:
+        raise ValueError("Limite deve estar entre 1 e 500.")
+
+    limite_tempo = func.now() - text("INTERVAL '5 minutes'")
+
+    return (
+        db.query(Mensagem)
+        .filter(
+            Mensagem.empresa_id == empresa_id,
+            Mensagem.remetente == "agente",
+            Mensagem.from_me.is_(True),
+            Mensagem.status_envio.is_(None),
+            Mensagem.criado_em < limite_tempo,
+        )
+        .order_by(Mensagem.criado_em.asc())
+        .limit(limite)
+        .all()
+    )

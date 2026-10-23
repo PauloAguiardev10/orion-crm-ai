@@ -1,4 +1,4 @@
-import re
+﻿import re
 import random
 import unicodedata
 from app.agents.detector_atendimento_humano import detectar_pedido_atendimento_humano
@@ -121,6 +121,50 @@ def identificar_servico_empresa(mensagem: str, contexto_empresa=None):
         return None
     candidatos.sort(reverse=True)
     return candidatos[0][2]
+
+
+
+def identificar_servico_com_intencao(mensagem: str, contexto_empresa=None):
+    """Detecta interesse sem confundir negacao ou cadastro com contratacao.
+
+    Identificar um termo no catalogo nao implica que o cliente o queira.
+    Analisa cada fala separadamente para nao misturar falas historicas.
+    """
+    texto = str(mensagem or "").strip()
+    if not texto:
+        return None
+
+    # A analise comercial agrega falas em linhas; nunca misturar uma
+    # negacao de uma fala com o interesse de outra.
+    resultado = None
+    for linha in texto.splitlines():
+        fala = linha.strip()
+        if not fala:
+            continue
+        normalizada = normalizar_linguagem_cliente(fala)
+
+        # Respostas de cadastro e descricoes de ramo de atividade.
+        if re.match(
+            r"^(?:atuo|atuamos|trabalho|trabalhamos) (?:com|em)\b"
+            r"|^(?:sou|somos) do segmento\b"
+            r"|^(?:meu|nosso) (?:ramo|segmento)\b",
+            normalizada,
+        ):
+            continue
+
+        # Negacoes diretas de contratacao/interesse. Conservador:
+        # na duvida nao inferir o produto automaticamente.
+        if re.search(
+            r"\b(?:nao (?:quero|preciso|busco|tenho interesse em|vou contratar|pretendo contratar)"
+            r"|sem interesse em|nao tenho interesse em)\b",
+            normalizada,
+        ):
+            continue
+
+        candidato = identificar_servico_empresa(fala, contexto_empresa)
+        if candidato:
+            resultado = candidato
+    return resultado
 
 
 def resposta_servicos_empresa(contexto_empresa, saudacao=None):
@@ -771,10 +815,12 @@ def classificar_servico_por_objetivo_contextual(
     Quando existe contexto de empresa, somente aceita servicos
     presentes e ativos no catalogo do tenant atual.
     """
-    if conversa.servico:
-        return conversa.servico
-
     objetivo = (conversa.objetivo or "").strip()
+
+    # O objetivo consolidado pode corrigir uma classificacao preliminar.
+    # Sem evidencia de necessidade multipla, preserva a escolha anterior.
+    if conversa.servico and not objetivo_multiplo_para_estrutura(objetivo):
+        return conversa.servico
     referencia_servico = None
 
     if objetivo:
@@ -787,10 +833,14 @@ def classificar_servico_por_objetivo_contextual(
 
     if referencia_servico:
         if contexto_empresa is not None:
-            conversa.servico = identificar_servico_empresa(
+            candidato = identificar_servico_empresa(
                 referencia_servico,
                 contexto_empresa,
             )
+            # Nunca apaga um servico valido quando o tenant nao
+            # oferece a alternativa sugerida pelo objetivo.
+            if candidato:
+                conversa.servico = candidato
         else:
             if referencia_servico == "estrutura completa":
                 conversa.servico = "Estrutura Completa"
@@ -817,47 +867,49 @@ def classificar_servico_por_objetivo_contextual(
 
 
 def objetivo_multiplo_para_estrutura(texto: str) -> bool:
+    texto_normalizado = normalizar_linguagem_cliente(texto)
+
+    negacoes = [
+        r"\bnao\s+(?:quero|preciso|busco|tenho interesse em)\s+tudo\b",
+        r"\bnao\s+(?:quero|preciso|busco)\s+todos\b",
+        r"\bapenas\s+(?:trafego pago|social media|um servico)\b",
+        r"\bsomente\s+(?:trafego pago|social media|um servico)\b",
+    ]
+
+    if any(re.search(padrao, texto_normalizado) for padrao in negacoes):
+        return False
+
     if (
         objetivo_vendas_para_estrutura(texto)
         and objetivo_marca_para_social_media(texto)
     ):
         return True
 
-    return contem_termo(
-        texto,
-        [
-            "tudo isso",
-            "quero tudo isso",
-            "busco tudo isso",
-            "estou buscando tudo isso",
-            "estou precisando de tudo",
-            "preciso de tudo isso",
-            "tudo que você está falando",
-            "tudo que voce esta falando",
-            "tudo o que você está falando",
-            "tudo o que voce esta falando",
-            "todos esses objetivos",
-            "todos esses pontos",
-            "tudo que você falou",
-            "tudo que voce falou",
-            "tudo o que você falou",
-            "tudo o que voce falou",
-            "tudo que você citou",
-            "tudo que voce citou",
-            "as três opções",
-            "tudo que você mencionou",
-            "tudo que voce mencionou",
-            "tudo o que você mencionou",
-            "tudo o que voce mencionou",
-            "tenho interesse em tudo",
-            "quero todos",
-            "quero todos eles",
-            "as tres opcoes",
-            "as três",
-            "as tres",
-            "todos eles",
-        ],
-    )
+    expressoes = [
+        "tudo isso",
+        "quero tudo isso",
+        "busco tudo isso",
+        "estou buscando tudo isso",
+        "estou precisando de tudo",
+        "preciso de tudo isso",
+        "tudo que voce esta falando",
+        "tudo o que voce esta falando",
+        "todos esses objetivos",
+        "todos esses pontos",
+        "tudo que voce falou",
+        "tudo o que voce falou",
+        "tudo que voce citou",
+        "tudo que voce mencionou",
+        "tudo o que voce mencionou",
+        "tenho interesse em tudo",
+        "quero todos os servicos",
+        "quero todos eles",
+        "tres opcoes",
+        "as tres",
+        "todos eles",
+    ]
+
+    return contem_termo(texto, expressoes)
 
 
 def objetivo_vendas_para_estrutura(texto: str) -> bool:
@@ -1331,7 +1383,7 @@ def identificar_servico_explicito_na_mensagem(
     Mantem separadas a intencao conversacional
     e a identificacao do servico.
     """
-    servico_catalogo = identificar_servico_empresa(
+    servico_catalogo = identificar_servico_com_intencao(
         mensagem,
         contexto_empresa=contexto_empresa,
     )
@@ -1347,6 +1399,12 @@ def identificar_servico_explicito_na_mensagem(
     texto = normalizar_linguagem_cliente(
         mensagem
     )
+    if re.search(
+        r"\b(?:nao (?:quero|preciso|busco|tenho interesse em|vou contratar|pretendo contratar)"
+        r"|sem interesse em|nao tenho interesse em)\b",
+        texto,
+    ):
+        return None
 
     grupos_servico = (
         (
@@ -1455,7 +1513,7 @@ def analisar_mensagem(
     texto = mensagem.lower()
     score = 0
 
-    servico_identificado = identificar_servico_empresa(
+    servico_identificado = identificar_servico_com_intencao(
         mensagem,
         contexto_empresa=contexto_empresa,
     )
@@ -1749,6 +1807,52 @@ def resposta_inicial_por_servico(intencao, mensagem='', contexto_empresa=None):
     if intencao == 'objetivo_comercial':
         return f'{saudacao}\nEntendi\nEsse é exatamente o tipo de objetivo que vale analisar com mais contexto.\nComo posso te chamar?'
     return f'{saudacao}\nSou a {nome_agente}, da {nome_empresa}.\nComo posso ajudar você hoje?'
+
+
+
+def pergunta_objetivo_por_servico(servico, sem_empresa_formal=False):
+    perguntas = {
+        "Automa\u00e7\u00e3o":
+            "Qual processo da empresa voc\u00eas mais gostariam de automatizar hoje?",
+        "Atendimento Automatizado com IA":
+            "Qual \u00e9 a maior dificuldade que voc\u00eas enfrentam hoje no atendimento aos clientes?",
+        "Gest\u00e3o de Tr\u00e1fego Pago":
+            "Com os an\u00fancios, voc\u00eas querem atrair mais clientes, aumentar as vendas ou melhorar os resultados atuais?",
+        "Social Media Estrat\u00e9gico":
+            "O que voc\u00eas mais querem melhorar nas redes sociais: presen\u00e7a da marca, engajamento ou gera\u00e7\u00e3o de clientes?",
+        "Web Design":
+            "O que voc\u00eas precisam hoje: criar um site, renovar o atual ou melhorar os resultados dele?",
+        "Treinamento e Suporte Comercial":
+            "Qual \u00e9 a principal dificuldade que a equipe comercial enfrenta hoje?",
+        "Estrutura Completa":
+            "Qual \u00e9 a maior prioridade hoje: aumentar as vendas, fortalecer a marca ou melhorar a opera\u00e7\u00e3o comercial?",
+    }
+
+    pergunta = perguntas.get(
+        (servico or "").strip(),
+        "O que voc\u00eas mais querem melhorar hoje na empresa?"
+    )
+
+    if sem_empresa_formal:
+        pergunta = pergunta.replace(
+            "voc\u00eas mais gostariam", "voc\u00ea mais gostaria"
+        )
+        pergunta = pergunta.replace(
+            "voc\u00eas enfrentam", "voc\u00ea enfrenta"
+        )
+        pergunta = pergunta.replace(
+            "voc\u00eas mais querem", "voc\u00ea mais quer"
+        )
+        pergunta = pergunta.replace(
+            "voc\u00eas querem", "voc\u00ea quer"
+        )
+        pergunta = pergunta.replace(
+            "voc\u00eas precisam", "voc\u00ea precisa"
+        )
+        pergunta = pergunta.replace("da empresa", "do seu trabalho")
+        pergunta = pergunta.replace("na empresa", "no seu trabalho")
+
+    return pergunta
 
 
 def comentario_segmento(segmento: str):
@@ -2393,6 +2497,15 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             ),
         )
 
+    # Preserva o objetivo informado na etapa atual antes da
+    # extracao GPT, evitando perder a classificacao contextual.
+    if (
+        conversa.etapa in ("entender_objetivo", "entender_objetivo_inicial")
+        and not conversa.objetivo
+        and parece_objetivo_valido(texto)
+    ):
+        conversa.objetivo = texto
+
     campos_contexto_aplicados = []
 
     if deve_usar_extrator_contexto(texto):
@@ -2407,7 +2520,18 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
 
     intencao = detectar_intencao_cliente(texto)
 
-    if not conversa.servico:
+    etapas_cadastrais_sem_deteccao_servico = {
+        "coletar_nome",
+        "coletar_empresa",
+        "coletar_segmento",
+        "coletar_origem",
+        "coletar_whatsapp",
+    }
+
+    if (
+        not conversa.servico
+        and conversa.etapa not in etapas_cadastrais_sem_deteccao_servico
+    ):
         servico_explicito = identificar_servico_explicito_na_mensagem(
             texto,
             contexto_empresa=contexto_empresa,
@@ -2442,19 +2566,11 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             if servico_estrutura:
                 conversa.servico = servico_estrutura
 
-    etapas_cadastrais_sem_deteccao_servico = {
-        "coletar_nome",
-        "coletar_empresa",
-        "coletar_segmento",
-        "coletar_origem",
-        "coletar_whatsapp",
-    }
-
     if (
         conversa.servico is None
         and conversa.etapa not in etapas_cadastrais_sem_deteccao_servico
     ):
-        servico_explicito = identificar_servico_empresa(
+        servico_explicito = identificar_servico_com_intencao(
             texto,
             contexto_empresa=contexto_empresa,
         )
@@ -2473,7 +2589,11 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     contexto_aquisicao = detectar_contexto_aquisicao(texto)
     if contexto_aquisicao and (not conversa.origem_aquisicao):
         conversa.origem_aquisicao = obter_origem_aquisicao(contexto_aquisicao)
-    texto_para_analise = montar_texto_comercial_cliente(conversa, texto)
+    mensagem_comercial = (
+        "" if conversa.etapa in etapas_cadastrais_sem_deteccao_servico
+        else texto
+    )
+    texto_para_analise = montar_texto_comercial_cliente(conversa, mensagem_comercial)
     analise = analisar_mensagem(texto_para_analise, contexto_empresa=contexto_empresa)
     etapas_que_podem_identificar_servico = ['inicio', 'entender_objetivo_inicial', 'entender_objetivo']
     if conversa.etapa in etapas_que_podem_identificar_servico and conversa.servico is None and (analise['produto'] != 'não identificado'):
@@ -2596,7 +2716,25 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
             if sofia_ja_se_apresentou(conversa, contexto_empresa=contexto_empresa):
                 resposta = 'Claro\nPara eu entender melhor seu cenário, como posso te chamar?'
             else:
-                resposta = resposta_inicial_por_servico('geral', texto, contexto_empresa=contexto_empresa)
+                servico_inicial = (conversa.servico or '').strip()
+
+                if servico_inicial == 'Automa\u00e7\u00e3o':
+                    resposta = (
+                        f'{saudacao_personalizada(texto)}\n'
+                        'Entendi que voc\u00ea quer automatizar processos da empresa. '
+                        'Podemos conversar sobre isso.\n'
+                        'Como posso te chamar?'
+                    )
+                elif servico_inicial == 'Treinamento e Suporte Comercial':
+                    resposta = (
+                        f'{saudacao_personalizada(texto)}\n'
+                        'Entendi que voc\u00ea busca melhorar o trabalho da equipe comercial.\n'
+                        'Como posso te chamar?'
+                    )
+                else:
+                    resposta = resposta_inicial_por_servico(
+                        'geral', texto, contexto_empresa=contexto_empresa
+                    )
         if contexto_aquisicao and intencao != 'geral':
             resposta = combinar_contexto_com_resposta(
                 contexto_aquisicao,
@@ -2614,12 +2752,11 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     elif conversa.etapa == 'entender_objetivo_inicial':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if conversa.servico is None:
-            classificar_servico_por_objetivo_contextual(
-                conversa,
-                analise=analise,
-                contexto_empresa=contexto_empresa,
-            )
+        classificar_servico_por_objetivo_contextual(
+            conversa,
+            analise=analise,
+            contexto_empresa=contexto_empresa,
+        )
         conversa.etapa = 'coletar_nome'
         resposta = 'Entendi\nComo posso te chamar?'
     elif conversa.etapa == 'coletar_nome':
@@ -2745,7 +2882,13 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                     resposta = f'Vou solicitar que nossa equipe comercial entre em contato assim que poss\u00edvel.'
             else:
                 conversa.etapa = 'entender_objetivo'
-                resposta = 'Legal!\nHoje o que voc\u00ea mais busca: gerar mais vendas, receber mais contatos ou fortalecer a presen\u00e7a da marca?'
+                pergunta = pergunta_objetivo_por_servico(
+                    conversa.servico,
+                    sem_empresa_formal=(
+                        conversa.empresa == "Sem empresa formal"
+                    )
+                )
+                resposta = f'Legal!\n{pergunta}'
         else:
             conversa.etapa = 'coletar_segmento'
             resposta = 'Legal! E voc\u00eas trabalham com o qu\u00ea?'
@@ -2775,41 +2918,32 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                 resposta = f'{comentario_segmento(conversa.segmento)}\nVou solicitar que nossa equipe comercial entre em contato assim que poss\u00edvel.'
         else:
             conversa.etapa = 'entender_objetivo'
-            if conversa.empresa == "Sem empresa formal":
-                resposta = (
-                    f'{comentario_segmento(conversa.segmento)}\n'
-                    'E o que voc\u00ea mais quer melhorar hoje: vendas, '
-                    'n\u00famero de contatos ou presen\u00e7a da marca?'
+            pergunta = pergunta_objetivo_por_servico(
+                conversa.servico,
+                sem_empresa_formal=(
+                    conversa.empresa == "Sem empresa formal"
                 )
-            else:
-                resposta = (
-                    f'{comentario_segmento(conversa.segmento)}\n'
-                    'E o que voc\u00eas mais querem melhorar hoje: vendas, '
-                    'n\u00famero de contatos ou presen\u00e7a da marca?'
-                )
+            )
+            resposta = f'{comentario_segmento(conversa.segmento)}\n{pergunta}'
     elif conversa.etapa == 'entender_objetivo':
         if not parece_objetivo_valido(texto):
-            if conversa.empresa == "Sem empresa formal":
-                resposta = (
-                    "Entendi E o que voc\u00ea quer melhorar hoje: "
-                    "vendas, n\u00famero de contatos ou presen\u00e7a da marca?"
+            pergunta = pergunta_objetivo_por_servico(
+                conversa.servico,
+                sem_empresa_formal=(
+                    conversa.empresa == "Sem empresa formal"
                 )
-            else:
-                resposta = (
-                    "Entendi E o que voc\u00eas querem melhorar hoje: "
-                    "vendas, n\u00famero de contatos ou presen\u00e7a da marca?"
-                )
+            )
+            resposta = f'Entendi. {pergunta}'
             conversa.historico += f'\nAgente: {resposta}'
             return (resposta, analise)
 
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
-        if conversa.servico is None:
-            classificar_servico_por_objetivo_contextual(
-                conversa,
-                analise=analise,
-                contexto_empresa=contexto_empresa,
-            )
+        classificar_servico_por_objetivo_contextual(
+            conversa,
+            analise=analise,
+            contexto_empresa=contexto_empresa,
+        )
         resposta_base = resposta_base_por_servico(conversa, intencao, contexto_empresa=contexto_empresa)
         if not conversa.origem_aquisicao:
             conversa.etapa = 'coletar_origem'
@@ -2852,16 +2986,8 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                     "estrutura completa",
                     contexto_empresa,
                 )
-                servico_social = identificar_servico_empresa(
-                    "social media",
-                    contexto_empresa,
-                )
-
                 if objetivo_multiplo_para_estrutura(conversa.objetivo):
-                    if (
-                        servico_estrutura
-                        and conversa.servico in [None, servico_social]
-                    ):
+                    if servico_estrutura:
                         conversa.servico = servico_estrutura
 
                 elif conversa.servico is None:

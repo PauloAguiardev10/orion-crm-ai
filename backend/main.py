@@ -2,6 +2,7 @@ import json
 import os
 import random
 import time
+import threading
 import traceback
 import unicodedata
 from urllib.parse import quote
@@ -78,19 +79,21 @@ SESSAO_EMPRESA = carregar_mapa_sessoes()
 TELEFONES_LID_CACHE: dict[str, str] = {}
 
 MENSAGENS_WAHA_PROCESSADAS: dict[str, float] = {}
+LOCK_MENSAGENS_WAHA = threading.RLock()
 TTL_MENSAGEM_WAHA_SEGUNDOS = 10 * 60
 
 
 def limpar_cache_mensagens_waha() -> None:
-    agora = time.monotonic()
-    expiradas = [
-        mensagem_id
-        for mensagem_id, instante in MENSAGENS_WAHA_PROCESSADAS.items()
-        if agora - instante > TTL_MENSAGEM_WAHA_SEGUNDOS
-    ]
+    with LOCK_MENSAGENS_WAHA:
+        agora = time.monotonic()
+        expiradas = [
+            mensagem_id
+            for mensagem_id, instante in MENSAGENS_WAHA_PROCESSADAS.items()
+            if agora - instante > TTL_MENSAGEM_WAHA_SEGUNDOS
+        ]
 
-    for mensagem_id in expiradas:
-        MENSAGENS_WAHA_PROCESSADAS.pop(mensagem_id, None)
+        for mensagem_id in expiradas:
+            MENSAGENS_WAHA_PROCESSADAS.pop(mensagem_id, None)
 
 
 def obter_id_mensagem_waha(mensagem: dict) -> str | None:
@@ -125,18 +128,20 @@ def mensagem_waha_ja_processada(mensagem_id: str | None) -> bool:
     if not mensagem_id:
         return False
 
-    limpar_cache_mensagens_waha()
+    with LOCK_MENSAGENS_WAHA:
+        limpar_cache_mensagens_waha()
 
-    if mensagem_id in MENSAGENS_WAHA_PROCESSADAS:
-        return True
+        if mensagem_id in MENSAGENS_WAHA_PROCESSADAS:
+            return True
 
-    MENSAGENS_WAHA_PROCESSADAS[mensagem_id] = time.monotonic()
-    return False
+        MENSAGENS_WAHA_PROCESSADAS[mensagem_id] = time.monotonic()
+        return False
 
 
 def liberar_mensagem_waha(mensagem_id: str | None) -> None:
     if mensagem_id:
-        MENSAGENS_WAHA_PROCESSADAS.pop(mensagem_id, None)
+        with LOCK_MENSAGENS_WAHA:
+            MENSAGENS_WAHA_PROCESSADAS.pop(mensagem_id, None)
 
 
 def normalizar_telefone_crm(telefone: str | None) -> str | None:
@@ -1143,7 +1148,7 @@ def enviar_texto_waha(
 
 
 @app.post("/webhook/waha")
-async def webhook_waha(payload: dict):
+def webhook_waha(payload: dict):
     evento = payload.get("event")
     mensagem = payload.get("payload", {})
     mensagem_id = obter_id_mensagem_waha(mensagem)

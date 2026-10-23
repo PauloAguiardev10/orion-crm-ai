@@ -1,9 +1,11 @@
-from pathlib import Path
-import streamlit as st
+﻿import streamlit as st
 import streamlit.components.v1 as components
+
+from pathlib import Path
 
 from styles.theme import carregar_tema
 from components.sidebar import render_sidebar
+
 from services.leads_service import carregar_leads
 
 from services.auth_service import (
@@ -33,10 +35,14 @@ from app_pages.configuracoes import render_configuracoes
 from app_pages.empresas import render_empresas
 
 
+# ============================================================
+# PROTEÇÃO CONTRA TRADUÇÃO AUTOMÁTICA
+# ============================================================
+
 def proteger_interface_contra_traducao():
     """
     Marca o Orion CRM como interface pt-BR
-    e solicita que tradutores automaticos nao alterem a pagina.
+    e solicita que tradutores automáticos não alterem a página.
     """
 
     components.html(
@@ -48,20 +54,16 @@ def proteger_interface_contra_traducao():
 
                 doc.documentElement.lang = "pt-BR";
                 doc.documentElement.setAttribute(
-                    "translate",
-                    "no"
+                    "translate", "no"
                 );
-
                 doc.documentElement.classList.add(
                     "notranslate"
                 );
 
                 if (doc.body) {
                     doc.body.setAttribute(
-                        "translate",
-                        "no"
+                        "translate", "no"
                     );
-
                     doc.body.classList.add(
                         "notranslate"
                     );
@@ -72,23 +74,15 @@ def proteger_interface_contra_traducao():
                 );
 
                 if (!metaGoogle) {
-                    metaGoogle = doc.createElement(
-                        "meta"
-                    );
-
+                    metaGoogle = doc.createElement("meta");
                     metaGoogle.setAttribute(
-                        "name",
-                        "google"
+                        "name", "google"
                     );
-
-                    doc.head.appendChild(
-                        metaGoogle
-                    );
+                    doc.head.appendChild(metaGoogle);
                 }
 
                 metaGoogle.setAttribute(
-                    "content",
-                    "notranslate"
+                    "content", "notranslate"
                 );
 
                 let metaLanguage = doc.head.querySelector(
@@ -96,29 +90,20 @@ def proteger_interface_contra_traducao():
                 );
 
                 if (!metaLanguage) {
-                    metaLanguage = doc.createElement(
-                        "meta"
-                    );
-
+                    metaLanguage = doc.createElement("meta");
                     metaLanguage.setAttribute(
-                        "http-equiv",
-                        "Content-Language"
+                        "http-equiv", "Content-Language"
                     );
-
-                    doc.head.appendChild(
-                        metaLanguage
-                    );
+                    doc.head.appendChild(metaLanguage);
                 }
 
                 metaLanguage.setAttribute(
-                    "content",
-                    "pt-BR"
+                    "content", "pt-BR"
                 );
 
             } catch (erro) {
                 console.warn(
-                    "Orion CRM notranslate:",
-                    erro
+                    "Orion CRM notranslate:", erro
                 );
             }
         })();
@@ -127,6 +112,10 @@ def proteger_interface_contra_traducao():
         height=0,
     )
 
+
+# ============================================================
+# CONFIGURAÇÃO DO STREAMLIT
+# ============================================================
 
 st.set_page_config(
     page_title="Orion Systems",
@@ -138,6 +127,10 @@ proteger_interface_contra_traducao()
 
 carregar_tema()
 
+
+# ============================================================
+# INICIALIZAÇÃO DA SESSÃO
+# ============================================================
 
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -170,6 +163,10 @@ if "empresa_ativa_nome" not in st.session_state:
     st.session_state.empresa_ativa_nome = None
 
 
+# ============================================================
+# TÍTULOS DAS PÁGINAS
+# ============================================================
+
 TITULOS_PAGINAS = {
     "📈 Leads": "📋 Leads",
     "🛒 Produtos": "🛒 Produtos",
@@ -189,9 +186,10 @@ def render_titulo_pagina(pagina):
     """
     Renderiza o título fora das páginas individuais.
 
-    Isso evita que o Streamlit reutilize visualmente o primeiro st.title()
-    mostrado durante a navegação.
+    Evita que o Streamlit reutilize visualmente o primeiro
+    st.title() mostrado durante a navegação.
     """
+
     titulo = TITULOS_PAGINAS.get(pagina)
 
     if not titulo:
@@ -206,6 +204,10 @@ def render_titulo_pagina(pagina):
         unsafe_allow_html=True,
     )
 
+
+# ============================================================
+# LOGIN OFICIAL DO ORION CRM AI
+# ============================================================
 
 def tela_login():
     """
@@ -331,92 +333,177 @@ def tela_login():
                 )
 
 
+# ============================================================
+# CONTROLE DE ACESSO
+# ============================================================
+
 if not st.session_state.logado:
+
     tela_login()
+
     st.stop()
 
 
+# ============================================================
+# SIDEBAR
+# ============================================================
+
 pagina = render_sidebar()
 
+
+# ============================================================
+# BLOQUEIO DE EMPRESA
+# ============================================================
+
 if empresa_bloqueada():
+
     tela_bloqueio()
 
+
+# ============================================================
+# CARREGAMENTO DE LEADS
+# ============================================================
 
 leads = carregar_leads(
     st.session_state.empresa_id
 )
 
 
+# ============================================================
+# INFORMAÇÕES DA CONTA E LOGOUT
+# ============================================================
+
 with st.sidebar:
+
     st.markdown("---")
 
     st.caption(
-        f"Conta: {st.session_state.get('empresa_login_nome')}"
+        f"Conta: "
+        f"{st.session_state.get('empresa_login_nome')}"
     )
+
     st.caption(
-        f"Empresa ativa: {st.session_state.get('empresa_ativa_nome')}"
+        f"Empresa ativa: "
+        f"{st.session_state.get('empresa_ativa_nome')}"
     )
+
     st.caption(
-        f"ID ativo: {st.session_state.get('empresa_ativa_id')}"
+        f"ID ativo: "
+        f"{st.session_state.get('empresa_ativa_id')}"
     )
-    st.caption(f"Usuário: {st.session_state.usuario}")
-    st.caption(f"Nível: {st.session_state.nivel}")
+
+    st.caption(
+        f"Usuário: {st.session_state.usuario}"
+    )
+
+    st.caption(
+        f"Nível: {st.session_state.nivel}"
+    )
 
     if st.button("Sair"):
+
         st.session_state.logado = False
+
         st.session_state.usuario = None
+
         st.session_state.usuario_id = None
+
         st.session_state.empresa = None
+
         st.session_state.empresa_id = None
+
         st.session_state.nivel = None
+
         st.session_state.empresa_login_id = None
+
         st.session_state.empresa_login_nome = None
+
         st.session_state.empresa_ativa_id = None
+
         st.session_state.empresa_ativa_nome = None
 
         st.rerun()
 
 
-# A Visão Geral já possui um cabeçalho próprio.
+# ============================================================
+# TÍTULO DA PÁGINA
+# ============================================================
+
+# A Visão Geral já possui cabeçalho próprio.
+
 if pagina != "🏠 Visão Geral":
+
     render_titulo_pagina(pagina)
 
 
+# ============================================================
+# ROTEAMENTO DAS PÁGINAS
+# ============================================================
+
 if pagina == "🏠 Visão Geral":
+
     render_visao_geral(leads)
 
+
 elif pagina == "📈 Leads":
+
     render_leads(leads)
 
+
 elif pagina == "🛒 Produtos":
+
     render_produtos()
 
+
 elif pagina == "🧾 Pedidos":
+
     render_pedidos()
 
+
 elif pagina == "💬 Conversas":
+
     render_conversas(leads)
 
+
 elif pagina == "👨‍💼 Especialistas":
+
     render_especialistas(leads)
 
+
 elif pagina == "🔥 Funil Comercial":
+
     render_funil(leads)
 
+
 elif pagina == "📊 Serviços e Canais":
+
     render_servicos_canais(leads)
 
+
 elif pagina == "📌 Resultados":
+
     render_resultados(leads)
 
+
 elif pagina == "🔌 Integrações":
+
     render_integracoes()
 
+
 elif pagina == "⚙️ Configurações":
+
     render_configuracoes()
 
+
 elif pagina == "🏢 Empresas":
-    if st.session_state.nivel in ["orion_admin", "parceiro_admin"]:
+
+    if st.session_state.nivel in [
+        "orion_admin",
+        "parceiro_admin",
+    ]:
+
         render_empresas()
+
     else:
+
         st.error("Acesso restrito.")
