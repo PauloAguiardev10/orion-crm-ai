@@ -66,28 +66,54 @@ def obter_nome_agente(contexto_empresa) -> str:
 
 def _termo_servico_corresponde(mensagem: str, termo: str) -> bool:
     """
-    Verifica se um termo configurado para um servico
-    aparece na mensagem do cliente.
+    Reconhece o nome completo ou uma abreviacao segura do servico.
 
-    Alem da frase exata, aceita pequenas palavras
-    intermediarias mantendo a ordem dos termos.
+    A abreviacao so e aceita quando representa a parte final
+    do nome e possui pelo menos duas palavras significativas.
     """
     mensagem_normalizada = normalizar_linguagem_cliente(mensagem)
     termo_normalizado = normalizar_linguagem_cliente(termo)
+
     if not termo_normalizado:
         return False
+
     if contem_termo(mensagem_normalizada, [termo_normalizado]):
         return True
-    palavras_termo = [palavra for palavra in termo_normalizado.split() if palavra]
-    if len(palavras_termo) < 2:
-        return False
-    palavras_mensagem = [palavra for palavra in mensagem_normalizada.split() if palavra]
-    indice = 0
-    for palavra in palavras_mensagem:
-        if palavra == palavras_termo[indice]:
-            indice += 1
-            if indice == len(palavras_termo):
+
+    palavras_termo = termo_normalizado.split()
+
+    # Permite pequenas palavras intermediarias na expressao completa.
+    if len(palavras_termo) >= 2:
+        palavras_mensagem = mensagem_normalizada.split()
+        indice = 0
+
+        for palavra in palavras_mensagem:
+            if palavra == palavras_termo[indice]:
+                indice += 1
+                if indice == len(palavras_termo):
+                    return True
+
+    # Exemplo: "Gestao de Trafego Pago" -> "trafego pago".
+    prefixos_genericos = {
+        "gestao", "servico", "servicos",
+        "solucao", "solucoes",
+    }
+
+    if (
+        len(palavras_termo) >= 3
+        and palavras_termo[0] in prefixos_genericos
+    ):
+        restantes = palavras_termo[1:]
+
+        while restantes and restantes[0] in {"de", "do", "da", "dos", "das"}:
+            restantes = restantes[1:]
+
+        if len(restantes) >= 2:
+            abreviacao = " ".join(restantes)
+
+            if contem_termo(mensagem_normalizada, [abreviacao]):
                 return True
+
     return False
 
 
@@ -2445,9 +2471,50 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     texto = mensagem.strip()
     canal = conversa.canal.lower()
     if conversa.etapa == 'aguardando_humano':
-        conversa.historico = (
-            conversa.historico or ''
-        ) + f'\nCliente: {texto}'
+        historico_anterior = conversa.historico or ""
+        conversa.historico = historico_anterior + f"\nCliente: {texto}"
+
+        agradecimentos_permitidos = {
+            "obrigado", "obrigada",
+            "muito obrigado", "muito obrigada",
+            "ok obrigado", "ok obrigada",
+            "valeu", "agradeco", "agradeço",
+            "ok muito obrigado", "ok muito obrigada",
+        }
+
+        mensagem_normalizada = normalizar_linguagem_cliente(texto)
+        mensagem_normalizada = " ".join(
+            mensagem_normalizada.replace(",", " ")
+            .replace(".", " ")
+            .replace("!", " ")
+            .split()
+        )
+
+        assinatura_agradecimento = (
+            "Eu que agrade\u00e7o pelo contato e pela confian\u00e7a na "
+        )
+
+        if (
+            conversa.humano_assumiu is not True
+            and mensagem_normalizada in agradecimentos_permitidos
+            and assinatura_agradecimento not in historico_anterior
+        ):
+            nome_empresa = obter_nome_empresa(contexto_empresa)
+            resposta = (
+                f"Eu que agrade\u00e7o pelo contato e pela confian\u00e7a "
+                f"na {nome_empresa}! "
+                "Nossa equipe comercial entrar\u00e1 em contato em breve."
+            )
+            conversa.historico += f"\nAgente: {resposta}"
+
+            return (
+                resposta,
+                analisar_mensagem(
+                    montar_texto_comercial_cliente(conversa),
+                    contexto_empresa=contexto_empresa,
+                ),
+            )
+
         return (
             None,
             analisar_mensagem(

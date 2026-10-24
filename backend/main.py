@@ -682,6 +682,47 @@ def receber_mensagem(dados: MensagemRequest):
             contexto_empresa=contexto_empresa,
         )
 
+        # ENCERRAMENTO POS-ENCAMINHAMENTO
+        # Mensagens posteriores ao encaminhamento nao devem
+        # reprocessar leads nem disparar notificacoes comerciais.
+        if etapa_anterior == "aguardando_humano":
+            from app.services.mensagem_service import (
+                concluir_processamento_mensagem,
+            )
+
+            concluido = concluir_processamento_mensagem(
+                db,
+                empresa_id=dados.empresa_id,
+                conversa_id=conversa.id,
+                mensagem_id=mensagem_interna_id,
+            )
+
+            if not concluido:
+                raise RuntimeError(
+                    "Falha ao concluir mensagem apos encaminhamento."
+                )
+
+            db.commit()
+
+            return {
+                "conversa_id": conversa.id,
+                "cliente_id": conversa.cliente_id,
+                "empresa_id": dados.empresa_id,
+                "canal": conversa.canal,
+                "etapa_atual": conversa.etapa,
+                "resposta_agente": resposta,
+                "produto_identificado": conversa.servico,
+                "temperatura": analise["temperatura"],
+                "prioridade": analise["prioridade"],
+                "score": analise["score"],
+                "status": "encaminhado",
+                "resumo_vendedor": None,
+                "lead_id": None,
+                "nova_lead": False,
+                "notificacao_luciano": None,
+                "alerta_atendimento_humano": False,
+            }
+
         primeiro_encaminhamento_humano = (
             etapa_anterior != 'aguardando_humano'
             and conversa.etapa == 'aguardando_humano'
@@ -1392,6 +1433,129 @@ def webhook_waha(payload: dict):
             False,
             headers,
         )
+
+        # PROTECAO AGRADECIMENTO POS-ENCAMINHAMENTO
+        # Verifica novamente se o humano assumiu antes do envio.
+        agradecimento_pos_encaminhamento = (
+            resultado.get("etapa_atual") == "aguardando_humano"
+            and resultado.get("nova_lead") is False
+            and resposta.startswith(
+                "Eu que agrade\u00e7o pelo contato e pela confian\u00e7a na "
+            )
+        )
+
+        if agradecimento_pos_encaminhamento:
+            db_verificacao = SessionLocal()
+            try:
+                humano_assumiu_agora = (
+                    db_verificacao.query(Conversa.humano_assumiu)
+                    .filter(
+                        Conversa.id == resultado["conversa_id"],
+                        Conversa.empresa_id == empresa_id,
+                    )
+                    .scalar()
+                )
+            finally:
+                db_verificacao.close()
+
+            if humano_assumiu_agora is not False:
+                from app.services.mensagem_service import (
+                    registrar_resultado_envio,
+                )
+                from app.services.estados_mensagem import (
+                    STATUS_ENVIO_NAO_APLICAVEL,
+                )
+
+                db_cancelamento = SessionLocal()
+                try:
+                    atualizado = registrar_resultado_envio(
+                        db_cancelamento,
+                        empresa_id=empresa_id,
+                        conversa_id=resultado["conversa_id"],
+                        mensagem_id=resposta_mensagem_id,
+                        status_envio=STATUS_ENVIO_NAO_APLICAVEL,
+                    )
+                    if not atualizado:
+                        raise RuntimeError(
+                            "Falha ao registrar cancelamento do envio."
+                        )
+                    # LIMPEZA SEGURA DO HISTORICO CANCELADO
+                    # Remove somente a ultima ocorrencia exata da
+                    # resposta cancelada, preservando mensagens posteriores.
+                    from sqlalchemy import func
+
+                    sufixo_cancelado = "\nAgente: " + resposta
+
+                    conversa_cancelamento = (
+                        db_cancelamento.query(Conversa)
+                        .filter(
+                            Conversa.id == resultado["conversa_id"],
+                            Conversa.empresa_id == empresa_id,
+                        )
+                        .with_for_update()
+                        .one_or_none()
+                    )
+
+                    if conversa_cancelamento is None:
+                        raise RuntimeError(
+                            "Conversa nao encontrada no cancelamento."
+                        )
+
+                    historico_atual = (
+                        conversa_cancelamento.historico or ""
+                    )
+
+                    posicao = historico_atual.rfind(
+                        sufixo_cancelado
+                    )
+
+                    if posicao >= 0:
+                        fim_resposta = (
+                            posicao + len(sufixo_cancelado)
+                        )
+
+                        trecho_posterior = (
+                            historico_atual[fim_resposta:]
+                        )
+
+                        if (
+                            not trecho_posterior
+                            or trecho_posterior.startswith("\n")
+                        ):
+                            conversa_cancelamento.historico = (
+                                historico_atual[:posicao]
+                                + trecho_posterior
+                            )
+                        else:
+                            print(
+                                "[WAHA WEBHOOK] historico preservado: "
+                                "ocorrencia ambigua do agradecimento.",
+                                flush=True,
+                            )
+                    else:
+                        print(
+                            "[WAHA WEBHOOK] agradecimento cancelado "
+                            "nao encontrado no historico.",
+                            flush=True,
+                        )
+
+                    db_cancelamento.commit()
+                except Exception:
+                    db_cancelamento.rollback()
+                    raise
+                finally:
+                    db_cancelamento.close()
+
+                return {
+                    "status": "processado",
+                    "empresa_id": empresa_id,
+                    "sessao": sessao,
+                    "chat_id": chat_id,
+                    "message_id": mensagem_id,
+                    "resposta": None,
+                    "status_envio": STATUS_ENVIO_NAO_APLICAVEL,
+                    "motivo": "atendimento_humano_assumido",
+                }
 
         envio_ok, status_envio = enviar_texto_waha(
             sessao,
