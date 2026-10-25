@@ -1,4 +1,4 @@
-﻿import re
+import re
 import random
 import unicodedata
 from app.agents.detector_atendimento_humano import detectar_pedido_atendimento_humano
@@ -485,6 +485,45 @@ def parece_segmento_valido(texto: str) -> bool:
     if valor in cargos_isolados:
         return False
 
+    descricoes_genericas = {
+        "minha loja",
+        "minha empresa",
+        "meu negocio",
+        "a loja",
+        "a empresa",
+        "uma loja",
+        "uma empresa",
+        "loja",
+        "empresa",
+        "negocio",
+        "comercio",
+        "estabelecimento",
+        "empreendimento",
+        "servicos",
+        "produtos",
+    }
+
+    if valor in descricoes_genericas:
+        return False
+
+    # Respostas com aparencia de nome comercial exigem
+    # esclarecimento antes de preencher o segmento.
+    sufixos_comerciais = {
+        "systems",
+        "solutions",
+        "ltda",
+        "eireli",
+        "inc",
+    }
+
+    palavras = valor.split()
+
+    if (
+        len(palavras) >= 2
+        and palavras[-1] in sufixos_comerciais
+    ):
+        return False
+
     return True
 
 
@@ -496,6 +535,39 @@ def parece_objetivo_valido(texto: str) -> bool:
     valor = normalizar_linguagem_cliente(texto or "").strip()
 
     if resposta_sem_conteudo_util(valor):
+        return False
+
+    pedidos_servico_sem_objetivo = {
+        "quero contratar trafego pago",
+        "contratar trafego pago",
+        "quero trafego pago",
+        "preciso de trafego pago",
+        "quero contratar social media",
+        "contratar social media",
+        "quero contratar automacao",
+        "contratar automacao",
+        "quero contratar design",
+        "contratar design",
+        "quero contratar um site",
+        "preciso de um site",
+    }
+
+    if valor.rstrip(".!? ") in pedidos_servico_sem_objetivo:
+        return False
+
+    # Nao confunde saudacao ou origem com objetivo comercial.
+    # Mensagens mistas com objetivo explicito continuam validas.
+    intencao_objetivo = detectar_intencao_cliente(texto)
+
+    if intencao_objetivo == "saudacao":
+        return False
+
+    origem_identificada = detectar_origem_aquisicao_resposta(texto)
+
+    if (
+        origem_identificada
+        and intencao_objetivo != "objetivo_comercial"
+    ):
         return False
 
     return True
@@ -2257,7 +2329,20 @@ def aplicar_contexto_extraido(conversa, contexto_extraido):
         if campo == "nome" and not parece_nome(valor):
             continue
 
-        if campo == "empresa" and resposta_sem_conteudo_util(valor):
+        if campo == "empresa" and (
+            resposta_sem_conteudo_util(valor)
+            or normalizar_linguagem_cliente(valor).strip() in {
+                "minha loja",
+                "minha empresa",
+                "meu negocio",
+                "a loja",
+                "a empresa",
+                "uma loja",
+                "uma empresa",
+                "meu comercio",
+                "meu estabelecimento",
+            }
+        ):
             continue
 
         if campo == "segmento" and not parece_segmento_valido(valor):
@@ -2816,6 +2901,20 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                     else None
                 ),
             )
+        # Evita pedir novamente um nome ja conhecido.
+        if (
+            conversa.etapa == 'coletar_nome'
+            and conversa.nome
+            and parece_nome(conversa.nome)
+        ):
+            proxima_etapa = determinar_proxima_etapa_contextual(conversa)
+            conversa.etapa = proxima_etapa
+            resposta = resposta_proxima_etapa_contextual(
+                conversa,
+                proxima_etapa,
+                contexto_empresa=contexto_empresa,
+            )
+
     elif conversa.etapa == 'entender_objetivo_inicial':
         conversa.objetivo = texto
         analise = analisar_mensagem(montar_texto_comercial_cliente(conversa, texto), contexto_empresa=contexto_empresa)
@@ -2931,6 +3030,21 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
                     "E hoje voc\u00ea trabalha com o qu\u00ea?"
                 )
 
+            conversa.historico += f'\nAgente: {resposta}'
+            return (resposta, analise)
+
+        # Se o cliente informou sua atividade em vez do nome
+        # comercial, aproveita o segmento e continua pedindo empresa.
+        if parece_contexto_segmento(texto):
+            segmento_informado = limpar_segmento(texto).strip()
+
+            if parece_segmento_valido(segmento_informado):
+                conversa.segmento = segmento_informado
+
+            resposta = (
+                "Entendi, esse é o ramo em que vocês atuam.\n"
+                "E qual é o nome da sua empresa ou negócio?"
+            )
             conversa.historico += f'\nAgente: {resposta}'
             return (resposta, analise)
 
