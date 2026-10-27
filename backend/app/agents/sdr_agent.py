@@ -2110,7 +2110,16 @@ def resposta_base_por_servico(conversa, intencao, contexto_empresa=None):
     if intencao == 'duvida_lead':
         return 'Lead é um possível cliente\nPode ser alguém que chamou no WhatsApp, pediu orçamento, veio pelo Instagram ou demonstrou interesse em algum serviço.'
     if intencao == 'objecao_experiencia_ruim':
-        return f'Entendo seu cuidado.\nQuando uma experiência anterior não foi boa, o ideal é olhar o que foi feito, o público, a comunicação e o acompanhamento.\nAssim {referencia_especialista} consegue analisar seu cenário e orientar você com mais segurança.'
+        return (
+            "Entendo sua preocupação. Quando um investimento anterior "
+            "não trouxe o resultado esperado, é importante entender "
+            "o que aconteceu antes de recomendar um novo caminho.\n"
+            "Precisamos avaliar a estratégia utilizada, as expectativas "
+            "e os resultados alcançados para identificar onde podem "
+            "estar as dificuldades.\n"
+            f"{referencia_especialista} poderá analisar seu cenário "
+            "e orientar os próximos passos com mais segurança."
+        )
     if conversa.servico == 'Gestão de Tráfego Pago':
         return 'Entendi.\nNesse caso, o foco não é só colocar anúncio no ar, mas atrair pessoas com perfil real de compra.'
     if conversa.servico == 'Estrutura Completa':
@@ -2751,7 +2760,62 @@ def conduzir_conversa(conversa, mensagem: str, contexto_empresa=None):
     if conversa.etapa in etapas_que_podem_identificar_servico and conversa.servico is None and (analise['produto'] != 'não identificado'):
         conversa.servico = analise['produto']
     conversa.historico = (conversa.historico or '') + f'\nCliente: {texto}'
+    # Uma objecao deve ser respondida antes de avancar
+    # para a proxima pergunta da qualificacao.
+    if (
+        intencao == "objecao_experiencia_ruim"
+        and conversa.etapa in (
+            "entender_objetivo",
+            "entender_objetivo_inicial",
+        )
+    ):
+        resposta_objecao = resposta_base_por_servico(
+            conversa,
+            intencao,
+            contexto_empresa=contexto_empresa,
+        )
 
+        if campos_contexto_aplicados:
+            classificar_servico_por_objetivo_contextual(
+                conversa,
+                analise=analise,
+                contexto_empresa=contexto_empresa,
+            )
+
+        # Preserva os dados extraidos, mas nao ignora a objecao.
+        if conversa.objetivo:
+            proxima_etapa = determinar_proxima_etapa_contextual(
+                conversa
+            )
+        else:
+            proxima_etapa = "entender_objetivo"
+
+        conversa.etapa = proxima_etapa
+
+        if proxima_etapa == "entender_objetivo":
+            resposta = (
+                f"{resposta_objecao}\n"
+                "Qual é o principal resultado que você "
+                "gostaria de alcançar agora?"
+            )
+        else:
+            proxima_pergunta = resposta_proxima_etapa_contextual(
+                conversa,
+                proxima_etapa,
+                contexto_empresa=contexto_empresa,
+            )
+            resposta = f"{resposta_objecao}\n{proxima_pergunta}"
+
+        conversa.historico += f"\nAgente: {resposta}"
+
+        analise = analisar_mensagem(
+            montar_texto_comercial_cliente(conversa),
+            contexto_empresa=contexto_empresa,
+        )
+
+        sincronizar_status_atendimento(conversa)
+
+        return (resposta, analise)
     if campos_contexto_aplicados:
         classificar_servico_por_objetivo_contextual(
             conversa,
