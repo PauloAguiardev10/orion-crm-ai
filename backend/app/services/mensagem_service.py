@@ -23,6 +23,7 @@ def registrar_mensagem(
             Conversa.id == conversa_id,
             Conversa.empresa_id == empresa_id,
         )
+        .with_for_update()
         .first()
     )
 
@@ -240,6 +241,8 @@ def registrar_resultado_envio(
     conversa_id: int,
     mensagem_id: int,
     status_envio: str,
+    mensagem_id_waha: str | None = None,
+    sessao_waha: str | None = None,
 ) -> bool:
     """Registra o resultado do envio sem efetuar commit."""
 
@@ -260,6 +263,41 @@ def registrar_resultado_envio(
     if status_envio not in permitidos:
         raise ValueError("Status de envio invalido.")
 
+    from app.services.estados_mensagem import (
+        STATUS_ENVIO_CONFIRMADO_HTTP,
+    )
+
+    if mensagem_id_waha is not None:
+        if not isinstance(mensagem_id_waha, str):
+            raise ValueError("ID WAHA invalido.")
+        mensagem_id_waha = mensagem_id_waha.strip()
+        if not mensagem_id_waha or len(mensagem_id_waha) > 180:
+            raise ValueError("ID WAHA invalido.")
+
+    if sessao_waha is not None:
+        if not isinstance(sessao_waha, str):
+            raise ValueError("Sessao WAHA invalida.")
+        sessao_waha = sessao_waha.strip()
+        if not sessao_waha or len(sessao_waha) > 120:
+            raise ValueError("Sessao WAHA invalida.")
+
+    if mensagem_id_waha is not None:
+        if (
+            status_envio != STATUS_ENVIO_CONFIRMADO_HTTP
+            or sessao_waha is None
+        ):
+            raise ValueError(
+                "ID WAHA exige envio HTTP aceito e sessao valida."
+            )
+
+    valores_atualizacao = {
+        Mensagem.status_envio: status_envio,
+    }
+
+    if mensagem_id_waha is not None:
+        valores_atualizacao[Mensagem.mensagem_id_waha] = mensagem_id_waha
+        valores_atualizacao[Mensagem.sessao_waha] = sessao_waha
+
     atualizados = (
         db.query(Mensagem)
         .filter(
@@ -269,9 +307,7 @@ def registrar_resultado_envio(
             Mensagem.status_envio.is_(None),
         )
         .update(
-            {
-                Mensagem.status_envio: status_envio,
-            },
+            valores_atualizacao,
             synchronize_session=False,
         )
     )

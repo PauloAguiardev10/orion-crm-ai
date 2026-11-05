@@ -1,4 +1,6 @@
 from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
     Boolean,
     Column,
     Date,
@@ -718,6 +720,11 @@ class Lead(Base):
     motivo_perda = Column(Text, nullable=True)
     observacao_comercial = Column(Text, nullable=True)
 
+    entrada_followup_em = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     criado_em = Column(
         DateTime,
         nullable=True,
@@ -850,7 +857,124 @@ class Mensagem(Base):
     midia_tipo = Column(String(50), nullable=True)
     from_me = Column(Boolean, nullable=True, server_default="false")
     mensagem_id_externo = Column(String(180), nullable=True)
+    mensagem_id_waha = Column(String(180), nullable=True)
+    sessao_waha = Column(String(120), nullable=True)
     criado_em = Column(DateTime, nullable=True, server_default=func.now())
     status_processamento = Column(String(30), nullable=True)
     processado_em = Column(DateTime, nullable=True)
     status_envio = Column(String(40), nullable=True)
+
+
+# ============================================================
+# FOLLOW-UP AUTOMATICO
+# ============================================================
+
+
+class FollowupAgendamento(Base):
+    __tablename__ = "followup_agendamentos"
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["empresa_id", "lead_id"],
+            ["leads.empresa_id", "leads.id"],
+            name="fk_followup_lead_empresa",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["empresa_id", "conversa_id"],
+            ["conversas.empresa_id", "conversas.id"],
+            name="fk_followup_conversa_empresa",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["empresa_id", "conversa_id", "mensagem_id"],
+            [
+                "mensagens.empresa_id",
+                "mensagens.conversa_id",
+                "mensagens.id",
+            ],
+            name="fk_followup_mensagem",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "mensagem_id IS NULL OR conversa_id IS NOT NULL",
+            name="ck_followup_mensagem_exige_conversa",
+        ),
+        CheckConstraint(
+            "numero_tentativa >= 1",
+            name="ck_followup_numero_tentativa",
+        ),
+        CheckConstraint(
+            "tentativas_envio >= 0",
+            name="ck_followup_tentativas_envio",
+        ),
+        CheckConstraint(
+            "status IN ("
+            "'pendente', 'processando', 'enviado', "
+            "'cancelado', 'falha', 'inconclusivo')",
+            name="ck_followup_status",
+        ),
+        UniqueConstraint(
+            "empresa_id",
+            "lead_id",
+            "numero_tentativa",
+            name="uq_followup_empresa_lead_tentativa",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    lead_id = Column(Integer, nullable=False)
+    conversa_id = Column(Integer, nullable=True)
+
+    numero_tentativa = Column(
+        Integer,
+        nullable=False,
+        server_default="1",
+    )
+
+    entrada_lead_em = Column(DateTime(timezone=True), nullable=False)
+    agendado_para = Column(DateTime(timezone=True), nullable=False)
+
+    status = Column(
+        String(30),
+        nullable=False,
+        server_default="pendente",
+    )
+
+    tentativas_envio = Column(
+        Integer,
+        nullable=False,
+        server_default="0",
+    )
+
+    mensagem_id = Column(Integer, nullable=True)
+    mensagem_id_externo = Column(String(180), nullable=True)
+    erro_envio = Column(Text, nullable=True)
+
+    reservado_em = Column(DateTime(timezone=True), nullable=True)
+    reserva_token = Column(String(100), nullable=True)
+    reserva_expira_em = Column(DateTime(timezone=True), nullable=True)
+    envio_iniciado_em = Column(DateTime(timezone=True), nullable=True)
+
+    criado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    atualizado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    enviado_em = Column(DateTime(timezone=True), nullable=True)
+    cancelado_em = Column(DateTime(timezone=True), nullable=True)

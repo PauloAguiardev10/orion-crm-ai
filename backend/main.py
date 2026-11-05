@@ -76,9 +76,9 @@ def carregar_mapa_sessoes() -> dict[str, int]:
 SESSAO_EMPRESA = carregar_mapa_sessoes()
 
 # Cache de mapeamentos LID -> telefone já resolvidos.
-TELEFONES_LID_CACHE: dict[str, str] = {}
+TELEFONES_LID_CACHE: dict[tuple[int, str, str], str] = {}
 
-MENSAGENS_WAHA_PROCESSADAS: dict[str, float] = {}
+MENSAGENS_WAHA_PROCESSADAS: dict[tuple[int, str], float] = {}
 LOCK_MENSAGENS_WAHA = threading.RLock()
 TTL_MENSAGEM_WAHA_SEGUNDOS = 10 * 60
 
@@ -124,24 +124,34 @@ def obter_id_mensagem_waha(mensagem: dict) -> str | None:
     return None
 
 
-def mensagem_waha_ja_processada(mensagem_id: str | None) -> bool:
+def mensagem_waha_ja_processada(
+    mensagem_id: str | None,
+    empresa_id: int,
+) -> bool:
     if not mensagem_id:
         return False
+
+    chave_cache = (empresa_id, mensagem_id)
 
     with LOCK_MENSAGENS_WAHA:
         limpar_cache_mensagens_waha()
 
-        if mensagem_id in MENSAGENS_WAHA_PROCESSADAS:
+        if chave_cache in MENSAGENS_WAHA_PROCESSADAS:
             return True
 
-        MENSAGENS_WAHA_PROCESSADAS[mensagem_id] = time.monotonic()
+        MENSAGENS_WAHA_PROCESSADAS[chave_cache] = time.monotonic()
         return False
 
 
-def liberar_mensagem_waha(mensagem_id: str | None) -> None:
+def liberar_mensagem_waha(
+    mensagem_id: str | None,
+    empresa_id: int,
+) -> None:
     if mensagem_id:
+        chave_cache = (empresa_id, mensagem_id)
+
         with LOCK_MENSAGENS_WAHA:
-            MENSAGENS_WAHA_PROCESSADAS.pop(mensagem_id, None)
+            MENSAGENS_WAHA_PROCESSADAS.pop(chave_cache, None)
 
 
 def normalizar_telefone_crm(telefone: str | None) -> str | None:
@@ -386,6 +396,14 @@ def obter_telefone_real_waha(
     sessao: str,
     empresa_id: int | None = None,
 ) -> str | None:
+    if (
+        type(empresa_id) is not int
+        or empresa_id < 1
+        or not isinstance(sessao, str)
+        or not sessao.strip()
+    ):
+        return None
+
     if not chat_id:
         return None
 
@@ -395,7 +413,8 @@ def obter_telefone_real_waha(
     if not chat_id.endswith("@lid"):
         return normalizar_telefone_crm(chat_id)
 
-    telefone_cache = TELEFONES_LID_CACHE.get(chat_id)
+    chave_cache = (empresa_id, str(sessao), chat_id)
+    telefone_cache = TELEFONES_LID_CACHE.get(chave_cache)
     if telefone_cache:
         return telefone_cache
 
@@ -423,7 +442,7 @@ def obter_telefone_real_waha(
                 or dados_lid.get("phone")
             )
             if telefone_real:
-                TELEFONES_LID_CACHE[chat_id] = telefone_real
+                TELEFONES_LID_CACHE[chave_cache] = telefone_real
                 return telefone_real
     except (requests.RequestException, ValueError, TypeError) as erro:
         print("[WAHA LID] falha na resolução direta:", repr(erro), flush=True)
@@ -459,14 +478,14 @@ def obter_telefone_real_waha(
 
                 telefone_real = normalizar_telefone_crm(candidato)
                 if telefone_real:
-                    TELEFONES_LID_CACHE[chat_id] = telefone_real
+                    TELEFONES_LID_CACHE[chave_cache] = telefone_real
                     return telefone_real
     except (requests.RequestException, ValueError, TypeError) as erro:
         print("[WAHA CONTATO] falha na consulta individual:", repr(erro), flush=True)
 
     telefone_banco = buscar_telefone_real_no_banco(chat_id, empresa_id)
     if telefone_banco:
-        TELEFONES_LID_CACHE[chat_id] = telefone_banco
+        TELEFONES_LID_CACHE[chave_cache] = telefone_banco
         return telefone_banco
 
     print(
@@ -604,7 +623,41 @@ def receber_mensagem(dados: MensagemRequest):
                     "Nao foi possivel reservar a mensagem."
                 )
 
+            # Cancela follow-ups pendentes quando o cliente responde.
+            # Nao interfere na qualificacao da Sofia.
+            if (
+                os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
+                .strip()
+                .lower()
+                in ("1", "true", "yes", "on")
+            ):
+                from app.services.followup_processamento_service import (
+                    cancelar_followups_pendentes_por_resposta,
+                )
+
+                # Atualiza a lead provisoria quando o cliente responde.
+                lead_em_espera = (
+                    db.query(Lead)
+                    .filter(
+                        Lead.empresa_id == dados.empresa_id,
+                        Lead.conversa_id == conversa.id,
+                        Lead.status == "Aguardando resposta",
+                    )
+                    .order_by(Lead.id.desc())
+                    .first()
+                )
+
+                if lead_em_espera is not None:
+                    lead_em_espera.status = "Em qualificação"
+
+                cancelar_followups_pendentes_por_resposta(
+                    db,
+                    empresa_id=dados.empresa_id,
+                    conversa_id=conversa.id,
+                )
+
             db.commit()
+
 
         if (
             dados.mensagem_id_externo
@@ -613,6 +666,7 @@ def receber_mensagem(dados: MensagemRequest):
             from app.services.mensagem_service import (
                 consultar_estado_mensagem,
             )
+            from app.models.models import Mensagem
 
             estado_mensagem = consultar_estado_mensagem(
                 db,
@@ -620,6 +674,53 @@ def receber_mensagem(dados: MensagemRequest):
                 conversa_id=conversa.id,
                 mensagem_id_externo=dados.mensagem_id_externo,
             )
+
+            if (
+                os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
+                .strip()
+                .lower()
+                in ("1", "true", "yes", "on")
+            ):
+                mensagem_cliente = (
+                    db.query(Mensagem)
+                    .filter(
+                        Mensagem.id == mensagem_interna_id,
+                        Mensagem.empresa_id == dados.empresa_id,
+                        Mensagem.conversa_id == conversa.id,
+                        Mensagem.mensagem_id_externo
+                        == dados.mensagem_id_externo,
+                        Mensagem.from_me.is_(False),
+                        Mensagem.remetente == "cliente",
+                    )
+                    .first()
+                )
+
+                if mensagem_cliente is not None:
+                    from app.services.followup_processamento_service import (
+                        cancelar_followups_pendentes_por_resposta,
+                    )
+
+                    lead_em_espera = (
+                        db.query(Lead)
+                        .filter(
+                            Lead.empresa_id == dados.empresa_id,
+                            Lead.conversa_id == conversa.id,
+                            Lead.status == "Aguardando resposta",
+                        )
+                        .order_by(Lead.id.desc())
+                        .first()
+                    )
+
+                    if lead_em_espera is not None:
+                        lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
+
+                    cancelar_followups_pendentes_por_resposta(
+                        db,
+                        empresa_id=dados.empresa_id,
+                        conversa_id=conversa.id,
+                    )
+
+                    db.commit()
 
             return {
                 "conversa_id": conversa.id,
@@ -673,6 +774,8 @@ def receber_mensagem(dados: MensagemRequest):
             db,
             conversa.empresa_id,
         )
+
+        entrada_lead_followup_em = None
 
         etapa_anterior = conversa.etapa
 
@@ -840,6 +943,10 @@ def receber_mensagem(dados: MensagemRequest):
 
             conversa.cliente_id = cliente_provisorio.id
 
+            from app.utils.tempo import agora_utc
+
+            entrada_lead_followup_em = agora_utc()
+
             lead_provisoria = Lead(
                 empresa_id=dados.empresa_id,
                 cliente_id=cliente_provisorio.id,
@@ -854,6 +961,7 @@ def receber_mensagem(dados: MensagemRequest):
                 observacoes=conversa.objetivo,
                 resumo_vendedor=None,
                 status="Aguardando resposta",
+                entrada_followup_em=entrada_lead_followup_em,
             )
 
             db.add(lead_provisoria)
@@ -1074,6 +1182,21 @@ def receber_mensagem(dados: MensagemRequest):
 
         db.commit()
 
+        if lead_id and entrada_lead_followup_em is None:
+            lead_para_followup = (
+                db.query(Lead)
+                .filter(
+                    Lead.id == lead_id,
+                    Lead.empresa_id == dados.empresa_id,
+                )
+                .first()
+            )
+
+            if lead_para_followup is not None:
+                entrada_lead_followup_em = (
+                    lead_para_followup.entrada_followup_em
+                )
+
         return {
             "conversa_id": conversa.id,
             "cliente_id": conversa.cliente_id,
@@ -1095,6 +1218,7 @@ def receber_mensagem(dados: MensagemRequest):
             ),
             "resumo_vendedor": resumo,
             "lead_id": lead_id,
+            "entrada_lead_followup_em": entrada_lead_followup_em,
             "nova_lead": nova_lead,
             "notificacao_luciano": notificacao_luciano,
             "alerta_atendimento_humano": pedido_humano_explicito,
@@ -1164,7 +1288,7 @@ def enviar_texto_waha(
     chat_id: str,
     texto: str,
     headers: dict,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     try:
         envio = requests.post(
             "http://localhost:3000/api/sendText",
@@ -1173,7 +1297,19 @@ def enviar_texto_waha(
             timeout=15,
         )
         envio.raise_for_status()
-        return True, None
+
+        from app.services.followup_ids_waha import (
+            extrair_id_resposta_waha,
+        )
+
+        try:
+            dados_resposta = envio.json()
+        except ValueError:
+            dados_resposta = None
+
+        id_waha = extrair_id_resposta_waha(dados_resposta)
+
+        return True, None, id_waha
 
     except requests.exceptions.ReadTimeout as erro:
         print(
@@ -1181,11 +1317,11 @@ def enviar_texto_waha(
             f"Sem reenvio automático. Erro: {repr(erro)}",
             flush=True,
         )
-        return False, "timeout_envio_inconclusivo"
+        return False, "timeout_envio_inconclusivo", None
 
     except requests.RequestException as erro:
         print(f"[WAHA SEND] falha no envio: {repr(erro)}", flush=True)
-        return False, "falha_envio"
+        return False, "falha_envio", None
 
 
 @app.post("/webhook/waha")
@@ -1269,7 +1405,74 @@ def webhook_waha(payload: dict):
             "chat_id": chat_id,
         }
 
-    if mensagem_waha_ja_processada(mensagem_id):
+    if mensagem_waha_ja_processada(mensagem_id, empresa_id):
+        if (
+            mensagem_id
+            and os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
+            .strip()
+            .lower()
+            in ("1", "true", "yes", "on")
+        ):
+            from app.models.models import Mensagem
+            from app.services.followup_processamento_service import (
+                cancelar_followups_pendentes_por_resposta,
+            )
+
+            db_recuperacao = SessionLocal()
+            try:
+                mensagem_cliente = (
+                    db_recuperacao.query(Mensagem)
+                    .join(
+                        Conversa,
+                        Conversa.id == Mensagem.conversa_id,
+                    )
+                    .filter(
+                        Mensagem.empresa_id == empresa_id,
+                        Conversa.empresa_id == empresa_id,
+                        Conversa.identificador == chat_id,
+                        Mensagem.mensagem_id_externo == mensagem_id,
+                        Mensagem.from_me.is_(False),
+                        Mensagem.remetente == "cliente",
+                    )
+                    .order_by(Mensagem.id.desc())
+                    .first()
+                )
+
+                if mensagem_cliente is not None:
+                    lead_em_espera = (
+                        db_recuperacao.query(Lead)
+                        .filter(
+                            Lead.empresa_id == empresa_id,
+                            Lead.conversa_id == mensagem_cliente.conversa_id,
+                            Lead.status == "Aguardando resposta",
+                        )
+                        .order_by(Lead.id.desc())
+                        .first()
+                    )
+
+                    if lead_em_espera is not None:
+                        lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
+
+                    cancelar_followups_pendentes_por_resposta(
+                        db_recuperacao,
+                        empresa_id=empresa_id,
+                        conversa_id=mensagem_cliente.conversa_id,
+                    )
+
+                    db_recuperacao.commit()
+
+            except Exception:
+                db_recuperacao.rollback()
+                traceback.print_exc()
+                return {
+                    "status": "erro",
+                    "motivo": "falha_recuperacao_duplicada",
+                    "empresa_id": empresa_id,
+                    "message_id": mensagem_id,
+                }
+            finally:
+                db_recuperacao.close()
+
         print(
             f"[WAHA WEBHOOK] mensagem duplicada ignorada: {mensagem_id}",
             flush=True,
@@ -1302,7 +1505,7 @@ def webhook_waha(payload: dict):
     resultado = receber_mensagem(dados)
 
     if resultado.get("erro"):
-        liberar_mensagem_waha(mensagem_id)
+        liberar_mensagem_waha(mensagem_id, empresa_id)
         return {
             "status": "erro",
             "empresa_id": empresa_id,
@@ -1557,7 +1760,7 @@ def webhook_waha(payload: dict):
                     "motivo": "atendimento_humano_assumido",
                 }
 
-        envio_ok, status_envio = enviar_texto_waha(
+        envio_ok, status_envio, id_waha = enviar_texto_waha(
             sessao,
             chat_id,
             resposta,
@@ -1571,6 +1774,8 @@ def webhook_waha(payload: dict):
             classificar_resultado_envio,
         )
 
+        resultado_envio_persistido = False
+
         db_envio = SessionLocal()
         try:
             atualizado = registrar_resultado_envio(
@@ -1582,6 +1787,8 @@ def webhook_waha(payload: dict):
                     envio_ok,
                     status_envio,
                 ),
+                mensagem_id_waha=id_waha if envio_ok else None,
+                sessao_waha=sessao if envio_ok and id_waha else None,
             )
 
             if not atualizado:
@@ -1590,6 +1797,7 @@ def webhook_waha(payload: dict):
                 )
 
             db_envio.commit()
+            resultado_envio_persistido = True
         except Exception as erro_registro_envio:
             db_envio.rollback()
             print(
@@ -1603,6 +1811,54 @@ def webhook_waha(payload: dict):
             )
         finally:
             db_envio.close()
+
+        # FOLLOW-UP AUTOMATICO - DESATIVADO POR PADRAO
+
+        followup_ativo = (
+            os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
+            .strip()
+            .lower()
+            == "true"
+        )
+
+        if (
+            followup_ativo
+            and envio_ok
+            and resultado_envio_persistido
+            and resultado.get("lead_id")
+            and resultado.get("entrada_lead_followup_em") is not None
+        ):
+            from app.services.followup_agendamento_service import (
+                criar_primeiro_agendamento,
+            )
+
+            db_followup = SessionLocal()
+            try:
+                agendamento, motivo = criar_primeiro_agendamento(
+                    db_followup,
+                    empresa_id=empresa_id,
+                    lead_id=resultado["lead_id"],
+                    entrada_lead_em=resultado["entrada_lead_followup_em"],
+                )
+
+                if motivo == "agendamento_preparado":
+                    db_followup.commit()
+                else:
+                    db_followup.rollback()
+
+                print(
+                    f"[FOLLOWUP] resultado do agendamento: {motivo}",
+                    flush=True,
+                )
+
+            except Exception as erro_followup:
+                db_followup.rollback()
+                print(
+                    f"[FOLLOWUP] falha ao preparar agendamento: {erro_followup}",
+                    flush=True,
+                )
+            finally:
+                db_followup.close()
 
         if not envio_ok:
             print(
