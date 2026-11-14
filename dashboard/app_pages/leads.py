@@ -36,6 +36,9 @@ def normalizar_status(status):
     if "aguardando resposta" in status:
         return "Aguardando resposta"
 
+    if "em qualifica??o" in status or "em qualificacao" in status:
+        return "Em qualificação"
+
     if "aguardando" in status:
         return "Aguardando atendimento"
 

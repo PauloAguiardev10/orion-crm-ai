@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import streamlit.components.v1 as components
 
 from pathlib import Path
@@ -278,7 +278,23 @@ def tela_login():
             use_container_width=True,
         ):
 
-            if validar_login(usuario, senha):
+            print(
+                "[LOGIN DEBUG]",
+                "usuario=", repr(usuario),
+                "tamanho_senha=", len(senha),
+                "espacos_usuario=", usuario != usuario.strip(),
+                flush=True,
+            )
+
+            resultado_login = validar_login(usuario, senha)
+
+            print(
+                "[LOGIN DEBUG] resultado=",
+                resultado_login,
+                flush=True,
+            )
+
+            if resultado_login:
 
                 usuario_id = obter_usuario_id(usuario)
 

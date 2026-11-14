@@ -24,6 +24,7 @@ def executar_agendador(
     session_factory=None,
     mapa_sessoes=None,
     simulador_envio=None,
+    modo_simulacao: bool = True,
 ) -> None:
     """Executa ciclos periodicos em modo seguro."""
 
@@ -44,25 +45,26 @@ def executar_agendador(
     if len(set(empresa_ids)) != len(empresa_ids):
         raise ValueError("empresa_duplicada")
 
-    if session_factory is None:
-        from sqlalchemy.engine import make_url
-        from app.database.database import DATABASE_URL, SessionLocal
+    if type(modo_simulacao) is not bool:
+        raise ValueError("modo_simulacao_invalido")
 
-        url = make_url(DATABASE_URL)
-
-        ambiente_teste = (
-            url.host == "127.0.0.1"
-            and url.port == 55432
-            and url.database == "orion_crm_followup_test"
-            and url.username == "orion_test"
-        )
-
-        if not ambiente_teste:
-            raise RuntimeError(
-                "BLOQUEADO: agendador automatico fora do banco de testes"
-            )
-
-        session_factory = SessionLocal
+    if modo_simulacao:
+        if not callable(session_factory):
+            raise ValueError("simulacao_exige_sessao_de_teste")
+        if mapa_sessoes is None or not callable(simulador_envio):
+            raise ValueError("simulacao_exige_transporte_simulado")
+    else:
+        if os.getenv("FOLLOWUP_WORKER_ATIVO") != "1":
+            raise ValueError("worker_desabilitado")
+        if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
+            raise ValueError("envio_real_desabilitado")
+        if simulador_envio is not None:
+            raise ValueError("transporte_injetado_no_modo_real")
+        if session_factory is None:
+            from app.database.database import SessionLocal
+            session_factory = SessionLocal
+        if not callable(session_factory):
+            raise ValueError("session_factory_invalida")
 
     ciclos = 0
 
@@ -94,10 +96,12 @@ def executar_agendador(
 
                 sucesso, resultado = executar_ciclo_followup(
                     empresa_id=empresa_id,
-                    modo_simulacao=True,
+                    modo_simulacao=modo_simulacao,
                     session_factory=session_factory,
                     mapa_sessoes=mapa_sessoes,
-                    simulador_envio=simulador_envio,
+                    simulador_envio=(
+                        simulador_envio if modo_simulacao else None
+                    ),
                 )
 
                 logger.info(
@@ -131,9 +135,13 @@ if __name__ == "__main__":
 
     ids = [int(item.strip()) for item in empresas.split(",")]
 
-    executar_agendador(
-        empresa_ids=ids,
-        intervalo_segundos=int(
-            os.getenv("FOLLOWUP_INTERVALO_SEGUNDOS", "60")
-        ),
+    if os.getenv("FOLLOWUP_WORKER_ATIVO") != "1":
+        raise SystemExit("Follow-up desabilitado: FOLLOWUP_WORKER_ATIVO != 1")
+
+    if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
+        raise SystemExit("Envio real desabilitado: FOLLOWUP_ENVIO_REAL_ATIVO != 1")
+
+    raise SystemExit(
+        "Execucao real ainda nao habilitada no agendador. "
+        "Aguardando validacao final da integracao."
     )

@@ -14,6 +14,7 @@ from services.intencao_service import (
 
 STATUS_LISTA = [
     "Aguardando resposta",
+    "Em qualificação",
     "Aguardando atendimento",
     "Em atendimento",
     "Proposta enviada",

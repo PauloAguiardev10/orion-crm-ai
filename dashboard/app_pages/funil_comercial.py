@@ -324,6 +324,10 @@ def render_funil(leads):
             "stage": "stage-waiting",
             "card": "card-waiting",
         },
+        "Em qualificação": {
+            "stage": "stage-service",
+            "card": "card-service",
+        },
         "Aguardando atendimento": {
             "stage": "stage-waiting",
             "card": "card-waiting",

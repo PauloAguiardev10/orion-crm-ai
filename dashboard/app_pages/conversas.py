@@ -1,7 +1,91 @@
 import streamlit as st
 
 
+
+from services.central_whatsapp_service import (
+    listar_conversas_whatsapp,
+    listar_mensagens_whatsapp,
+)
+
+
+def render_central_whatsapp():
+    st.subheader("Central de Atendimento WhatsApp")
+    st.caption("Conversas reais vinculadas ao usuario e a empresa.")
+
+    usuario_id = st.session_state.get("usuario_id")
+    empresa_id = st.session_state.get("empresa_id")
+    nivel = st.session_state.get("nivel")
+
+    if not usuario_id or not empresa_id:
+        st.warning("Identificacao do usuario indisponivel.")
+        return
+
+    try:
+        conversas = listar_conversas_whatsapp(
+            empresa_id=int(empresa_id),
+            usuario_id=int(usuario_id),
+            nivel=str(nivel),
+        )
+    except Exception:
+        st.error("Nao foi possivel consultar as conversas WhatsApp.")
+        return
+
+    if not conversas:
+        st.info("Nenhuma conversa WhatsApp disponivel para este usuario.")
+        return
+
+    st.metric("Conversas disponiveis", len(conversas))
+
+    for conversa in conversas:
+        nome = conversa.get("nome") or conversa.get("identificador") or "Contato"
+        vendedor = conversa.get("vendedor_nome") or "Nao atribuido"
+        status = conversa.get("status_atendimento") or "Sem status"
+        ultima = conversa.get("ultima_mensagem") or "Sem mensagens"
+
+        with st.expander(f"{nome} | {status}"):
+            st.write(f"**Vendedor:** {vendedor}")
+            st.write(f"**WhatsApp:** {conversa.get('identificador') or 'Nao informado'}")
+            st.write(f"**Ultima mensagem:** {ultima}")
+
+            try:
+                mensagens = listar_mensagens_whatsapp(
+                    empresa_id=int(empresa_id),
+                    usuario_id=int(usuario_id),
+                    nivel=str(nivel),
+                    conversa_id=int(conversa["id"]),
+                )
+            except Exception:
+                st.error("Nao foi possivel carregar o historico.")
+                continue
+
+            st.markdown("**Historico de mensagens**")
+
+            if not mensagens:
+                st.info("Nenhuma mensagem registrada.")
+                continue
+
+            for mensagem in mensagens:
+                remetente = (
+                    "assistant"
+                    if mensagem.get("from_me")
+                    else "user"
+                )
+
+                texto = mensagem.get("texto") or ""
+
+                with st.chat_message(remetente):
+                    st.write(texto)
+
+                    data = mensagem.get("criado_em")
+                    if data:
+                        st.caption(
+                            data.strftime("%d/%m/%Y %H:%M")
+                        )
+
+
 def render_conversas(leads):
+    render_central_whatsapp()
+
 
     st.title("💬 Conversas")
 

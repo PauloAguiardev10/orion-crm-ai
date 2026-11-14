@@ -33,3 +33,45 @@ def resolver_sessao_waha_empresa(
         return None, "multiplas_sessoes_empresa"
 
     return sessoes[0], "sessao_resolvida"
+
+
+def resolver_sessao_waha_conversa(
+    db,
+    *,
+    empresa_id: int,
+    conexao_canal_id: int,
+) -> tuple[str | None, str]:
+    """Resolve a sessao WAHA pela conexao especifica da conversa."""
+
+    from app.models.models import ConexaoCanal
+
+    if (
+        type(empresa_id) is not int
+        or empresa_id < 1
+        or type(conexao_canal_id) is not int
+        or conexao_canal_id < 1
+    ):
+        return None, "identificadores_invalidos"
+
+    conexao = (
+        db.query(ConexaoCanal)
+        .filter(
+            ConexaoCanal.id == conexao_canal_id,
+            ConexaoCanal.empresa_id == empresa_id,
+            ConexaoCanal.provedor == "waha",
+            ConexaoCanal.canal == "whatsapp",
+            ConexaoCanal.ativo.is_(True),
+        )
+        .first()
+    )
+
+    if conexao is None:
+        return None, "conexao_waha_nao_encontrada"
+
+    if conexao.especialista_id is None:
+        return None, "vendedor_nao_vinculado"
+
+    if not conexao.sessao_waha or not conexao.sessao_waha.strip():
+        return None, "sessao_waha_nao_configurada"
+
+    return conexao.sessao_waha.strip(), "sessao_resolvida"

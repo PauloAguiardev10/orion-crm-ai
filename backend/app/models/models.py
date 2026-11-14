@@ -534,6 +534,8 @@ class Conversa(Base):
         index=True,
     )
 
+    conexao_canal_id = Column(Integer, nullable=True)
+
     cliente_id = Column(
         Integer,
         ForeignKey(
@@ -635,6 +637,26 @@ class Conversa(Base):
         String(80),
         nullable=True,
     )
+
+    # Proveniencia tecnica de anuncio Click-to-WhatsApp.
+    # Independente da origem comercial informada pelo cliente.
+    anuncio_referral_confirmado = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    anuncio_referral_id = Column(
+        String(180),
+        nullable=True,
+    )
+
+    anuncio_referral_recebido_em = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 
 
 class Lead(Base):
@@ -800,6 +822,9 @@ class ConexaoCanal(Base):
         index=True,
     )
 
+    sessao_waha = Column(String(120), nullable=True)
+    especialista_id = Column(Integer, nullable=True)
+
     # Token da API do provedor.
     # Nunca deve ser exibido em logs ou respostas públicas.
     access_token = Column(
@@ -856,6 +881,8 @@ class Mensagem(Base):
     midia_url = Column(Text, nullable=True)
     midia_tipo = Column(String(50), nullable=True)
     from_me = Column(Boolean, nullable=True, server_default="false")
+    conexao_canal_id = Column(Integer, nullable=True)
+    especialista_id = Column(Integer, nullable=True)
     mensagem_id_externo = Column(String(180), nullable=True)
     mensagem_id_waha = Column(String(180), nullable=True)
     sessao_waha = Column(String(120), nullable=True)

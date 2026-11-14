@@ -6,6 +6,11 @@ e validacao completa das transacoes e do transporte WAHA.
 
 import os
 
+MENSAGEM_PADRAO_PRIMEIRO_FOLLOWUP = (
+    "Ol?! Tudo bem? Vi que ainda n?o conseguimos continuar nossa "
+    "conversa. Voc? gostaria de saber mais sobre como podemos ajudar?"
+)
+
 
 def executar_ciclo_followup(
     *,
@@ -24,7 +29,18 @@ def executar_ciclo_followup(
         if os.getenv("FOLLOWUP_WORKER_ATIVO") != "1":
             return False, "worker_desabilitado"
 
-        return False, "envio_real_nao_implementado"
+        if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
+            return False, "envio_real_desabilitado"
+
+        if not callable(session_factory):
+            return False, "session_factory_invalida"
+
+        return executar_ciclo_followup_simulado(
+            empresa_id=empresa_id,
+            session_factory=session_factory,
+            mapa_sessoes=mapa_sessoes,
+            simulador_envio=enviar_followup_via_waha,
+        )
 
     if (
         session_factory is None
@@ -376,14 +392,11 @@ def preparar_destino_followup(
     agendamento_id: int,
     mapa_sessoes,
 ) -> tuple[dict | None, str]:
-    """Consulta destino e sessao sem autorizar ou enviar mensagens.
+    """Prepara o destino usando a conexao WAHA da conversa."""
 
-    A consulta nao substitui a revalidacao transacional
-    imediatamente anterior a autorizacao de envio.
-    """
-
+    from app.models.models import Conversa, FollowupAgendamento
     from app.services.followup_sessao_waha_service import (
-        resolver_sessao_waha_empresa,
+        resolver_sessao_waha_conversa,
     )
     from app.services.followup_consulta_destinatario_service import (
         consultar_destinatario_followup,
@@ -395,9 +408,27 @@ def preparar_destino_followup(
     if type(agendamento_id) is not int or agendamento_id < 1:
         return None, "agendamento_invalido"
 
-    sessao, motivo = resolver_sessao_waha_empresa(
-        empresa_id,
-        mapa_sessoes,
+    vinculo = (
+        db.query(Conversa.conexao_canal_id)
+        .join(
+            FollowupAgendamento,
+            (FollowupAgendamento.conversa_id == Conversa.id)
+            & (FollowupAgendamento.empresa_id == Conversa.empresa_id),
+        )
+        .filter(
+            FollowupAgendamento.id == agendamento_id,
+            FollowupAgendamento.empresa_id == empresa_id,
+        )
+        .first()
+    )
+
+    if vinculo is None or vinculo.conexao_canal_id is None:
+        return None, "conexao_conversa_nao_identificada"
+
+    sessao, motivo = resolver_sessao_waha_conversa(
+        db,
+        empresa_id=empresa_id,
+        conexao_canal_id=vinculo.conexao_canal_id,
     )
 
     if sessao is None:
@@ -418,7 +449,6 @@ def preparar_destino_followup(
         "sessao": sessao,
         "chat_id": chat_id,
     }, "destino_preparado"
-
 
 
 def liberar_reserva_followup_transacional(
@@ -576,3 +606,42 @@ def executar_ciclo_followup_simulado(
             status_envio=status_envio,
             mensagem_id_externo=mensagem_id_externo,
         )
+
+
+def enviar_followup_via_waha(destino: dict) -> tuple[str, str | None]:
+    """Adapta o transporte WAHA ao retorno esperado pelo worker."""
+
+    from app.services.followup_transporte_waha import (
+        transportar_mensagem_waha,
+    )
+
+    if not isinstance(destino, dict):
+        return "falha_envio", None
+
+    sessao = destino.get("sessao")
+    chat_id = destino.get("chat_id")
+
+    if (
+        not isinstance(sessao, str)
+        or not sessao.strip()
+        or not isinstance(chat_id, str)
+        or not chat_id.strip()
+    ):
+        return "falha_envio", None
+
+    try:
+        sucesso, erro, mensagem_id_externo = transportar_mensagem_waha(
+            sessao=sessao,
+            chat_id=chat_id,
+            texto=MENSAGEM_PADRAO_PRIMEIRO_FOLLOWUP,
+        )
+    except Exception:
+        return "timeout_envio_inconclusivo", None
+
+    if sucesso:
+        return "aceito_waha", mensagem_id_externo
+
+    if erro == "timeout_envio_inconclusivo":
+        return "timeout_envio_inconclusivo", None
+
+    return "falha_envio", None

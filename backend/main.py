@@ -33,6 +33,9 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Agente SDR Forway")
 
+from app.routes.followup_vendedor_api import router as followup_vendedor_router
+app.include_router(followup_vendedor_router)
+
 
 @app.get("/status/waha")
 def status_waha():
@@ -97,31 +100,8 @@ def limpar_cache_mensagens_waha() -> None:
 
 
 def obter_id_mensagem_waha(mensagem: dict) -> str | None:
-    candidatos = [
-        mensagem.get("id"),
-        mensagem.get("messageId"),
-        mensagem.get("message_id"),
-    ]
-
-    dados = mensagem.get("_data", {})
-    if isinstance(dados, dict):
-        candidatos.extend([
-            dados.get("id"),
-            dados.get("messageId"),
-            dados.get("message_id"),
-        ])
-
-    for candidato in candidatos:
-        if isinstance(candidato, str) and candidato.strip():
-            return candidato.strip()
-
-        if isinstance(candidato, dict):
-            for chave in ["_serialized", "serialized", "id"]:
-                valor = candidato.get(chave)
-                if isinstance(valor, str) and valor.strip():
-                    return valor.strip()
-
-    return None
+    from app.services.followup_ids_waha import extrair_id_resposta_waha
+    return extrair_id_resposta_waha(mensagem)
 
 
 def mensagem_waha_ja_processada(
@@ -178,6 +158,7 @@ class MensagemRequest(BaseModel):
     identificador: str
     mensagem: str
     mensagem_id_externo: str | None = None
+    referencia_anuncio: dict | None = None
 
 
 from app.agents.detector_atendimento_humano import detectar_pedido_atendimento_humano
@@ -583,6 +564,32 @@ def receber_mensagem(dados: MensagemRequest):
             db.commit()
             db.refresh(conversa)
 
+        # Follow-up: registra referencia publicitaria preliminar.
+        # Referencia recebida nao equivale a campanha comprovada.
+        if dados.referencia_anuncio:
+            from datetime import datetime, timezone
+            from app.services.followup_origem_anuncio import (
+                analisar_referencia_anuncio,
+            )
+
+            analise_referral = analisar_referencia_anuncio(
+                dados.referencia_anuncio
+            )
+
+            if (
+                analise_referral["referencia_valida"]
+                and not conversa.anuncio_referral_id
+            ):
+                conversa.anuncio_referral_id = (
+                    analise_referral["anuncio_id"]
+                )
+                conversa.anuncio_referral_recebido_em = (
+                    datetime.now(timezone.utc)
+                )
+                # Nunca confirmar campanha apenas com metadados.
+                conversa.anuncio_referral_confirmado = False
+                db.commit()
+
         # Se o especialista já assumiu esta conversa no CRM,
         # a Sofia permanece em silêncio e não executa o fluxo da IA.
 
@@ -943,10 +950,6 @@ def receber_mensagem(dados: MensagemRequest):
 
             conversa.cliente_id = cliente_provisorio.id
 
-            from app.utils.tempo import agora_utc
-
-            entrada_lead_followup_em = agora_utc()
-
             lead_provisoria = Lead(
                 empresa_id=dados.empresa_id,
                 cliente_id=cliente_provisorio.id,
@@ -960,8 +963,8 @@ def receber_mensagem(dados: MensagemRequest):
                 origem=origem_aquisicao,
                 observacoes=conversa.objetivo,
                 resumo_vendedor=None,
-                status="Aguardando resposta",
-                entrada_followup_em=entrada_lead_followup_em,
+                status="Aguardando atendimento",
+                entrada_followup_em=None,
             )
 
             db.add(lead_provisoria)
@@ -1076,7 +1079,12 @@ def receber_mensagem(dados: MensagemRequest):
 
             else:
                 era_lead_provisoria = (
-                    lead_existente.status == "Aguardando resposta"
+                    not lead_existente.resumo_vendedor
+                    and lead_existente.status in (
+                        "Aguardando atendimento",
+                        "Aguardando resposta",
+                        "Em qualificação",
+                    )
                 )
 
                 if not era_lead_provisoria:
@@ -1354,10 +1362,49 @@ def webhook_waha(payload: dict):
         }
 
     if mensagem.get("fromMe") is True:
-        return {
-            "status": "ignorado",
-            "motivo": "mensagem_enviada_pelo_proprio_numero",
-        }
+        from app.services.followup_eventos_waha import identificar_saida_waha
+        from app.services.followup_conexoes_waha import localizar_conexao_waha
+        from app.services.followup_origem_saida_waha import (
+            verificar_saida_automatica_registrada,
+        )
+
+        dados_saida, motivo_saida = identificar_saida_waha(payload)
+
+        if dados_saida is None:
+            return {"status": "ignorado", "motivo": motivo_saida}
+
+        db_saida = SessionLocal()
+
+        try:
+            conexao, motivo_conexao = localizar_conexao_waha(
+                db_saida,
+                dados_saida["sessao"],
+            )
+
+            if conexao is None:
+                return {"status": "ignorado", "motivo": motivo_conexao}
+
+            automatica, motivo_origem = verificar_saida_automatica_registrada(
+                db_saida,
+                conexao.empresa_id,
+                dados_saida["sessao"],
+                mensagem_id,
+            )
+
+            if automatica:
+                return {
+                    "status": "ignorado",
+                    "motivo": "saida_automatica_registrada",
+                }
+
+            return {
+                "status": "ignorado",
+                "motivo": "saida_sem_origem_comprovada",
+                "detalhe": motivo_origem,
+            }
+
+        finally:
+            db_saida.close()
 
     texto = mensagem.get("body")
     chat_id = mensagem.get("from")
@@ -1492,6 +1539,16 @@ def webhook_waha(payload: dict):
         empresa_id,
     )
 
+    # Metadados de anuncio, quando fornecidos pelo WAHA.
+    # Ainda nao representam campanha comprovada.
+    referencia_anuncio = None
+    if isinstance(dados_internos, dict):
+        referencia_anuncio = dados_internos.get("referral")
+    if referencia_anuncio is None:
+        referencia_anuncio = mensagem.get("referral")
+    if not isinstance(referencia_anuncio, dict):
+        referencia_anuncio = None
+
     dados = MensagemRequest(
         empresa_id=empresa_id,
         nome=nome,
@@ -1500,6 +1557,7 @@ def webhook_waha(payload: dict):
         identificador=chat_id,
         mensagem=texto,
         mensagem_id_externo=mensagem_id,
+        referencia_anuncio=referencia_anuncio,
     )
 
     resultado = receber_mensagem(dados)
@@ -1523,6 +1581,55 @@ def webhook_waha(payload: dict):
             "empresa_id": empresa_id,
             "message_id": mensagem_id,
         }
+
+    # Vinculo seguro da conversa com a conexao WAHA.
+    # Falhas nesta integracao nao interrompem a Sofia.
+    if resultado.get("conversa_id"):
+        db_vinculo = SessionLocal()
+        try:
+            from app.services.followup_entrada_conexao_waha import (
+                validar_conexao_entrada_waha,
+            )
+            from app.services.followup_vinculo_conversa_waha import (
+                vincular_conversa_conexao_waha,
+            )
+
+            conexao_id, motivo_conexao = validar_conexao_entrada_waha(
+                db_vinculo,
+                sessao,
+                empresa_id,
+            )
+
+            if conexao_id is not None:
+                vinculado, motivo_vinculo = vincular_conversa_conexao_waha(
+                    db_vinculo,
+                    empresa_id,
+                    resultado["conversa_id"],
+                    conexao_id,
+                )
+
+                if vinculado:
+                    db_vinculo.commit()
+                else:
+                    db_vinculo.rollback()
+                    print(
+                        f"[FOLLOWUP] vinculo recusado: {motivo_vinculo}",
+                        flush=True,
+                    )
+            else:
+                print(
+                    f"[FOLLOWUP] conexao nao validada: {motivo_conexao}",
+                    flush=True,
+                )
+
+        except Exception as erro_vinculo:
+            db_vinculo.rollback()
+            print(
+                f"[FOLLOWUP] falha no vinculo: {erro_vinculo}",
+                flush=True,
+            )
+        finally:
+            db_vinculo.close()
 
     resposta = resultado.get("resposta_agente")
 
@@ -1812,49 +1919,71 @@ def webhook_waha(payload: dict):
         finally:
             db_envio.close()
 
-        # FOLLOW-UP AUTOMATICO - DESATIVADO POR PADRAO
-
-        followup_ativo = (
-            os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
-            .strip()
-            .lower()
-            == "true"
-        )
-
+        # Follow-up de primeiro contato da Sofia.
+        # Apenas agenda quando a origem e a primeira resposta
+        # estiverem validadas. Nao executa disparos aqui.
         if (
-            followup_ativo
+            os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
+            .strip().lower() in ("1", "true", "yes", "on")
             and envio_ok
             and resultado_envio_persistido
             and resultado.get("lead_id")
-            and resultado.get("entrada_lead_followup_em") is not None
         ):
+            from datetime import datetime, timezone
             from app.services.followup_agendamento_service import (
                 criar_primeiro_agendamento,
             )
 
             db_followup = SessionLocal()
             try:
-                agendamento, motivo = criar_primeiro_agendamento(
-                    db_followup,
-                    empresa_id=empresa_id,
-                    lead_id=resultado["lead_id"],
-                    entrada_lead_em=resultado["entrada_lead_followup_em"],
+                lead_followup = (
+                    db_followup.query(Lead)
+                    .filter(
+                        Lead.id == resultado["lead_id"],
+                        Lead.empresa_id == empresa_id,
+                        Lead.conversa_id == resultado["conversa_id"],
+                    )
+                    .with_for_update()
+                    .one_or_none()
                 )
 
-                if motivo == "agendamento_preparado":
-                    db_followup.commit()
+                if (
+                    lead_followup is not None
+                    and lead_followup.status == "Aguardando atendimento"
+                    and not lead_followup.resumo_vendedor
+                ):
+                    lead_followup.status = "Aguardando resposta"
+                    lead_followup.entrada_followup_em = (
+                        datetime.now(timezone.utc)
+                    )
+
+                    agendamento, motivo = criar_primeiro_agendamento(
+                        db_followup,
+                        empresa_id=empresa_id,
+                        lead_id=lead_followup.id,
+                        entrada_lead_em=lead_followup.entrada_followup_em,
+                    )
+
+                    if agendamento is not None:
+                        db_followup.commit()
+                        print(
+                            "[FOLLOWUP] primeiro agendamento: "
+                            f"{motivo}; lead={lead_followup.id}",
+                            flush=True,
+                        )
+                    else:
+                        db_followup.rollback()
+                        print(
+                            "[FOLLOWUP] nao agendado: "
+                            f"{motivo}; lead={lead_followup.id}",
+                            flush=True,
+                        )
                 else:
                     db_followup.rollback()
-
-                print(
-                    f"[FOLLOWUP] resultado do agendamento: {motivo}",
-                    flush=True,
-                )
-
             except Exception as erro_followup:
                 db_followup.rollback()
                 print(
-                    f"[FOLLOWUP] falha ao preparar agendamento: {erro_followup}",
+                    f"[FOLLOWUP] falha no gatilho: {erro_followup}",
                     flush=True,
                 )
             finally:
