@@ -1,4 +1,6 @@
-﻿from sqlalchemy.orm import Session
+﻿
+from sqlalchemy.orm import Session
+
 from app.models.models import ConexaoCanal
 
 
@@ -30,7 +32,8 @@ def localizar_conexao_waha(
 
     conexao = conexoes[0]
 
-    if conexao.especialista_id is None:
-        return None, "vendedor_nao_vinculado"
-
+    # Conexoes institucionais podem operar sem vendedor fixo.
+    # A validacao da empresa ocorre no fluxo de entrada WAHA.
+    # Permissoes de acesso dos vendedores sao verificadas
+    # separadamente nos servicos de atendimento.
     return conexao, "conexao_identificada"
