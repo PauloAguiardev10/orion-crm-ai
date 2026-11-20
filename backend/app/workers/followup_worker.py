@@ -267,6 +267,18 @@ def autorizar_followup_transacional(
         )
 
         if not autorizado:
+            if motivo == "fora_horario_reagendado":
+                referencia = db.info.pop(
+                    "followup_reagendamento_atual", None
+                )
+
+                if referencia != (empresa_id, agendamento_id):
+                    db.rollback()
+                    return False, "reagendamento_nao_confirmado"
+
+                db.commit()
+                return False, motivo
+
             if not _confirmar_cancelamento_followup(db, empresa_id):
                 db.rollback()
             return False, motivo
@@ -394,7 +406,12 @@ def preparar_destino_followup(
 ) -> tuple[dict | None, str]:
     """Prepara o destino usando a conexao WAHA da conversa."""
 
-    from app.models.models import Conversa, FollowupAgendamento
+    from app.models.models import (
+        Conversa,
+        FollowupAgendamento,
+        FollowupConfiguracao,
+        FollowupModeloMensagem,
+    )
     from app.services.followup_sessao_waha_service import (
         resolver_sessao_waha_conversa,
     )
@@ -443,11 +460,49 @@ def preparar_destino_followup(
     if chat_id is None:
         return None, motivo
 
+    agendamento = (
+        db.query(FollowupAgendamento)
+        .filter(
+            FollowupAgendamento.id == agendamento_id,
+            FollowupAgendamento.empresa_id == empresa_id,
+        )
+        .first()
+    )
+
+    if agendamento is None:
+        return None, "agendamento_nao_encontrado"
+
+    configuracao = (
+        db.query(FollowupConfiguracao)
+        .filter(FollowupConfiguracao.empresa_id == empresa_id)
+        .first()
+    )
+
+    if configuracao is None or not configuracao.ativo:
+        return None, "followup_empresa_desativado"
+
+    if agendamento.numero_tentativa > configuracao.quantidade_tentativas:
+        return None, "limite_tentativas_atingido"
+
+    modelo = (
+        db.query(FollowupModeloMensagem)
+        .filter(
+            FollowupModeloMensagem.empresa_id == empresa_id,
+            FollowupModeloMensagem.numero_tentativa == agendamento.numero_tentativa,
+            FollowupModeloMensagem.ativo.is_(True),
+        )
+        .first()
+    )
+
+    if modelo is None or not isinstance(modelo.texto, str) or not modelo.texto.strip():
+        return None, "modelo_mensagem_indisponivel"
+
     return {
         "empresa_id": empresa_id,
         "agendamento_id": agendamento_id,
         "sessao": sessao,
         "chat_id": chat_id,
+        "texto": modelo.texto,
     }, "destino_preparado"
 
 
@@ -620,12 +675,15 @@ def enviar_followup_via_waha(destino: dict) -> tuple[str, str | None]:
 
     sessao = destino.get("sessao")
     chat_id = destino.get("chat_id")
+    texto_mensagem = destino.get("texto")
 
     if (
         not isinstance(sessao, str)
         or not sessao.strip()
         or not isinstance(chat_id, str)
         or not chat_id.strip()
+        or not isinstance(texto_mensagem, str)
+        or not texto_mensagem.strip()
     ):
         return "falha_envio", None
 
@@ -633,7 +691,7 @@ def enviar_followup_via_waha(destino: dict) -> tuple[str, str | None]:
         sucesso, erro, mensagem_id_externo = transportar_mensagem_waha(
             sessao=sessao,
             chat_id=chat_id,
-            texto=MENSAGEM_PADRAO_PRIMEIRO_FOLLOWUP,
+            texto=texto_mensagem,
         )
     except Exception:
         return "timeout_envio_inconclusivo", None

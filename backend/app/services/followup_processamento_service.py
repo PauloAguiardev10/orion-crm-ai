@@ -2,7 +2,12 @@
 
 from datetime import datetime, timezone
 
-from app.models.models import Conversa, FollowupAgendamento
+from app.models.models import (
+    Conversa,
+    FollowupAgendamento,
+    FollowupConfiguracao,
+    FollowupModeloMensagem,
+)
 from app.services.followup_service import (
     verificar_elegibilidade_primeiro_followup,
 )
@@ -272,6 +277,31 @@ def finalizar_agendamento_reservado(
     if agora.tzinfo is None or agora.utcoffset() is None:
         raise ValueError("Data precisa conter fuso horario.")
 
+    referencia = (
+        db.query(FollowupAgendamento.conversa_id)
+        .filter(
+            FollowupAgendamento.id == agendamento_id,
+            FollowupAgendamento.empresa_id == empresa_id,
+        )
+        .first()
+    )
+
+    if referencia is None or referencia.conversa_id is None:
+        return False, "conversa_nao_identificada"
+
+    conversa = (
+        db.query(Conversa)
+        .filter(
+            Conversa.id == referencia.conversa_id,
+            Conversa.empresa_id == empresa_id,
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if conversa is None:
+        return False, "conversa_nao_encontrada"
+
     agendamento = (
         db.query(FollowupAgendamento)
         .filter(
@@ -310,6 +340,29 @@ def finalizar_agendamento_reservado(
         agendamento.erro_envio = "timeout_envio_inconclusivo"
 
     db.flush()
+
+    if novo_status == "enviado":
+        from app.services.followup_agendamento_service import (
+            criar_proximo_agendamento,
+        )
+
+        try:
+            with db.begin_nested():
+                criar_proximo_agendamento(
+                    db,
+                    agendamento_anterior=agendamento,
+                    enviado_em=agora,
+                )
+        except Exception as erro:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Falha ao criar proxima tentativa de follow-up "
+                "(empresa_id=%s, agendamento_id=%s): %s",
+                empresa_id,
+                agendamento_id,
+                erro,
+            )
 
     return True, novo_status
 
@@ -478,6 +531,93 @@ def autorizar_envio_followup_reservado(
             empresa_id, agendamento.id
         )
         return False, motivo
+
+    configuracao = (
+        db.query(FollowupConfiguracao)
+        .filter(FollowupConfiguracao.empresa_id == empresa_id)
+        .first()
+    )
+
+    if configuracao is None or not configuracao.ativo:
+        agendamento.status = "cancelado"
+        agendamento.cancelado_em = agora
+        agendamento.atualizado_em = agora
+        db.flush()
+        db.info["followup_cancelamento_atual"] = (
+            empresa_id, agendamento.id
+        )
+        return False, "followup_empresa_desativado"
+
+    if agendamento.numero_tentativa > configuracao.quantidade_tentativas:
+        agendamento.status = "cancelado"
+        agendamento.cancelado_em = agora
+        agendamento.atualizado_em = agora
+        db.flush()
+        db.info["followup_cancelamento_atual"] = (
+            empresa_id, agendamento.id
+        )
+        return False, "limite_tentativas_atingido"
+
+    modelo = (
+        db.query(FollowupModeloMensagem)
+        .filter(
+            FollowupModeloMensagem.empresa_id == empresa_id,
+            FollowupModeloMensagem.numero_tentativa == agendamento.numero_tentativa,
+            FollowupModeloMensagem.ativo.is_(True),
+        )
+        .first()
+    )
+
+    if modelo is None:
+        agendamento.status = "cancelado"
+        agendamento.cancelado_em = agora
+        agendamento.atualizado_em = agora
+        db.flush()
+        db.info["followup_cancelamento_atual"] = (
+            empresa_id, agendamento.id
+        )
+        return False, "modelo_tentativa_desativado"
+
+
+    from app.services.followup_horarios import (
+        calcular_primeiro_followup,
+        horario_followup_permitido,
+    )
+
+    parametros_horario = dict(
+        fuso_horario=configuracao.fuso_horario,
+        segunda_sexta_inicio=configuracao.segunda_sexta_inicio,
+        segunda_sexta_fim=configuracao.segunda_sexta_fim,
+        sabado_ativo=configuracao.sabado_ativo,
+        sabado_inicio=configuracao.sabado_inicio,
+        sabado_fim=configuracao.sabado_fim,
+        domingo_ativo=configuracao.domingo_ativo,
+    )
+
+    if not horario_followup_permitido(
+        agora,
+        **parametros_horario,
+    ):
+        proximo_horario = calcular_primeiro_followup(
+            agora,
+            intervalo_minutos=1,
+            **parametros_horario,
+        )
+
+        agendamento.agendado_para = proximo_horario
+        agendamento.status = "pendente"
+        agendamento.reserva_token = None
+        agendamento.reservado_em = None
+        agendamento.reserva_expira_em = None
+        agendamento.atualizado_em = agora
+
+        db.flush()
+        db.info["followup_reagendamento_atual"] = (
+            empresa_id,
+            agendamento.id,
+        )
+
+        return False, "fora_horario_reagendado"
 
     agendamento.envio_iniciado_em = agora
     agendamento.atualizado_em = agora

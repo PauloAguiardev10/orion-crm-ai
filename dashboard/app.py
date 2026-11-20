@@ -23,6 +23,7 @@ from utils.bloqueio import (
 
 from app_pages.visao_geral import render_visao_geral
 from app_pages.leads import render_leads
+from app_pages.followup import render_followup
 from app_pages.produtos import render_produtos
 from app_pages.pedidos import render_pedidos
 from app_pages.conversas import render_conversas
@@ -464,6 +465,11 @@ if pagina == "🏠 Visão Geral":
 elif pagina == "📈 Leads":
 
     render_leads(leads)
+
+
+elif pagina == "Follow-up":
+
+    render_followup()
 
 
 elif pagina == "🛒 Produtos":

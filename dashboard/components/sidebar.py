@@ -353,10 +353,23 @@ def render_sidebar():
         if nivel in [
             "orion_admin",
             "parceiro_admin",
+            "admin_empresa",
+        ]:
+            menu.insert(
+                3,
+                "Follow-up",
+            )
+
+        if nivel in [
+            "orion_admin",
+            "parceiro_admin",
         ]:
             menu.append(
                 "🏢 Empresas"
             )
+
+        if st.session_state.get("menu_principal") not in menu:
+            st.session_state["menu_principal"] = menu[0]
 
         pagina = st.radio(
             "Menu",

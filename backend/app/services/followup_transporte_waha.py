@@ -54,5 +54,10 @@ def transportar_mensagem_waha(
     except requests.exceptions.Timeout:
         return False, "timeout_envio_inconclusivo", None
 
+    except requests.exceptions.ConnectionError:
+        # A conexao pode cair depois de o WAHA receber a mensagem.
+        # Nao permitir repeticao automatica de um envio incerto.
+        return False, "timeout_envio_inconclusivo", None
+
     except requests.RequestException:
         return False, "falha_envio", None

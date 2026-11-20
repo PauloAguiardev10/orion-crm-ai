@@ -1,3 +1,4 @@
+from sqlalchemy import Time
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -1005,3 +1006,108 @@ class FollowupAgendamento(Base):
 
     enviado_em = Column(DateTime(timezone=True), nullable=True)
     cancelado_em = Column(DateTime(timezone=True), nullable=True)
+
+class FollowupConfiguracao(Base):
+    __tablename__ = "followup_configuracoes"
+
+    __table_args__ = (
+        CheckConstraint(
+            "modo IN ('padrao_orion', 'personalizado')",
+            name="ck_followup_modo",
+        ),
+        CheckConstraint(
+            "quantidade_tentativas BETWEEN 1 AND 10",
+            name="ck_followup_quantidade",
+        ),
+        CheckConstraint(
+            "segunda_sexta_inicio < segunda_sexta_fim",
+            name="ck_followup_semana_horarios",
+        ),
+        CheckConstraint(
+            "sabado_inicio < sabado_fim",
+            name="ck_followup_sabado_horarios",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+
+    ativo = Column(Boolean, nullable=False, server_default="false")
+    modo = Column(String(20), nullable=False, server_default="padrao_orion")
+    quantidade_tentativas = Column(Integer, nullable=False, server_default="3")
+    fuso_horario = Column(
+        String(80),
+        nullable=False,
+        server_default="America/Sao_Paulo",
+    )
+
+    segunda_sexta_inicio = Column(Time, nullable=False, server_default="08:00")
+    segunda_sexta_fim = Column(Time, nullable=False, server_default="18:00")
+    sabado_ativo = Column(Boolean, nullable=False, server_default="true")
+    sabado_inicio = Column(Time, nullable=False, server_default="08:00")
+    sabado_fim = Column(Time, nullable=False, server_default="12:00")
+    domingo_ativo = Column(Boolean, nullable=False, server_default="false")
+
+    criado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    atualizado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class FollowupModeloMensagem(Base):
+    __tablename__ = "followup_modelos_mensagem"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id",
+            "numero_tentativa",
+            name="uq_followup_modelo_empresa_tentativa",
+        ),
+        CheckConstraint(
+            "numero_tentativa BETWEEN 1 AND 10",
+            name="ck_followup_modelo_tentativa",
+        ),
+        CheckConstraint(
+            "intervalo_minutos BETWEEN 1 AND 43200",
+            name="ck_followup_modelo_intervalo",
+        ),
+        CheckConstraint(
+            "length(trim(texto)) BETWEEN 1 AND 4000",
+            name="ck_followup_modelo_texto",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    numero_tentativa = Column(Integer, nullable=False)
+    intervalo_minutos = Column(Integer, nullable=False)
+    texto = Column(Text, nullable=False)
+    ativo = Column(Boolean, nullable=False, server_default="true")
+
+    criado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    atualizado_em = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
