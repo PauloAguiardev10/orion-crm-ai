@@ -1,4 +1,13 @@
 import streamlit as st
+import extra_streamlit_components as stx
+from datetime import datetime, timedelta, timezone
+from services.sessao_persistente_service import (
+    criar_sessao,
+    validar_sessao,
+    revogar_sessao,
+)
+
+
 import streamlit.components.v1 as components
 
 from pathlib import Path
@@ -133,6 +142,9 @@ carregar_tema()
 # INICIALIZAÇÃO DA SESSÃO
 # ============================================================
 
+COOKIE_SESSAO = "orion_crm_sessao"
+cookie_manager = stx.CookieManager(key="orion_auth_cookie_manager")
+
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -167,6 +179,79 @@ if "empresa_ativa_nome" not in st.session_state:
 # ============================================================
 # TÍTULOS DAS PÁGINAS
 # ============================================================
+
+if "token_sessao_persistente" not in st.session_state:
+    st.session_state.token_sessao_persistente = None
+
+
+# ============================================================
+# RESTAURACAO DO LOGIN PERSISTENTE
+# ============================================================
+
+if not st.session_state.logado:
+
+    # Aguarda a primeira leitura dos cookies pelo navegador.
+    if not st.session_state.get("cookies_verificados", False):
+        st.session_state.cookies_verificados = True
+        st.rerun()
+
+    token_cookie = cookie_manager.get(
+        cookie=COOKIE_SESSAO
+    )
+
+    if token_cookie:
+
+        dados_sessao = validar_sessao(
+            token_cookie
+        )
+
+        if dados_sessao:
+
+            usuario_id = int(
+                dados_sessao["usuario_id"]
+            )
+
+            empresa_id = int(
+                dados_sessao["empresa_id"]
+            )
+
+            empresa_nome = dados_sessao[
+                "empresa_nome"
+            ]
+
+            st.session_state.logado = True
+
+            st.session_state.usuario = (
+                dados_sessao["usuario"]
+                or dados_sessao["nome"]
+            )
+
+            st.session_state.usuario_id = usuario_id
+            st.session_state.empresa = empresa_nome
+            st.session_state.empresa_id = empresa_id
+            st.session_state.nivel = dados_sessao["nivel"]
+
+            st.session_state.empresa_login_id = (
+                empresa_id
+            )
+
+            st.session_state.empresa_login_nome = (
+                empresa_nome
+            )
+
+            st.session_state.empresa_ativa_id = (
+                empresa_id
+            )
+
+            st.session_state.empresa_ativa_nome = (
+                empresa_nome
+            )
+
+            st.session_state.token_sessao_persistente = (
+                token_cookie
+            )
+
+
 
 TITULOS_PAGINAS = {
     "📈 Leads": "📋 Leads",
@@ -309,6 +394,30 @@ def tela_login():
 
                 # Estado de autenticação
 
+
+                # ============================================
+
+                token_sessao = criar_sessao(
+                    usuario_id=int(usuario_id)
+                )
+
+                expira_em = (
+                    datetime.now(timezone.utc)
+                    + timedelta(hours=12)
+                )
+
+                cookie_manager.set(
+                    COOKIE_SESSAO,
+                    token_sessao,
+                    expires_at=expira_em,
+                )
+
+                st.session_state.token_sessao_persistente = (
+                    token_sessao
+                )
+
+
+
                 st.session_state.logado = True
 
                 st.session_state.usuario = usuario
@@ -418,6 +527,39 @@ with st.sidebar:
     )
 
     if st.button("Sair"):
+
+
+        # ============================================
+
+        token_sessao = (
+            st.session_state.get(
+                "token_sessao_persistente"
+            )
+        )
+
+        if not token_sessao:
+
+            token_sessao = cookie_manager.get(
+                cookie=COOKIE_SESSAO
+            )
+
+        # A revogacao no banco deve ocorrer
+        # antes de limpar a autenticacao local.
+
+        if token_sessao:
+
+            revogar_sessao(
+                token_sessao
+            )
+
+        # Remove o cookie do navegador.
+
+        cookie_manager.delete(
+            COOKIE_SESSAO
+        )
+
+
+        st.session_state.token_sessao_persistente = None
 
         st.session_state.logado = False
 
