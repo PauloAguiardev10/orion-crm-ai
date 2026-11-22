@@ -364,7 +364,8 @@ hr {
 
 /* =========================================
    ORION CRM AI - ICONES NEON OUTLINE
-   Preserva os valores originais do st.radio
+   Menu com Follow-up: 12 ou 13 opcoes
+   Menu sem Follow-up: 11 opcoes
    ========================================= */
 
 [data-testid="stSidebar"] div[role="radiogroup"] label {
@@ -382,8 +383,6 @@ hr {
     line-height: 24px !important;
 }
 
-/* Desenho dos icones */
-
 [data-testid="stSidebar"] div[role="radiogroup"] label p::before {
     content: "";
     display: inline-block;
@@ -400,8 +399,6 @@ hr {
     mask-size: contain;
 }
 
-/* Nome visivel de cada opcao */
-
 [data-testid="stSidebar"] div[role="radiogroup"] label p::after {
     font-size: 14px;
     line-height: 24px;
@@ -409,8 +406,7 @@ hr {
     font-weight: 500;
 }
 
-/* 01 - Visao Geral: casa */
-
+/* 01 - Visao Geral */
 [data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(1) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'/%3E%3Cpath d='M9 21v-8h6v8'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'/%3E%3Cpath d='M9 21v-8h6v8'/%3E%3C/svg%3E");
@@ -419,133 +415,204 @@ hr {
     content: "Visão Geral";
 }
 
-/* 02 - Leads: usuarios */
-
+/* 02 - Leads */
 [data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(2) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M22 21v-2a4 4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
 }
 [data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(2) p::after {
     content: "Leads";
 }
 
-/* 03 - Produtos: caixa */
-
+/* 03 - Conversas */
 [data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(3) p::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(3) p::after {
-    content: "Produtos";
-}
-
-/* 04 - Pedidos: carrinho */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(4) p::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(4) p::after {
-    content: "Pedidos";
-}
-
-/* 05 - Conversas: baloes */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(5) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8z'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(5) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(3) p::after {
     content: "Conversas";
 }
 
-/* 06 - Especialistas: usuario */
+/* 04 - Follow-up */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(4) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M5.6 9A8 8 0 0 1 19 7l1 5M4 12l1 5a8 8 0 0 0 13.4-2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5'/%3E%3Cpath d='M4 17v-5h5'/%3E%3Cpath d='M5.6 9A8 8 0 0 1 19 7l1 5M4 12l1 5a8 8 0 0 0 13.4-2'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(4) p::after {
+    content: "Follow-up";
+}
 
+/* 05 - Pedidos */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(5) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(5) p::after {
+    content: "Pedidos";
+}
+
+/* 06 - Produtos */
 [data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(6) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(6) p::after {
+    content: "Produtos";
+}
+
+/* 07 - Especialistas */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(7) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='7' r='4'/%3E%3Cpath d='M3 21v-2a7 7 0 0 1 14 0v2M17 11l2 2 4-4'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='7' r='4'/%3E%3Cpath d='M3 21v-2a7 7 0 0 1 14 0v2M17 11l2 2 4-4'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(6) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(7) p::after {
+    content: "Especialistas";
+}
+
+/* 08 - Funil Comercial */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(8) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4h16l-6.5 8v6l-3 2v-8z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4h16l-6.5 8v6l-3 2v-8z'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(8) p::after {
+    content: "Funil Comercial";
+}
+
+/* 09 - Servicos e Canais */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(9) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V10M10 20V4M16 20v-7M22 20V8M2 20h22'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V10M10 20V4M16 20v-7M22 20V8M2 20h22'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(9) p::after {
+    content: "Serviços e Canais";
+}
+
+/* 10 - Resultados */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(10) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8M15 7h6v6'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8M15 7h6v6'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(10) p::after {
+    content: "Resultados";
+}
+
+/* 11 - Integracoes */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(11) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v4'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(11) p::after {
+    content: "Integrações";
+}
+
+/* 12 - Configuracoes */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(12) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M10 2h4l.7 2.5 2 1 2.5-.7 2 3.5-1.8 1.8v2.3l1.8 1.8-2 3.5-2.5-.7-2 1L14 22h-4l-.7-2.5-2-1-2.5.7-2-3.5 1.8-1.8v-2.3L2.8 9.8l2-3.5 2.5.7 2-1z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M10 2h4l.7 2.5 2 1 2.5-.7 2 3.5-1.8 1.8v2.3l1.8 1.8-2 3.5-2.5-.7-2 1L14 22h-4l-.7-2.5-2-1-2.5.7-2-3.5 1.8-1.8v-2.3L2.8 9.8l2-3.5 2.5.7 2-1z'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(12) p::after {
+    content: "Configurações";
+}
+
+/* 13 - Empresas */
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(13) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21V3h12v18M15 9h6v12M1 21h22M7 7h4M7 11h4M7 15h4M18 13h1M18 17h1'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21V3h12v18M15 9h6v12M1 21h22M7 7h4M7 11h4M7 15h4M18 13h1M18 17h1'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(13) p::after {
+    content: "Empresas";
+}
+
+/* =========================================
+   USUARIOS SEM FOLLOW-UP
+   11 OPCOES NO MENU
+   ========================================= */
+
+/* 04 - Pedidos */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(4) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(4) p::after {
+    content: "Pedidos";
+}
+
+/* 05 - Produtos */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(5) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5-9 5-9-5zM3 7v10l9 5 9-5V7M12 12v10'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(5) p::after {
+    content: "Produtos";
+}
+
+/* 06 - Especialistas */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(6) p::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='7' r='4'/%3E%3Cpath d='M3 21v-2a7 7 0 0 1 14 0v2M17 11l2 2 4-4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='7' r='4'/%3E%3Cpath d='M3 21v-2a7 7 0 0 1 14 0v2M17 11l2 2 4-4'/%3E%3C/svg%3E");
+}
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(6) p::after {
     content: "Especialistas";
 }
 
 /* 07 - Funil Comercial */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(7) p::before {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(7) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4h16l-6.5 8v6l-3 2v-8z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4h16l-6.5 8v6l-3 2v-8z'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(7) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(7) p::after {
     content: "Funil Comercial";
 }
 
-/* 08 - Servicos e Canais: grafico */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(8) p::before {
+/* 08 - Servicos e Canais */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(8) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V10M10 20V4M16 20v-7M22 20V8M2 20h22'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V10M10 20V4M16 20v-7M22 20V8M2 20h22'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(8) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(8) p::after {
     content: "Serviços e Canais";
 }
 
-/* 09 - Resultados: tendencia */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(9) p::before {
+/* 09 - Resultados */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(9) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8M15 7h6v6'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8M15 7h6v6'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(9) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(9) p::after {
     content: "Resultados";
 }
 
-/* 10 - Integracoes: plugue */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(10) p::before {
+/* 10 - Integracoes */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(10) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v4'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v4'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(10) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(10) p::after {
     content: "Integrações";
 }
 
-/* 11 - Configuracoes: engrenagem */
-
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(11) p::before {
+/* 11 - Configuracoes */
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(11) p::before {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M10 2h4l.7 2.5 2 1 2.5-.7 2 3.5-1.8 1.8v2.3l1.8 1.8-2 3.5-2.5-.7-2 1L14 22h-4l-.7-2.5-2-1-2.5.7-2-3.5 1.8-1.8v-2.3L2.8 9.8l2-3.5 2.5.7 2-1z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M10 2h4l.7 2.5 2 1 2.5-.7 2 3.5-1.8 1.8v2.3l1.8 1.8-2 3.5-2.5-.7-2 1L14 22h-4l-.7-2.5-2-1-2.5.7-2-3.5 1.8-1.8v-2.3L2.8 9.8l2-3.5 2.5.7 2-1z'/%3E%3C/svg%3E");
 }
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(11) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"]:has(> label:nth-child(11):last-child) > label:nth-child(11) p::after {
     content: "Configurações";
 }
 
-/* 12 - Empresas: edificio */
+/* =========================================
+   DESTAQUE NEON DA OPCAO SELECIONADA
+   ========================================= */
 
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(12) p::before {
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21V3h12v18M15 9h6v12M1 21h22M7 7h4M7 11h4M7 15h4M18 13h1M18 17h1'/%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21V3h12v18M15 9h6v12M1 21h22M7 7h4M7 11h4M7 15h4M18 13h1M18 17h1'/%3E%3C/svg%3E");
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:nth-child(12) p::after {
-    content: "Empresas";
-}
-
-/* Destaque neon na opcao selecionada */
-
-[data-testid="stSidebar"]
-div[role="radiogroup"]
-label:has(input:checked) p::before {
+[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p::before {
     background-color: #A78BFA;
 }
 
-[data-testid="stSidebar"]
-div[role="radiogroup"]
-label:has(input:checked) p::after {
+[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p::after {
     color: #F8FAFC;
     font-weight: 700;
     text-shadow: 0 0 8px rgba(34,211,238,.14);
 }
-
-/* Alinha as bolinhas do radio com os icones */
 
 [data-testid="stSidebar"] div[role="radiogroup"] label > div {
     align-self: center !important;
