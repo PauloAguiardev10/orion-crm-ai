@@ -11,8 +11,12 @@ from services.followup_configuracoes_service import (
 def render_followup():
     """Interface administrativa do Follow-up Automatico."""
 
+
     nivel = st.session_state.get("nivel")
-    empresa_id = st.session_state.get("empresa_id")
+    empresa_id = st.session_state.get(
+        "empresa_ativa_id",
+        st.session_state.get("empresa_id"),
+)
 
     if nivel not in {
         "orion_admin",

@@ -467,7 +467,7 @@ elif pagina == "📈 Leads":
     render_leads(leads)
 
 
-elif pagina == "Follow-up":
+elif pagina == "🎯 Follow-up":
 
     render_followup()
 

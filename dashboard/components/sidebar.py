@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import requests
@@ -292,10 +293,6 @@ def render_sidebar():
         # nível de acesso do funcionário.
         # =========================================
 
-        # A identidade visual superior pertence
-        # sempre a empresa em que o usuario fez login.
-        # A logo e carregada dinamicamente do banco.
-
         logo_path = obter_logo_empresa(
             empresa_login_id
         )
@@ -339,9 +336,10 @@ def render_sidebar():
         menu = [
             "🏠 Visão Geral",
             "📈 Leads",
-            "🛒 Produtos",
-            "🧾 Pedidos",
             "💬 Conversas",
+            "🎯 Follow-up",
+            "🧾 Pedidos",
+            "🛒 Produtos",
             "👨‍💼 Especialistas",
             "🔥 Funil Comercial",
             "📊 Serviços e Canais",
@@ -350,13 +348,15 @@ def render_sidebar():
             "⚙️ Configurações",
         ]
 
-        if nivel in [
+        # Follow-up: acesso restrito aos administradores
+        if nivel not in [
             "orion_admin",
             "parceiro_admin",
             "admin_empresa",
         ]:
-            menu.insert(3, "Follow-up")
+            menu.remove("🎯 Follow-up")
 
+        # Empresas: acesso Orion e parceiros
         if nivel in [
             "orion_admin",
             "parceiro_admin",
@@ -401,7 +401,6 @@ def render_sidebar():
             st.warning(
                 "🟡 WhatsApp Indisponível"
             )
-
 
         st.caption(
             "WhatsApp • Instagram Direct • Facebook Messenger"

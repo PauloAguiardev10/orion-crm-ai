@@ -1,4 +1,4 @@
-"""Regras de elegibilidade do Follow-up Automatico de primeiro contato."""
+﻿"""Regras de elegibilidade do Follow-up Automatico de primeiro contato."""
 
 from sqlalchemy.orm import Session
 
@@ -59,6 +59,9 @@ def verificar_elegibilidade_primeiro_followup(
 
     if lead.resumo_vendedor:
         return False, "lead_ja_qualificada"
+
+    if conversa.humano_assumiu is True:
+        return False, "atendimento_humano_assumiu"
 
     if conversa.etapa in {"aguardando_humano", "encaminhar", "finalizado"}:
         return False, "conversa_ja_encaminhada"
