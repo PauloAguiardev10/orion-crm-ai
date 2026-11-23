@@ -632,36 +632,30 @@ def receber_mensagem(dados: MensagemRequest):
 
             # Cancela follow-ups pendentes quando o cliente responde.
             # Nao interfere na qualificacao da Sofia.
-            if (
-                os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
-                .strip()
-                .lower()
-                in ("1", "true", "yes", "on")
-            ):
-                from app.services.followup_processamento_service import (
-                    cancelar_followups_pendentes_por_resposta,
-                )
+            from app.services.followup_processamento_service import (
+                cancelar_followups_pendentes_por_resposta,
+            )
 
-                # Atualiza a lead provisoria quando o cliente responde.
-                lead_em_espera = (
-                    db.query(Lead)
-                    .filter(
-                        Lead.empresa_id == dados.empresa_id,
-                        Lead.conversa_id == conversa.id,
-                        Lead.status == "Aguardando resposta",
-                    )
-                    .order_by(Lead.id.desc())
-                    .first()
+            # Atualiza a lead provisoria quando o cliente responde.
+            lead_em_espera = (
+                db.query(Lead)
+                .filter(
+                    Lead.empresa_id == dados.empresa_id,
+                    Lead.conversa_id == conversa.id,
+                    Lead.status == "Aguardando resposta",
                 )
+                .order_by(Lead.id.desc())
+                .first()
+            )
 
-                if lead_em_espera is not None:
-                    lead_em_espera.status = "Em qualificação"
+            if lead_em_espera is not None:
+                lead_em_espera.status = "Em qualificação"
 
-                cancelar_followups_pendentes_por_resposta(
-                    db,
-                    empresa_id=dados.empresa_id,
-                    conversa_id=conversa.id,
-                )
+            cancelar_followups_pendentes_por_resposta(
+                db,
+                empresa_id=dados.empresa_id,
+                conversa_id=conversa.id,
+            )
 
             db.commit()
 
@@ -682,52 +676,46 @@ def receber_mensagem(dados: MensagemRequest):
                 mensagem_id_externo=dados.mensagem_id_externo,
             )
 
-            if (
-                os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
-                .strip()
-                .lower()
-                in ("1", "true", "yes", "on")
-            ):
-                mensagem_cliente = (
-                    db.query(Mensagem)
+            mensagem_cliente = (
+                db.query(Mensagem)
+                .filter(
+                    Mensagem.id == mensagem_interna_id,
+                    Mensagem.empresa_id == dados.empresa_id,
+                    Mensagem.conversa_id == conversa.id,
+                    Mensagem.mensagem_id_externo
+                    == dados.mensagem_id_externo,
+                    Mensagem.from_me.is_(False),
+                    Mensagem.remetente == "cliente",
+                )
+                .first()
+            )
+
+            if mensagem_cliente is not None:
+                from app.services.followup_processamento_service import (
+                    cancelar_followups_pendentes_por_resposta,
+                )
+
+                lead_em_espera = (
+                    db.query(Lead)
                     .filter(
-                        Mensagem.id == mensagem_interna_id,
-                        Mensagem.empresa_id == dados.empresa_id,
-                        Mensagem.conversa_id == conversa.id,
-                        Mensagem.mensagem_id_externo
-                        == dados.mensagem_id_externo,
-                        Mensagem.from_me.is_(False),
-                        Mensagem.remetente == "cliente",
+                        Lead.empresa_id == dados.empresa_id,
+                        Lead.conversa_id == conversa.id,
+                        Lead.status == "Aguardando resposta",
                     )
+                    .order_by(Lead.id.desc())
                     .first()
                 )
 
-                if mensagem_cliente is not None:
-                    from app.services.followup_processamento_service import (
-                        cancelar_followups_pendentes_por_resposta,
-                    )
+                if lead_em_espera is not None:
+                    lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
 
-                    lead_em_espera = (
-                        db.query(Lead)
-                        .filter(
-                            Lead.empresa_id == dados.empresa_id,
-                            Lead.conversa_id == conversa.id,
-                            Lead.status == "Aguardando resposta",
-                        )
-                        .order_by(Lead.id.desc())
-                        .first()
-                    )
+                cancelar_followups_pendentes_por_resposta(
+                    db,
+                    empresa_id=dados.empresa_id,
+                    conversa_id=conversa.id,
+                )
 
-                    if lead_em_espera is not None:
-                        lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
-
-                    cancelar_followups_pendentes_por_resposta(
-                        db,
-                        empresa_id=dados.empresa_id,
-                        conversa_id=conversa.id,
-                    )
-
-                    db.commit()
+                db.commit()
 
             return {
                 "conversa_id": conversa.id,

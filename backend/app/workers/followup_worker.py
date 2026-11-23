@@ -554,6 +554,47 @@ def liberar_reserva_followup_transacional(
         raise
 
 
+
+def confirmar_inicio_followup_transacional(
+    db,
+    *,
+    empresa_id: int,
+    agendamento_id: int,
+    reserva_token: str,
+) -> tuple[bool, str]:
+    """Confirma o inicio do envio e persiste a decisao."""
+    from app.services.followup_processamento_service import (
+        confirmar_inicio_envio_followup,
+    )
+
+    if db.in_transaction():
+        return False, "sessao_com_transacao_ativa"
+
+    try:
+        confirmado, motivo = confirmar_inicio_envio_followup(
+            db,
+            empresa_id=empresa_id,
+            agendamento_id=agendamento_id,
+            reserva_token=reserva_token,
+        )
+
+        if confirmado or motivo not in (
+            "agendamento_nao_encontrado",
+            "conversa_nao_encontrada",
+            "reserva_invalidada",
+            "envio_ja_iniciado",
+        ):
+            db.commit()
+        else:
+            db.rollback()
+
+        return confirmado, motivo
+
+    except Exception:
+        db.rollback()
+        raise
+
+
 def executar_ciclo_followup_simulado(
     *,
     empresa_id: int,
@@ -640,7 +681,20 @@ def executar_ciclo_followup_simulado(
     if not autorizado:
         return False, motivo
 
-    # Etapa 4: simulador de envio.
+    # Etapa 4: confirma o inicio antes de chamar o transporte.
+    # Revalida a elegibilidade sob bloqueio da conversa.
+    with session_factory() as db:
+        confirmado, motivo = confirmar_inicio_followup_transacional(
+            db,
+            empresa_id=empresa_id,
+            agendamento_id=agendamento_id,
+            reserva_token=reserva_token,
+        )
+
+    if not confirmado:
+        return False, motivo
+
+    # Etapa 5: simulador de envio.
     # A funcao injetada deve retornar:
     # (status_envio, mensagem_id_externo)
     try:

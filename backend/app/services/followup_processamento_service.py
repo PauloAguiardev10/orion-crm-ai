@@ -367,6 +367,88 @@ def finalizar_agendamento_reservado(
     return True, novo_status
 
 
+
+def confirmar_inicio_envio_followup(
+    db,
+    *,
+    empresa_id: int,
+    agendamento_id: int,
+    reserva_token: str,
+    agora: datetime | None = None,
+) -> tuple[bool, str]:
+    """Confirma o inicio da tentativa, sem commit nem envio HTTP."""
+    if agora is None:
+        agora = datetime.now(timezone.utc)
+
+    referencia = (
+        db.query(FollowupAgendamento.conversa_id)
+        .filter(
+            FollowupAgendamento.id == agendamento_id,
+            FollowupAgendamento.empresa_id == empresa_id,
+        )
+        .first()
+    )
+
+    if referencia is None or referencia.conversa_id is None:
+        return False, "agendamento_nao_encontrado"
+
+    conversa = (
+        db.query(Conversa)
+        .filter(
+            Conversa.id == referencia.conversa_id,
+            Conversa.empresa_id == empresa_id,
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if conversa is None:
+        return False, "conversa_nao_encontrada"
+
+    agendamento = (
+        db.query(FollowupAgendamento)
+        .filter(
+            FollowupAgendamento.id == agendamento_id,
+            FollowupAgendamento.empresa_id == empresa_id,
+            FollowupAgendamento.status == "processando",
+            FollowupAgendamento.reserva_token == reserva_token,
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if agendamento is None:
+        return False, "reserva_invalidada"
+
+    if agendamento.envio_iniciado_em is not None:
+        return False, "envio_ja_iniciado"
+
+    if (
+        agendamento.reserva_expira_em is None
+        or agendamento.reserva_expira_em <= agora
+    ):
+        return False, "reserva_expirada"
+
+    elegivel, motivo = verificar_elegibilidade_primeiro_followup(
+        db,
+        empresa_id=empresa_id,
+        lead_id=agendamento.lead_id,
+    )
+
+    if not elegivel:
+        agendamento.status = "cancelado"
+        agendamento.cancelado_em = agora
+        agendamento.atualizado_em = agora
+        db.flush()
+        return False, motivo
+
+    agendamento.envio_iniciado_em = agora
+    agendamento.atualizado_em = agora
+    db.flush()
+
+    return True, "inicio_envio_confirmado"
+
+
 def recuperar_reservas_expiradas(
     db,
     *,
@@ -619,7 +701,8 @@ def autorizar_envio_followup_reservado(
 
         return False, "fora_horario_reagendado"
 
-    agendamento.envio_iniciado_em = agora
+    # A autorizacao nao significa que o envio HTTP comecou.
+    # O inicio sera confirmado em uma etapa transacional posterior.
     agendamento.atualizado_em = agora
 
     db.flush()
