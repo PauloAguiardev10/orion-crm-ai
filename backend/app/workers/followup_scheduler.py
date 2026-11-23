@@ -141,7 +141,7 @@ if __name__ == "__main__":
     if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
         raise SystemExit("Envio real desabilitado: FOLLOWUP_ENVIO_REAL_ATIVO != 1")
 
-    raise SystemExit(
-        "Execucao real ainda nao habilitada no agendador. "
-        "Aguardando validacao final da integracao."
+    executar_agendador(
+        empresa_ids=ids,
+        modo_simulacao=False,
     )
