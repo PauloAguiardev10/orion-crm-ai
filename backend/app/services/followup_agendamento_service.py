@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from sqlalchemy import or_
+
 from app.services.followup_horarios import calcular_primeiro_followup
 from app.models.models import FollowupConfiguracao, FollowupModeloMensagem
 
@@ -125,13 +127,18 @@ def criar_primeiro_agendamento(
         db.query(FollowupAgendamento)
         .filter(
             FollowupAgendamento.empresa_id == empresa_id,
-            FollowupAgendamento.lead_id == lead_id,
+            or_(
+                FollowupAgendamento.lead_id == lead_id,
+                FollowupAgendamento.conversa_id == lead.conversa_id,
+            ),
             FollowupAgendamento.numero_tentativa == 1,
         )
         .first()
     )
 
     if existente is not None:
+        if existente.lead_id != lead_id:
+            return None, "primeiro_followup_ja_agendado_na_conversa"
         return existente, "agendamento_ja_existe"
 
     configuracao = (
@@ -190,8 +197,12 @@ def criar_proximo_agendamento(
     """
     from app.models.models import FollowupAgendamento
     from app.services.followup_service import (
+        agendamento_followup_ativo,
         verificar_elegibilidade_primeiro_followup,
     )
+
+    if not agendamento_followup_ativo():
+        return None, "agendamento_desativado"
 
     if agendamento_anterior.status != "enviado":
         return None, "tentativa_anterior_nao_enviada"

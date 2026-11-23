@@ -66,6 +66,39 @@ def processar_agendamento_pendente(
     return "elegivel", "aguardando_etapa_de_envio"
 
 
+def processar_resposta_cliente_followup(db, *, mensagem) -> None:
+    """Aplica a resposta ao follow-up dentro da transação da mensagem."""
+    from app.models.models import Lead
+    from app.services.followup_service import consultar_primeira_resposta_confirmada
+
+    if mensagem.from_me is not False or mensagem.remetente != "cliente":
+        return
+
+    primeira = consultar_primeira_resposta_confirmada(
+        db, empresa_id=mensagem.empresa_id, conversa_id=mensagem.conversa_id,
+    )
+    if (
+        primeira is None
+        or primeira.criado_em is None
+        or mensagem.criado_em is None
+        or (mensagem.criado_em, mensagem.id) <= (primeira.criado_em, primeira.id)
+    ):
+        return
+
+    cancelar_followups_pendentes_por_resposta(
+        db, empresa_id=mensagem.empresa_id, conversa_id=mensagem.conversa_id,
+    )
+    (
+        db.query(Lead)
+        .filter(
+            Lead.empresa_id == mensagem.empresa_id,
+            Lead.conversa_id == mensagem.conversa_id,
+            Lead.status == "Aguardando resposta",
+        )
+        .update({Lead.status: "Em qualificação"}, synchronize_session=False)
+    )
+
+
 def cancelar_followups_pendentes_por_resposta(
     db,
     *,

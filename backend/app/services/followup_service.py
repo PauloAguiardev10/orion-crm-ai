@@ -1,16 +1,73 @@
 ﻿"""Regras de elegibilidade do Follow-up Automatico de primeiro contato."""
 
+import os
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from app.models.models import Conversa, Lead, Mensagem
 from app.services.estados_mensagem import STATUS_ENVIO_CONFIRMADO_HTTP
 
 
-ORIGENS_ANUNCIO = {
-    "anuncio_instagram",
-    "anuncio_facebook",
-    "anuncio",
-}
+REMETENTES_PRIMEIRA_RESPOSTA = ("agente", "humano")
+REMETENTE_SAIDA_APLICATIVO = "humano_whatsapp"
+
+
+def agendamento_followup_ativo() -> bool:
+    return os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def consultar_primeira_resposta_confirmada(db: Session, *, empresa_id: int, conversa_id: int):
+    return (
+        db.query(Mensagem.id, Mensagem.criado_em)
+        .filter(
+            Mensagem.empresa_id == empresa_id,
+            Mensagem.conversa_id == conversa_id,
+            Mensagem.from_me.is_(True),
+            Mensagem.remetente.in_(REMETENTES_PRIMEIRA_RESPOSTA),
+            Mensagem.status_envio == STATUS_ENVIO_CONFIRMADO_HTTP,
+        )
+        .order_by(Mensagem.criado_em.asc(), Mensagem.id.asc())
+        .first()
+    )
+
+
+def registrar_entrada_followup(
+    db: Session, *, empresa_id: int, conversa_id: int, mensagem_id: int,
+) -> None:
+    """Registra a primeira confirmação no mesmo commit do envio."""
+    if not agendamento_followup_ativo():
+        return
+
+    confirmada = consultar_primeira_resposta_confirmada(
+        db, empresa_id=empresa_id, conversa_id=conversa_id,
+    )
+    if confirmada is None or confirmada.id != mensagem_id:
+        return
+
+    lead_atual = (
+        db.query(Lead.id)
+        .filter(Lead.empresa_id == empresa_id, Lead.conversa_id == conversa_id)
+        .order_by(Lead.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    (
+        db.query(Lead)
+        .filter(
+            Lead.id == lead_atual,
+            Lead.empresa_id == empresa_id,
+            Lead.conversa_id == conversa_id,
+            Lead.status.in_(("Em atendimento", "Aguardando resposta")),
+            Lead.entrada_followup_em.is_(None),
+        )
+        .update(
+            {Lead.entrada_followup_em: datetime.now(timezone.utc)},
+            synchronize_session=False,
+        )
+    )
 
 
 def verificar_elegibilidade_primeiro_followup(
@@ -18,6 +75,7 @@ def verificar_elegibilidade_primeiro_followup(
     *,
     empresa_id: int,
     lead_id: int,
+    permitir_em_atendimento: bool = False,
 ) -> tuple[bool, str]:
     """Valida o primeiro contato sem modificar o banco."""
 
@@ -30,7 +88,13 @@ def verificar_elegibilidade_primeiro_followup(
     if lead is None:
         return False, "lead_nao_encontrada"
 
-    if lead.status != "Aguardando resposta":
+    status_permitidos = (
+        ("Aguardando resposta", "Em atendimento")
+        if permitir_em_atendimento
+        else ("Aguardando resposta",)
+    )
+
+    if lead.status not in status_permitidos:
         return False, "lead_nao_aguardando_resposta"
 
     if lead.conversa_id is None:
@@ -49,14 +113,6 @@ def verificar_elegibilidade_primeiro_followup(
     if conversa is None:
         return False, "vinculo_conversa_invalido"
 
-    # Somente a proveniencia tecnica pode indicar anuncio.
-    # A origem comercial informada pelo cliente nao e suficiente.
-    if conversa.anuncio_referral_confirmado is not True:
-        return False, "anuncio_sem_comprovacao_tecnica"
-
-    if not conversa.anuncio_referral_id:
-        return False, "anuncio_sem_identificador"
-
     if lead.resumo_vendedor:
         return False, "lead_ja_qualificada"
 
@@ -69,6 +125,7 @@ def verificar_elegibilidade_primeiro_followup(
     if conversa.status_atendimento in {
         "aguardando_humano",
         "aguardando_atendimento_humano",
+        "em_atendimento_humano",
         "finalizado",
     }:
         return False, "atendimento_ja_encaminhado"
@@ -92,24 +149,29 @@ def verificar_elegibilidade_primeiro_followup(
     ):
         return False, "historico_incompleto"
 
+    if any(m.from_me is True and m.remetente == REMETENTE_SAIDA_APLICATIVO for m in mensagens):
+        return False, "contato_manual_whatsapp"
+
     recebidas = [m for m in mensagens if m.from_me is False]
-    enviadas = [m for m in mensagens if m.from_me is True]
+    respostas_confirmadas = [
+        m for m in mensagens
+        if m.from_me is True
+        and m.remetente in REMETENTES_PRIMEIRA_RESPOSTA
+        and m.status_envio == STATUS_ENVIO_CONFIRMADO_HTTP
+    ]
 
     if not recebidas:
         return False, "cliente_nao_iniciou_contato"
 
-    if not enviadas:
-        return False, "empresa_ainda_nao_respondeu"
-
     primeira_recebida = recebidas[0]
-    primeira_enviada = enviadas[0]
 
     if mensagens[0].id != primeira_recebida.id:
         return False, "empresa_iniciou_conversa"
 
-    if primeira_enviada.status_envio != STATUS_ENVIO_CONFIRMADO_HTTP:
+    if not respostas_confirmadas:
         return False, "primeira_resposta_sem_confirmacao_http"
 
+    primeira_enviada = respostas_confirmadas[0]
     # Nenhuma mensagem do cliente pode ocorrer depois da primeira
     # resposta da empresa. Isso impede reentrada apos interacao.
     indice_primeira_enviada = next(
@@ -126,6 +188,4 @@ def verificar_elegibilidade_primeiro_followup(
     if mensagens[-1].from_me is not True:
         return False, "ultima_mensagem_nao_e_da_empresa"
 
-    # A elegibilidade exige proveniencia tecnica previamente validada.
-    # O disparo real permanece controlado por configuracao separada.
     return True, "elegivel_primeiro_followup"

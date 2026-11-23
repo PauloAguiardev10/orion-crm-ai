@@ -1,12 +1,10 @@
-"""Agendador independente de follow-up do Orion CRM AI.
-
-Nesta etapa, executa exclusivamente ciclos sem envio real.
-"""
+"""Agendador independente de follow-up do Orion CRM AI."""
 
 import logging
 import os
 import time
 
+from app.services.followup_service import agendamento_followup_ativo
 from app.workers.followup_worker import (
     executar_ciclo_followup,
     recuperar_followups_expirados_transacional,
@@ -14,6 +12,107 @@ from app.workers.followup_worker import (
 
 
 logger = logging.getLogger("orion.followup.scheduler")
+
+
+
+def processar_leads_apos_cinco_minutos(db, *, empresa_id: int) -> int:
+    """Agenda leads sem resposta apos cinco minutos. Nao envia mensagens."""
+    from datetime import datetime, timedelta, timezone
+    from app.models.models import Conversa, Lead
+    from app.services.followup_service import (
+        verificar_elegibilidade_primeiro_followup,
+    )
+    from app.services.followup_agendamento_service import (
+        criar_primeiro_agendamento,
+    )
+
+    limite = datetime.now(timezone.utc) - timedelta(minutes=5)
+    quantidade = 0
+
+    candidatos = (
+        db.query(Lead.id, Lead.conversa_id)
+        .filter(
+            Lead.empresa_id == empresa_id,
+            Lead.status == "Em atendimento",
+            Lead.entrada_followup_em.isnot(None),
+            Lead.entrada_followup_em <= limite,
+        )
+        .all()
+    )
+
+    for lead_id, conversa_id in candidatos:
+        try:
+            # Usa a mesma ordem de bloqueios da recepção de mensagens.
+            conversa = (
+                db.query(Conversa.id)
+                .filter(
+                    Conversa.id == conversa_id,
+                    Conversa.empresa_id == empresa_id,
+                )
+                .with_for_update(skip_locked=True)
+                .one_or_none()
+            )
+            if conversa is None:
+                db.rollback()
+                continue
+
+            lead = (
+                db.query(Lead)
+                .filter(
+                    Lead.id == lead_id,
+                    Lead.empresa_id == empresa_id,
+                    Lead.conversa_id == conversa_id,
+                    Lead.status == "Em atendimento",
+                    Lead.entrada_followup_em <= limite,
+                )
+                .with_for_update()
+                .one_or_none()
+            )
+
+            if lead is None:
+                db.rollback()
+                continue
+
+            elegivel, motivo = verificar_elegibilidade_primeiro_followup(
+                db,
+                empresa_id=empresa_id,
+                lead_id=lead.id,
+                permitir_em_atendimento=True,
+            )
+
+            if not elegivel:
+                db.rollback()
+                continue
+
+            lead.status = "Aguardando resposta"
+            db.flush()
+
+            agendamento, motivo = criar_primeiro_agendamento(
+                db,
+                empresa_id=empresa_id,
+                lead_id=lead.id,
+                entrada_lead_em=lead.entrada_followup_em,
+            )
+
+            if agendamento is None:
+                db.rollback()
+                logger.info(
+                    "Follow-up nao agendado: lead=%s motivo=%s",
+                    lead_id, motivo,
+                )
+                continue
+
+            db.commit()
+            if motivo == "agendamento_preparado":
+                quantidade += 1
+
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Erro ao processar lead %s para follow-up", lead_id,
+            )
+
+    return quantidade
 
 
 def executar_agendador(
@@ -56,8 +155,6 @@ def executar_agendador(
     else:
         if os.getenv("FOLLOWUP_WORKER_ATIVO") != "1":
             raise ValueError("worker_desabilitado")
-        if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
-            raise ValueError("envio_real_desabilitado")
         if simulador_envio is not None:
             raise ValueError("transporte_injetado_no_modo_real")
         if session_factory is None:
@@ -72,6 +169,18 @@ def executar_agendador(
         for empresa_id in empresa_ids:
             try:
                 try:
+                    if agendamento_followup_ativo():
+                        with session_factory() as db:
+                            quantidade_novos = processar_leads_apos_cinco_minutos(
+                                db,
+                                empresa_id=empresa_id,
+                            )
+                            logger.info(
+                                "Follow-up: %s novos agendamentos; empresa=%s",
+                                quantidade_novos,
+                                empresa_id,
+                            )
+
                     with session_factory() as db:
                         quantidade, motivo_recuperacao = (
                             recuperar_followups_expirados_transacional(
@@ -91,6 +200,15 @@ def executar_agendador(
                     logger.exception(
                         "Erro na recuperacao de reservas da empresa %s",
                         empresa_id,
+                    )
+                    continue
+
+                if (
+                    not modo_simulacao
+                    and os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1"
+                ):
+                    logger.info(
+                        "Envio real desativado; agendamentos preservados."
                     )
                     continue
 
@@ -138,8 +256,6 @@ if __name__ == "__main__":
     if os.getenv("FOLLOWUP_WORKER_ATIVO") != "1":
         raise SystemExit("Follow-up desabilitado: FOLLOWUP_WORKER_ATIVO != 1")
 
-    if os.getenv("FOLLOWUP_ENVIO_REAL_ATIVO") != "1":
-        raise SystemExit("Envio real desabilitado: FOLLOWUP_ENVIO_REAL_ATIVO != 1")
 
     executar_agendador(
         empresa_ids=ids,

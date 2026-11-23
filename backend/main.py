@@ -8,7 +8,7 @@ import unicodedata
 from urllib.parse import quote
 
 import requests
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -169,10 +169,11 @@ def obter_empresa_id_por_sessao(sessao: str) -> int | None:
 
 
 def obter_sessao_waha(payload: dict, mensagem: dict) -> str:
+    dados = mensagem.get("_data")
     sessao = (
         payload.get("session")
         or mensagem.get("session")
-        or mensagem.get("_data", {}).get("session")
+        or (dados.get("session") if isinstance(dados, dict) else None)
         or "default"
     )
 
@@ -630,33 +631,6 @@ def receber_mensagem(dados: MensagemRequest):
                     "Nao foi possivel reservar a mensagem."
                 )
 
-            # Cancela follow-ups pendentes quando o cliente responde.
-            # Nao interfere na qualificacao da Sofia.
-            from app.services.followup_processamento_service import (
-                cancelar_followups_pendentes_por_resposta,
-            )
-
-            # Atualiza a lead provisoria quando o cliente responde.
-            lead_em_espera = (
-                db.query(Lead)
-                .filter(
-                    Lead.empresa_id == dados.empresa_id,
-                    Lead.conversa_id == conversa.id,
-                    Lead.status == "Aguardando resposta",
-                )
-                .order_by(Lead.id.desc())
-                .first()
-            )
-
-            if lead_em_espera is not None:
-                lead_em_espera.status = "Em qualificação"
-
-            cancelar_followups_pendentes_por_resposta(
-                db,
-                empresa_id=dados.empresa_id,
-                conversa_id=conversa.id,
-            )
-
             db.commit()
 
 
@@ -692,28 +666,10 @@ def receber_mensagem(dados: MensagemRequest):
 
             if mensagem_cliente is not None:
                 from app.services.followup_processamento_service import (
-                    cancelar_followups_pendentes_por_resposta,
+                    processar_resposta_cliente_followup,
                 )
 
-                lead_em_espera = (
-                    db.query(Lead)
-                    .filter(
-                        Lead.empresa_id == dados.empresa_id,
-                        Lead.conversa_id == conversa.id,
-                        Lead.status == "Aguardando resposta",
-                    )
-                    .order_by(Lead.id.desc())
-                    .first()
-                )
-
-                if lead_em_espera is not None:
-                    lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
-
-                cancelar_followups_pendentes_por_resposta(
-                    db,
-                    empresa_id=dados.empresa_id,
-                    conversa_id=conversa.id,
-                )
+                processar_resposta_cliente_followup(db, mensagem=mensagem_cliente)
 
                 db.commit()
 
@@ -950,7 +906,7 @@ def receber_mensagem(dados: MensagemRequest):
                 origem=origem_aquisicao,
                 observacoes=conversa.objetivo,
                 resumo_vendedor=None,
-                status="Aguardando resposta",
+                status="Em atendimento",
                 entrada_followup_em=None,
             )
 
@@ -986,7 +942,7 @@ def receber_mensagem(dados: MensagemRequest):
                         Cliente.empresa_id == dados.empresa_id,
                         Cliente.telefone == conversa.telefone,
                         Cliente.canal == conversa.canal,
-                        Lead.status == "Aguardando resposta",
+                        Lead.status.in_(("Aguardando resposta", "Em atendimento")),
                     )
                     .order_by(Lead.id.desc())
                     .first()
@@ -1070,6 +1026,7 @@ def receber_mensagem(dados: MensagemRequest):
                     and lead_existente.status in (
                         "Aguardando atendimento",
                         "Aguardando resposta",
+                        "Em atendimento",
                         "Em qualificação",
                     )
                 )
@@ -1319,12 +1276,36 @@ def enviar_texto_waha(
         return False, "falha_envio", None
 
 
+async def autenticar_webhook_waha(request: Request) -> bool:
+    from app.services.followup_eventos_waha import assinatura_waha_valida
+
+    chave = os.getenv("WAHA_WEBHOOK_HMAC_KEY")
+    if not chave:
+        return False
+    if (
+        request.headers.get("X-Webhook-Hmac-Algorithm") != "sha512"
+        or not assinatura_waha_valida(
+            await request.body(), chave, request.headers.get("X-Webhook-Hmac", ""),
+        )
+    ):
+        raise HTTPException(status_code=401, detail="Assinatura WAHA inválida")
+    return True
+
+
 @app.post("/webhook/waha")
-def webhook_waha(payload: dict):
+def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_waha)):
     evento = payload.get("event")
-    mensagem = payload.get("payload", {})
+    if evento not in ("message", "message.any", "message.reaction"):
+        return {"status": "ignorado", "motivo": "evento_diferente_de_message"}
+
+    mensagem = payload.get("payload")
+    if not isinstance(mensagem, dict):
+        return {"status": "ignorado", "motivo": "payload_invalido"}
+
     mensagem_id = obter_id_mensagem_waha(mensagem)
-    dados_internos = mensagem.get("_data", {})
+    dados_internos = mensagem.get("_data")
+    if not isinstance(dados_internos, dict):
+        dados_internos = {}
 
     print(
         "[WAHA WEBHOOK]",
@@ -1342,16 +1323,14 @@ def webhook_waha(payload: dict):
         flush=True,
     )
 
-    if evento != "message":
-        return {
-            "status": "ignorado",
-            "motivo": "evento_diferente_de_message",
-        }
+    if evento == "message.reaction" and mensagem.get("fromMe") is not False:
+        return {"status": "ignorado", "motivo": "evento_sem_resposta_do_cliente"}
 
     if mensagem.get("fromMe") is True:
         from app.services.followup_eventos_waha import identificar_saida_waha
         from app.services.followup_conexoes_waha import localizar_conexao_waha
         from app.services.followup_origem_saida_waha import (
+            proteger_followup_de_saida_manual,
             verificar_saida_automatica_registrada,
         )
 
@@ -1384,6 +1363,18 @@ def webhook_waha(payload: dict):
                     "motivo": "saida_automatica_registrada",
                 }
 
+            if (
+                autenticado is True and evento == "message.any"
+                and mensagem.get("source") == "app"
+                and mensagem_id and len(mensagem_id) <= 180
+                and proteger_followup_de_saida_manual(
+                    db_saida, conexao=conexao,
+                    destinatario=dados_saida["destinatario"], mensagem_id=mensagem_id,
+                )
+            ):
+                db_saida.commit()
+                return {"status": "processado", "motivo": "followup_bloqueado_saida_manual"}
+
             return {
                 "status": "ignorado",
                 "motivo": "saida_sem_origem_comprovada",
@@ -1393,9 +1384,12 @@ def webhook_waha(payload: dict):
         finally:
             db_saida.close()
 
-    texto = mensagem.get("body")
+    if evento != "message" and mensagem.get("fromMe") is not False:
+        return {"status": "ignorado", "motivo": "evento_sem_resposta_do_cliente"}
+
+    texto = mensagem.get("body") if evento != "message.reaction" else None
     chat_id = mensagem.get("from")
-    nome = mensagem.get("_data", {}).get("notifyName")
+    nome = dados_internos.get("notifyName")
 
     if chat_id == "status@broadcast":
         return {
@@ -1419,7 +1413,17 @@ def webhook_waha(payload: dict):
             "sessao": sessao,
         }
 
-    if not texto or not chat_id:
+    if autenticado is True:
+        from app.services.followup_entrada_conexao_waha import (
+            validar_conexao_entrada_waha,
+        )
+
+        with SessionLocal() as db_entrada:
+            conexao_id, motivo = validar_conexao_entrada_waha(db_entrada, sessao, empresa_id)
+        if conexao_id is None:
+            return {"status": "ignorado", "motivo": motivo}
+
+    if not isinstance(chat_id, str) or not chat_id.strip():
         return {
             "status": "ignorado",
             "motivo": "sem_texto_ou_chat_id",
@@ -1439,17 +1443,58 @@ def webhook_waha(payload: dict):
             "chat_id": chat_id,
         }
 
+    if not isinstance(texto, str) or not texto.strip():
+        from app.services.followup_eventos_waha import identificar_resposta_sem_texto
+
+        tipo_resposta = identificar_resposta_sem_texto(evento, mensagem)
+        if tipo_resposta and mensagem_id and chat_id.endswith(("@c.us", "@lid")):
+            from app.services.followup_entrada_conexao_waha import validar_conexao_entrada_waha
+            from app.services.mensagem_service import registrar_mensagem
+
+            with SessionLocal() as db_resposta:
+                conexao_id, _ = validar_conexao_entrada_waha(
+                    db_resposta, sessao, empresa_id,
+                )
+                if conexao_id is not None:
+                    conversa = (
+                        db_resposta.query(Conversa)
+                        .join(
+                            Lead,
+                            (Lead.conversa_id == Conversa.id)
+                            & (Lead.empresa_id == Conversa.empresa_id),
+                        )
+                        .filter(
+                            Conversa.empresa_id == empresa_id,
+                            Conversa.conexao_canal_id == conexao_id,
+                            Conversa.canal == "whatsapp",
+                            Conversa.identificador == chat_id,
+                            Lead.status.in_(("Em atendimento", "Aguardando resposta")),
+                        )
+                        .order_by(Conversa.id.desc())
+                        .first()
+                    )
+                    if conversa is not None:
+                        registro, criada = registrar_mensagem(
+                            db_resposta,
+                            empresa_id=empresa_id,
+                            conversa_id=conversa.id,
+                            cliente_id=conversa.cliente_id,
+                            remetente="cliente",
+                            texto="",
+                            from_me=False,
+                            mensagem_id_externo=mensagem_id,
+                        )
+                        if criada:
+                            registro.tipo = tipo_resposta
+                        db_resposta.commit()
+                        return {"status": "processado", "motivo": "resposta_sem_texto"}
+        return {"status": "ignorado", "motivo": "sem_texto_ou_chat_id"}
+
     if mensagem_waha_ja_processada(mensagem_id, empresa_id):
-        if (
-            mensagem_id
-            and os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
-            .strip()
-            .lower()
-            in ("1", "true", "yes", "on")
-        ):
+        if mensagem_id:
             from app.models.models import Mensagem
             from app.services.followup_processamento_service import (
-                cancelar_followups_pendentes_por_resposta,
+                processar_resposta_cliente_followup,
             )
 
             db_recuperacao = SessionLocal()
@@ -1473,24 +1518,8 @@ def webhook_waha(payload: dict):
                 )
 
                 if mensagem_cliente is not None:
-                    lead_em_espera = (
-                        db_recuperacao.query(Lead)
-                        .filter(
-                            Lead.empresa_id == empresa_id,
-                            Lead.conversa_id == mensagem_cliente.conversa_id,
-                            Lead.status == "Aguardando resposta",
-                        )
-                        .order_by(Lead.id.desc())
-                        .first()
-                    )
-
-                    if lead_em_espera is not None:
-                        lead_em_espera.status = "Em qualifica\u00e7\u00e3o"
-
-                    cancelar_followups_pendentes_por_resposta(
-                        db_recuperacao,
-                        empresa_id=empresa_id,
-                        conversa_id=mensagem_cliente.conversa_id,
+                    processar_resposta_cliente_followup(
+                        db_recuperacao, mensagem=mensagem_cliente,
                     )
 
                     db_recuperacao.commit()
@@ -1868,8 +1897,6 @@ def webhook_waha(payload: dict):
             classificar_resultado_envio,
         )
 
-        resultado_envio_persistido = False
-
         db_envio = SessionLocal()
         try:
             atualizado = registrar_resultado_envio(
@@ -1891,7 +1918,6 @@ def webhook_waha(payload: dict):
                 )
 
             db_envio.commit()
-            resultado_envio_persistido = True
         except Exception as erro_registro_envio:
             db_envio.rollback()
             print(
@@ -1905,76 +1931,6 @@ def webhook_waha(payload: dict):
             )
         finally:
             db_envio.close()
-
-        # Follow-up de primeiro contato da Sofia.
-        # Apenas agenda quando a origem e a primeira resposta
-        # estiverem validadas. Nao executa disparos aqui.
-        if (
-            os.getenv("FOLLOWUP_AGENDAMENTO_ATIVO", "false")
-            .strip().lower() in ("1", "true", "yes", "on")
-            and envio_ok
-            and resultado_envio_persistido
-            and resultado.get("lead_id")
-        ):
-            from datetime import datetime, timezone
-            from app.services.followup_agendamento_service import (
-                criar_primeiro_agendamento,
-            )
-
-            db_followup = SessionLocal()
-            try:
-                lead_followup = (
-                    db_followup.query(Lead)
-                    .filter(
-                        Lead.id == resultado["lead_id"],
-                        Lead.empresa_id == empresa_id,
-                        Lead.conversa_id == resultado["conversa_id"],
-                    )
-                    .with_for_update()
-                    .one_or_none()
-                )
-
-                if (
-                    lead_followup is not None
-                    and lead_followup.status == "Aguardando resposta"
-                    and not lead_followup.resumo_vendedor
-                ):
-                    lead_followup.status = "Aguardando resposta"
-                    lead_followup.entrada_followup_em = (
-                        datetime.now(timezone.utc)
-                    )
-
-                    agendamento, motivo = criar_primeiro_agendamento(
-                        db_followup,
-                        empresa_id=empresa_id,
-                        lead_id=lead_followup.id,
-                        entrada_lead_em=lead_followup.entrada_followup_em,
-                    )
-
-                    if agendamento is not None:
-                        db_followup.commit()
-                        print(
-                            "[FOLLOWUP] primeiro agendamento: "
-                            f"{motivo}; lead={lead_followup.id}",
-                            flush=True,
-                        )
-                    else:
-                        db_followup.rollback()
-                        print(
-                            "[FOLLOWUP] nao agendado: "
-                            f"{motivo}; lead={lead_followup.id}",
-                            flush=True,
-                        )
-                else:
-                    db_followup.rollback()
-            except Exception as erro_followup:
-                db_followup.rollback()
-                print(
-                    f"[FOLLOWUP] falha no gatilho: {erro_followup}",
-                    flush=True,
-                )
-            finally:
-                db_followup.close()
 
         if not envio_ok:
             print(

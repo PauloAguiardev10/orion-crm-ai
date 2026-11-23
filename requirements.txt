@@ -6,3 +6,7 @@ sqlalchemy
 psycopg2-binary
 openai
 extra-streamlit-components==0.1.81
+fastapi
+uvicorn
+requests
+itsdangerous
