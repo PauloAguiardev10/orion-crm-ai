@@ -903,7 +903,6 @@ def receber_mensagem(dados: MensagemRequest):
             identificador_valido
             and bool(conversa.telefone)
             and 1 <= len(texto_inicial_normalizado) <= 1000
-            and tem_interesse_comercial
             and "codigo de confirmacao do facebook"
                 not in texto_inicial_normalizado
             and not texto_inicial_normalizado.startswith("/9j/")
