@@ -950,7 +950,7 @@ def receber_mensagem(dados: MensagemRequest):
                 origem=origem_aquisicao,
                 observacoes=conversa.objetivo,
                 resumo_vendedor=None,
-                status="Aguardando atendimento",
+                status="Aguardando resposta",
                 entrada_followup_em=None,
             )
 
@@ -1936,7 +1936,7 @@ def webhook_waha(payload: dict):
 
                 if (
                     lead_followup is not None
-                    and lead_followup.status == "Aguardando atendimento"
+                    and lead_followup.status == "Aguardando resposta"
                     and not lead_followup.resumo_vendedor
                 ):
                     lead_followup.status = "Aguardando resposta"
