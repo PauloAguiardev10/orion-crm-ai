@@ -524,6 +524,14 @@ class Cliente(Base):
 class Conversa(Base):
     __tablename__ = "conversas"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id",
+            "id",
+            name="uq_conversas_empresa_id",
+        ),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
 
     # O DEFAULT 1 é legado e será removido depois da auditoria
@@ -536,6 +544,7 @@ class Conversa(Base):
     )
 
     conexao_canal_id = Column(Integer, nullable=True)
+    especialista_id = Column(Integer, nullable=True, index=True)
 
     cliente_id = Column(
         Integer,
@@ -662,6 +671,14 @@ class Conversa(Base):
 
 class Lead(Base):
     __tablename__ = "leads"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id",
+            "id",
+            name="uq_leads_empresa_id",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -825,6 +842,10 @@ class ConexaoCanal(Base):
 
     sessao_waha = Column(String(120), nullable=True)
     especialista_id = Column(Integer, nullable=True)
+    nome_conexao = Column(String(100), nullable=True)
+    gerenciada_crm = Column(Boolean, nullable=False, server_default="false")
+    sofia_ativa = Column(Boolean, nullable=False, server_default="true")
+    operacao_suspensa = Column(Boolean, nullable=False, server_default="false")
 
     # Token da API do provedor.
     # Nunca deve ser exibido em logs ou respostas públicas.
@@ -855,6 +876,15 @@ class ConexaoCanal(Base):
 
 class Mensagem(Base):
     __tablename__ = "mensagens"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id",
+            "conversa_id",
+            "id",
+            name="uq_mensagens_empresa_conversa_id",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
 

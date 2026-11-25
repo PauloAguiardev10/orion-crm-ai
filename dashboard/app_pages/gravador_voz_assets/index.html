@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;font:14px system-ui;color:#cde1f6}button,select{border:1px solid #397396;border-radius:8px;background:#142a40;color:#eaf8ff;padding:7px 10px;margin:2px;cursor:pointer}button:disabled{opacity:.5}canvas{width:min(190px,95%);height:23px;background:#101d2e;border-radius:5px;vertical-align:middle}audio{width:min(240px,100%);height:35px;display:block;margin:4px 0}p{margin:3px 0}
+</style>
+<button id="microfone" aria-label="Gravar mensagem de voz">🎙 Gravar áudio</button>
+<span id="tempo" hidden>00:00</span><canvas id="onda" width="190" height="23" hidden></canvas>
+<div id="controles" hidden>
+  <button id="pausa">Pausar</button><button id="finalizar">Finalizar</button><button id="cancelar">Cancelar</button>
+</div>
+<div id="previa" hidden>
+  <audio id="audio" controls playsinline></audio>
+  <select id="velocidade" aria-label="Velocidade de reprodução"><option value="1">1x</option><option value="1.5">1,5x</option><option value="2">2x</option></select>
+  <button id="usar">Usar gravação</button><button id="descartar">Descartar</button>
+</div>
+<p id="aviso" role="status"></p>
+<script>
+const el = id => document.getElementById(id);
+const enviar = (type, fields={}) => parent.postMessage({isStreamlitMessage:true,type,...fields}, "*");
+const ajustar = () => enviar("streamlit:setFrameHeight",{height:document.body.scrollHeight + 5});
+let gravador, fluxo, contexto, amostras, timer, blob, url;
+let partes=[], bytes=0, segundos=0, cancelada=false;
+const limite = 8*1024*1024;
+const aviso = texto => { el("aviso").textContent=texto; ajustar(); };
+function liberar() {
+  clearInterval(timer);
+  fluxo?.getTracks().forEach(track=>track.stop());
+  if (contexto) contexto.close().catch(()=>{});
+  contexto=null;
+}
+function limpar() {
+  blob=null;
+  if(url) URL.revokeObjectURL(url);
+  url=null;
+  el("previa").hidden=true;
+  el("microfone").disabled=false;
+  enviar("streamlit:setComponentValue",{value:{cancelado:true,nonce:Date.now()},dataType:"json"});
+  aviso("");
+}
+function atualizar() {
+  if (gravador.state !== "recording") return;
+  segundos+=0.1;
+  const s=Math.floor(segundos);
+  el("tempo").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  if (amostras) {
+    const arr=new Uint8Array(amostras.fftSize); amostras.getByteTimeDomainData(arr);
+    const c=el("onda").getContext("2d"); c.clearRect(0,0,190,23); c.beginPath();
+    arr.forEach((v,i)=>i===0?c.moveTo(0,v/255*23):c.lineTo(i/(arr.length-1)*190,v/255*23));
+    c.strokeStyle="#64d7ea";c.stroke();
+  }
+  if(segundos>=120) gravador.stop();
+}
+el("microfone").onclick=async()=>{
+  el("microfone").disabled=true;
+  try {
+    if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("unsupported");
+    fluxo=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1},video:false});
+    const tipo=["audio/ogg;codecs=opus","audio/webm;codecs=opus","audio/mp4"]
+      .find(t=>MediaRecorder.isTypeSupported(t));
+    if(!tipo) throw new Error("unsupported");
+    gravador=new MediaRecorder(fluxo,{mimeType:tipo,audioBitsPerSecond:48000});
+    partes=[];bytes=0;segundos=0;cancelada=false;amostras=null;
+    try {
+      const Audio=window.AudioContext || window.webkitAudioContext;
+      contexto=new Audio(); amostras=contexto.createAnalyser(); amostras.fftSize=256;
+      contexto.createMediaStreamSource(fluxo).connect(amostras);
+    } catch { amostras=null; }
+    gravador.ondataavailable=e=>{
+      bytes+=e.data.size;
+      if(bytes>limite) { cancelada=true; aviso("A gravação excedeu 8 MiB."); if(gravador.state!=="inactive")gravador.stop(); }
+      else partes.push(e.data);
+    };
+    gravador.onerror=()=>{
+      cancelada=true; liberar(); el("controles").hidden=true;
+      el("tempo").hidden=true; el("onda").hidden=true; el("microfone").disabled=false;
+      aviso("Falha na gravação.");
+    };
+    gravador.onstop=()=>{
+      liberar(); el("controles").hidden=true;el("tempo").hidden=true;el("onda").hidden=true;
+      if(cancelada || !bytes) { el("microfone").disabled=false; ajustar(); return; }
+      blob=new Blob(partes,{type:gravador.mimeType});
+      url=URL.createObjectURL(blob);el("audio").src=url;el("previa").hidden=false;el("usar").disabled=false;
+      aviso("Ouça a gravação antes de anexar.");
+    };
+    gravador.start(200); el("tempo").textContent="00:00";el("tempo").hidden=false;
+    el("onda").hidden=false;el("controles").hidden=false;el("pausa").textContent="Pausar";
+    timer=setInterval(atualizar,100);aviso("Gravando. Limite de 2 minutos.");
+  } catch(e) {
+    liberar();el("microfone").disabled=false;
+    aviso(e.name==="NotAllowedError"?"Permissão de microfone negada.":"Microfone ou gravação indisponível neste navegador.");
+  }
+};
+el("pausa").onclick=()=>{
+  if(gravador.state==="recording"){gravador.pause();el("pausa").textContent="Continuar";aviso("Gravação pausada.");}
+  else if(gravador.state==="paused"){gravador.resume();el("pausa").textContent="Pausar";aviso("Gravando.");}
+};
+el("finalizar").onclick=()=>{if(gravador.state!=="inactive")gravador.stop();};
+el("cancelar").onclick=()=>{cancelada=true;if(gravador.state!=="inactive")gravador.stop();limpar();};
+el("descartar").onclick=limpar;
+el("velocidade").onchange=()=>{el("audio").playbackRate=Number(el("velocidade").value);};
+el("usar").onclick=()=>{
+  if(!blob)return;
+  const leitor=new FileReader();
+  leitor.onload=()=>{
+    enviar("streamlit:setComponentValue",{value:{tipo:blob.type.split(";")[0],dados:leitor.result.split(",")[1]},dataType:"json"});
+    el("usar").disabled=true;aviso("Áudio anexado. Use Enviar para confirmar.");
+  };
+  leitor.onerror=()=>aviso("Falha ao preparar o áudio.");
+  leitor.readAsDataURL(blob);
+};
+window.addEventListener("message", e=>{if(e.source===parent && e.data?.type==="streamlit:render") ajustar();});
+window.addEventListener("pagehide", liberar);
+enviar("streamlit:componentReady",{apiVersion:1});ajustar();
+</script>
+</html>

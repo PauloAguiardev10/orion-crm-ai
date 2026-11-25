@@ -7,6 +7,10 @@ import pandas as pd
 from database.db import conectar
 
 
+class FranquiaUsuariosAtingida(Exception):
+    pass
+
+
 def hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode()).hexdigest()
 
@@ -123,11 +127,12 @@ def criar_usuario(
                 """
                 SELECT id
                 FROM usuarios
-                WHERE usuario = %s
-                   OR email = %s
+                WHERE empresa_id = %s
+                  AND (usuario = %s OR email = %s)
                 LIMIT 1
                 """,
                 (
+                    empresa_id,
                     usuario,
                     email,
                 ),
@@ -150,7 +155,7 @@ def criar_usuario(
                         nivel = %s,
                         status = 'ativo',
                         atualizado_em = CURRENT_TIMESTAMP
-                    WHERE id = %s
+                    WHERE id = %s AND empresa_id = %s
                     """,
                     (
                         empresa_id,
@@ -162,8 +167,12 @@ def criar_usuario(
                         senha_hash,
                         nivel,
                         existente[0],
+                        empresa_id,
                     ),
                 )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    return False
 
             else:
                 cursor.execute(
@@ -199,8 +208,15 @@ def criar_usuario(
         conn.commit()
         return True
 
-    except Exception:
+    except Exception as erro:
         conn.rollback()
+        restricao = getattr(getattr(erro, "diag", None), "constraint_name", None)
+        if restricao == "orion_limite_usuarios":
+            raise FranquiaUsuariosAtingida("O limite de usuários do plano foi atingido.") from None
+        if restricao == "orion_plano_invalido":
+            raise FranquiaUsuariosAtingida("A empresa precisa de um plano válido para criar usuários.") from None
+        if getattr(erro, "pgcode", None) == "23505":
+            return False
         raise
 
     finally:

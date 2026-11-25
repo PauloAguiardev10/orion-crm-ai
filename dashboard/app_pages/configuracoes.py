@@ -13,6 +13,7 @@ from services.configuracoes_service import (
 )
 
 from services.usuarios_service import (
+    FranquiaUsuariosAtingida,
     listar_usuarios,
     criar_usuario,
     alterar_senha,
@@ -267,19 +268,20 @@ def render_configuracoes():
         elif not nivel:
             st.warning("Selecione o nível de acesso.")
 
-        elif criar_usuario(
-            novo_usuario,
-            nova_senha,
-            st.session_state.empresa,
-            nivel,
-            empresa_id,
-        ):
-            st.success("Usuário criado com sucesso.")
-            limpar_formularios()
-            st.rerun()
-
         else:
-            st.error("Não foi possível criar o usuário.")
+            try:
+                criado = criar_usuario(
+                    novo_usuario, nova_senha, st.session_state.empresa, nivel, empresa_id,
+                )
+            except FranquiaUsuariosAtingida as erro:
+                st.warning(str(erro))
+            else:
+                if criado:
+                    st.success("Usuário criado com sucesso.")
+                    limpar_formularios()
+                    st.rerun()
+                else:
+                    st.error("Não foi possível criar o usuário.")
 
     st.markdown("### 🗑️ Excluir funcionário")
 
