@@ -521,61 +521,19 @@ with st.sidebar:
     )
 
     if st.button("Sair"):
-
-
-        # ============================================
-
-        token_sessao = (
-            st.session_state.get(
-                "token_sessao_persistente"
-            )
+        token_sessao = st.session_state.get("token_sessao_persistente") or cookie_manager.get(
+            cookie=COOKIE_SESSAO,
         )
-
-        if not token_sessao:
-
-            token_sessao = cookie_manager.get(
-                cookie=COOKIE_SESSAO
-            )
-
-        # A revogacao no banco deve ocorrer
-        # antes de limpar a autenticacao local.
-
         if token_sessao:
+            revogar_sessao(token_sessao)
 
-            revogar_sessao(
-                token_sessao
-            )
+        try:
+            cookie_manager.delete(COOKIE_SESSAO)
+        except KeyError as erro:
+            if erro.args != (COOKIE_SESSAO,):
+                raise
 
-        # Remove o cookie do navegador.
-
-        cookie_manager.delete(
-            COOKIE_SESSAO
-        )
-
-
-        st.session_state.pop("token_central", None)
-        st.session_state.token_sessao_persistente = None
-
-        st.session_state.logado = False
-
-        st.session_state.usuario = None
-
-        st.session_state.usuario_id = None
-
-        st.session_state.empresa = None
-
-        st.session_state.empresa_id = None
-
-        st.session_state.nivel = None
-
-        st.session_state.empresa_login_id = None
-
-        st.session_state.empresa_login_nome = None
-
-        st.session_state.empresa_ativa_id = None
-
-        st.session_state.empresa_ativa_nome = None
-
+        st.session_state.clear()
         st.rerun()
 
 
