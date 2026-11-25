@@ -544,6 +544,7 @@ class Conversa(Base):
     )
 
     conexao_canal_id = Column(Integer, nullable=True)
+    especialista_id = Column(Integer, nullable=True, index=True)
 
     cliente_id = Column(
         Integer,
@@ -841,6 +842,10 @@ class ConexaoCanal(Base):
 
     sessao_waha = Column(String(120), nullable=True)
     especialista_id = Column(Integer, nullable=True)
+    nome_conexao = Column(String(100), nullable=True)
+    gerenciada_crm = Column(Boolean, nullable=False, server_default="false")
+    sofia_ativa = Column(Boolean, nullable=False, server_default="true")
+    operacao_suspensa = Column(Boolean, nullable=False, server_default="false")
 
     # Token da API do provedor.
     # Nunca deve ser exibido em logs ou respostas públicas.

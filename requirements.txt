@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.57,<2
 pandas
 plotly
 python-dotenv
@@ -6,7 +6,10 @@ sqlalchemy
 psycopg2-binary
 openai
 extra-streamlit-components==0.1.81
-fastapi
+fastapi>=0.136,<1
 uvicorn
+pydantic>=2,<3
 requests
-itsdangerous
+itsdangerous>=2.2,<3
+python-multipart
+pyarrow

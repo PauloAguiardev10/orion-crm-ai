@@ -1,4 +1,5 @@
 ﻿
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.models import Conversa, Mensagem
@@ -64,6 +65,8 @@ def registrar_mensagem(
     )
 
     db.add(registro)
+    if conversa.canal == "whatsapp":
+        conversa.atualizado_em = func.now()
     db.flush()
 
     if from_me is False and remetente == "cliente":
@@ -298,6 +301,9 @@ def registrar_resultado_envio(
     }
 
     if mensagem_id_waha is not None:
+        from app.services.central_whatsapp_ack import bloquear_correlacao_ack
+
+        bloquear_correlacao_ack(db, empresa_id, sessao_waha, mensagem_id_waha)
         valores_atualizacao[Mensagem.mensagem_id_waha] = mensagem_id_waha
         valores_atualizacao[Mensagem.sessao_waha] = sessao_waha
 
@@ -324,6 +330,10 @@ def registrar_resultado_envio(
             conversa_id=conversa_id,
             mensagem_id=mensagem_id,
         )
+        if mensagem_id_waha is not None:
+            from app.services.central_whatsapp_ack import aplicar_ack_pendente
+
+            aplicar_ack_pendente(db, empresa_id, sessao_waha, mensagem_id_waha)
 
     return atualizados == 1
 

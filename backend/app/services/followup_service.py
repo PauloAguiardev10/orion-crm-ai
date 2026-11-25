@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.models import Conversa, Lead, Mensagem
-from app.services.estados_mensagem import STATUS_ENVIO_CONFIRMADO_HTTP
+from app.services.estados_mensagem import ESTADOS_ENVIO_COM_ACEITE_HTTP
 
 
 REMETENTES_PRIMEIRA_RESPOSTA = ("agente", "humano")
@@ -27,7 +27,7 @@ def consultar_primeira_resposta_confirmada(db: Session, *, empresa_id: int, conv
             Mensagem.conversa_id == conversa_id,
             Mensagem.from_me.is_(True),
             Mensagem.remetente.in_(REMETENTES_PRIMEIRA_RESPOSTA),
-            Mensagem.status_envio == STATUS_ENVIO_CONFIRMADO_HTTP,
+            Mensagem.status_envio.in_(ESTADOS_ENVIO_COM_ACEITE_HTTP),
         )
         .order_by(Mensagem.criado_em.asc(), Mensagem.id.asc())
         .first()
@@ -157,7 +157,7 @@ def verificar_elegibilidade_primeiro_followup(
         m for m in mensagens
         if m.from_me is True
         and m.remetente in REMETENTES_PRIMEIRA_RESPOSTA
-        and m.status_envio == STATUS_ENVIO_CONFIRMADO_HTTP
+        and m.status_envio in ESTADOS_ENVIO_COM_ACEITE_HTTP
     ]
 
     if not recebidas:

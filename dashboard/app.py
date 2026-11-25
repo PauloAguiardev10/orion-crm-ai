@@ -16,6 +16,7 @@ from styles.theme import carregar_tema
 from components.sidebar import render_sidebar
 
 from services.leads_service import carregar_leads
+from services.central_whatsapp_auth import gerar_token_central
 
 from services.auth_service import (
     validar_login,
@@ -364,13 +365,6 @@ def tela_login():
             use_container_width=True,
         ):
 
-            print(
-                "[LOGIN DEBUG]",
-                "usuario=", repr(usuario),
-                "tamanho_senha=", len(senha),
-                "espacos_usuario=", usuario != usuario.strip(),
-                flush=True,
-            )
 
             resultado_login = validar_login(usuario, senha)
 
@@ -559,6 +553,7 @@ with st.sidebar:
         )
 
 
+        st.session_state.pop("token_central", None)
         st.session_state.token_sessao_persistente = None
 
         st.session_state.logado = False
@@ -626,6 +621,13 @@ elif pagina == "🧾 Pedidos":
 
 elif pagina == "💬 Conversas":
 
+    try:
+        st.session_state["token_central"] = gerar_token_central(
+            usuario_id=st.session_state.get("usuario_id"),
+            empresa_id=st.session_state.get("empresa_login_id"),
+        )
+    except (TypeError, ValueError, RuntimeError):
+        st.session_state.pop("token_central", None)
     render_conversas(leads)
 
 

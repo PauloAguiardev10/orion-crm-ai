@@ -68,6 +68,9 @@ def resolver_sessao_waha_conversa(
     if conexao is None:
         return None, "conexao_waha_nao_encontrada"
 
+    if conexao.operacao_suspensa:
+        return None, "conexao_waha_suspensa"
+
     if conexao.especialista_id is None:
         return None, "vendedor_nao_vinculado"
 

@@ -78,7 +78,7 @@ class FollowupAutomaticoTest(unittest.TestCase):
             db.commit()
 
     def criar_empresa(self, db):
-        empresa = Empresa(nome=f"Teste follow-up {uuid4()}")
+        empresa = Empresa(nome=f"Teste follow-up {uuid4()}", plano="Premium")
         db.add(empresa)
         db.flush()
         db.add(FollowupConfiguracao(empresa_id=empresa.id, ativo=True))
@@ -440,7 +440,9 @@ class FollowupAutomaticoTest(unittest.TestCase):
         self.assertEqual(self.agendar(), len(casos) - 1)
         # O texto usa a persistência real. O atendimento humano evita resposta da Sofia.
         with self.sessoes() as db:
-            db.get(Conversa, leads["texto"][1]).humano_assumiu = True
+            conversa = db.get(Conversa, leads["texto"][1])
+            conversa.humano_assumiu = True
+            conversa.status_atendimento = "finalizado"
             db.commit()
 
         with (
@@ -494,6 +496,282 @@ class FollowupAutomaticoTest(unittest.TestCase):
                                 "cancelado" if tipo else "pendente",
                             )
         self.assertEqual(self.agendar(), 0)
+
+    def test_sofia_descarta_resposta_preparada_apos_tomada_humana(self):
+        from fastapi.testclient import TestClient
+        from app.models.models import Base
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "chave-ficticia"}):
+            with patch.object(Base.metadata, "create_all"):
+                import main
+
+        with self.sessoes() as db:
+            conexao = ConexaoCanal(
+                empresa_id=self.empresa, provedor="waha", canal="whatsapp",
+                sessao_waha=f"teste-{uuid4()}", ativo=True,
+            )
+            db.add(conexao)
+            db.flush()
+            lead = self.nova_lead(db, conexao_canal_id=conexao.id)
+            conversa = db.get(Conversa, lead.conversa_id)
+            conversa_id, chat_id, sessao = conversa.id, conversa.identificador, conexao.sessao_waha
+            db.commit()
+
+        def preparar_resposta(_dados):
+            # Simula a tomada ocorrida depois que a Sofia já preparou a resposta.
+            with self.sessoes() as db:
+                conversa = db.get(Conversa, conversa_id)
+                conversa.humano_assumiu = True
+                conversa.status_atendimento = "em_atendimento_humano"
+                db.commit()
+            return {"conversa_id": conversa_id, "resposta_agente": "Resposta simulada"}
+
+        mensagem_id = str(uuid4())
+        with (
+            patch.object(main, "SessionLocal", self.sessoes),
+            patch.dict(main.SESSAO_EMPRESA, {sessao: self.empresa}),
+            patch.object(main, "receber_mensagem", side_effect=preparar_resposta),
+            patch.object(main, "obter_lid_luciano", return_value=None),
+            patch.object(main, "obter_telefone_real_waha", return_value=None),
+            patch.object(main, "definir_presenca_digitacao"),
+            patch.object(main, "calcular_delay_resposta", return_value=0),
+            patch.object(main, "enviar_texto_waha") as transporte,
+            patch("requests.sessions.Session.request", side_effect=AssertionError("Rede proibida")),
+            TestClient(main.app) as client,
+        ):
+            resposta = client.post("/webhook/waha", json={
+                "event": "message", "session": sessao,
+                "payload": {"id": mensagem_id, "from": chat_id, "fromMe": False, "body": "Olá"},
+            })
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(resposta.json().get("motivo"), "atendimento_humano_assumido")
+            transporte.assert_not_called()
+
+    def test_conexao_crm_assinada_sem_mapa_registra_texto_com_sofia_desativada(self):
+        from fastapi.testclient import TestClient
+        from app.database import database
+        from app.models.models import Base
+        from app.services.followup_sessao_waha_service import resolver_sessao_waha_conversa
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "chave-ficticia"}):
+            with patch.object(Base.metadata, "create_all"):
+                import main
+
+        sessao = f"orion-{self.empresa}-{uuid4().hex}"
+        with self.sessoes() as db:
+            conexao = ConexaoCanal(
+                empresa_id=self.empresa, sessao_waha=sessao, canal="whatsapp", provedor="waha",
+                gerenciada_crm=True, sofia_ativa=False,
+            )
+            db.add(conexao)
+            db.flush()
+            conexao_id = conexao.id
+            db.commit()
+
+        chave = "hmac-ficticio-fase5"
+        mensagem_id = str(uuid4())
+        corpo = json.dumps({
+            "event": "message", "session": sessao,
+            "payload": {"id": mensagem_id, "from": "5511999999999@c.us", "fromMe": False, "body": "Mensagem simulada"},
+        }).encode()
+        headers = {
+            "Content-Type": "application/json", "X-Webhook-Hmac-Algorithm": "sha512",
+            "X-Webhook-Hmac": hmac.new(chave.encode(), corpo, hashlib.sha512).hexdigest(),
+        }
+        with (
+            patch.dict(os.environ, {"WAHA_WEBHOOK_HMAC_KEY": chave}),
+            patch.object(main, "SessionLocal", self.sessoes),
+            patch.object(database, "SessionLocal", self.sessoes),
+            patch.object(main, "obter_lid_luciano", return_value=None),
+            patch.object(main, "obter_telefone_real_waha", return_value=None),
+            patch.object(main, "conduzir_conversa") as sofia,
+            patch("requests.sessions.Session.request", side_effect=AssertionError("Rede proibida")),
+            TestClient(main.app) as client,
+        ):
+            resposta = client.post("/webhook/waha", content=corpo, headers=headers)
+            self.assertEqual(resposta.json()["status"], "processado", resposta.text)
+            sofia.assert_not_called()
+
+        with self.sessoes() as db:
+            registro = db.query(Mensagem).filter_by(empresa_id=self.empresa, mensagem_id_externo=mensagem_id).one()
+            conversa = db.get(Conversa, registro.conversa_id)
+            self.assertEqual((conversa.conexao_canal_id, conversa.status_atendimento), (conexao_id, "aguardando_humano"))
+            db.get(ConexaoCanal, conexao_id).operacao_suspensa = True
+            db.flush()
+            self.assertEqual(resolver_sessao_waha_conversa(
+                db, empresa_id=self.empresa, conexao_canal_id=conexao_id,
+            ), (None, "conexao_waha_suspensa"))
+
+    def test_ack_assinado_atualiza_saida_da_sofia_sem_perder_entrada_do_followup(self):
+        from fastapi.testclient import TestClient
+        from app.models.models import Base
+        from app.services.followup_service import consultar_primeira_resposta_confirmada
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "chave-ficticia"}):
+            with patch.object(Base.metadata, "create_all"):
+                import main
+
+        senha = "chave-hmac-ficticia"
+        sessao = f"ack-ficticio-{uuid4()}"
+        with self.sessoes() as db:
+            conexao = ConexaoCanal(
+                empresa_id=self.empresa, sessao_waha=sessao, canal="whatsapp", provedor="waha",
+            )
+            db.add(conexao)
+            db.flush()
+            lead = self.nova_lead(db, conexao_canal_id=conexao.id)
+            self.confirmar(db, lead)
+            self.marcar_idade(lead, 6)
+            conversa_id = lead.conversa_id
+            resposta = db.query(Mensagem).filter_by(
+                conversa_id=conversa_id, remetente="agente",
+            ).one()
+            resposta.sessao_waha = sessao
+            resposta.mensagem_id_waha = "sofia-ack-ficticio"
+            mensagem_id = resposta.id
+            db.commit()
+
+        corpo = json.dumps({
+            "event": "message.ack", "session": sessao,
+            "payload": {"id": "sofia-ack-ficticio", "fromMe": True, "ack": 3, "ackName": "READ"},
+        }).encode()
+        headers = {"Content-Type": "application/json"}
+        with (
+            patch.dict(os.environ, {"WAHA_WEBHOOK_HMAC_KEY": senha}),
+            patch.object(main, "SessionLocal", self.sessoes),
+            patch("requests.sessions.Session.request", side_effect=AssertionError("Rede proibida")),
+            TestClient(main.app) as client,
+        ):
+            self.assertEqual(client.post("/webhook/waha", content=corpo, headers=headers).status_code, 401)
+            headers.update({
+                "X-Webhook-Hmac-Algorithm": "sha512",
+                "X-Webhook-Hmac": hmac.new(senha.encode(), corpo, hashlib.sha512).hexdigest(),
+            })
+            for resultado in ("ack_registrado", "ack_sem_transicao"):
+                resposta = client.post("/webhook/waha", content=corpo, headers=headers)
+                self.assertEqual(resposta.json().get("motivo"), resultado)
+        with self.sessoes() as db:
+            self.assertEqual(db.get(Mensagem, mensagem_id).status_envio, "lida_waha")
+            primeira = consultar_primeira_resposta_confirmada(
+                db, empresa_id=self.empresa, conversa_id=conversa_id,
+            )
+            self.assertEqual(primeira.id, mensagem_id)
+        self.assertEqual(self.agendar(), 1)
+
+    def test_webhook_midia_exige_assinatura_deduplica_e_preserva_followup(self):
+        from tempfile import TemporaryDirectory
+        from fastapi.testclient import TestClient
+        from app.models.models import Base
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "chave-ficticia"}):
+            with patch.object(Base.metadata, "create_all"):
+                import main
+
+        chave = "chave-assinatura-ficticia"
+        with self.sessoes() as db:
+            conexao = ConexaoCanal(
+                empresa_id=self.empresa, provedor="waha", canal="whatsapp",
+                sessao_waha=f"teste-{uuid4()}",
+            )
+            db.add(conexao)
+            db.flush()
+            sessao = conexao.sessao_waha
+            lead = self.nova_lead(db, conexao_canal_id=conexao.id)
+            lead_id = lead.id
+            conversa = db.get(Conversa, lead.conversa_id)
+            chat_id = conversa.identificador
+            self.confirmar(db, lead)
+            self.marcar_idade(lead, 6)
+            db.commit()
+        self.assertEqual(self.agendar(), 1)
+        mensagem_id = str(uuid4())
+        corpo = json.dumps({
+            "event": "message", "session": sessao,
+            "payload": {
+                "id": mensagem_id, "fromMe": False, "from": chat_id, "hasMedia": True,
+                "body": "Legenda fictícia", "media": {"url": "http://waha.invalido/anexo"},
+            },
+        }).encode()
+        headers = {
+            "Content-Type": "application/json",
+            "X-Webhook-Hmac-Algorithm": "sha512",
+            "X-Webhook-Hmac": hmac.new(chave.encode(), corpo, hashlib.sha512).hexdigest(),
+        }
+        with (
+            TemporaryDirectory() as pasta,
+            patch.dict(os.environ, {
+                "ORION_CENTRAL_WHATSAPP_MIDIA_ATIVA": "1",
+                "ORION_CENTRAL_WHATSAPP_MIDIA_DIR": pasta,
+                "WAHA_WEBHOOK_HMAC_KEY": chave,
+            }),
+            patch.object(main, "SessionLocal", self.sessoes),
+            patch.dict(main.SESSAO_EMPRESA, {sessao: self.empresa}),
+            patch.object(main, "obter_lid_luciano", return_value=None),
+            patch.object(main, "conduzir_conversa") as sofia,
+            patch(
+                "app.services.central_whatsapp_midia_entrada.baixar_midia_waha",
+                return_value=("teste.pdf", "application/pdf", b"%PDF-1.7"),
+            ) as obter_midia,
+            patch("requests.sessions.Session.request", side_effect=AssertionError("Rede proibida")),
+            TestClient(main.app) as client,
+        ):
+            sem_assinatura = client.post("/webhook/waha", content=corpo, headers={
+                "Content-Type": "application/json",
+            })
+            self.assertEqual(sem_assinatura.status_code, 401)
+            for motivo in ("midia_registrada", "midia_duplicada"):
+                resposta = client.post("/webhook/waha", content=corpo, headers=headers)
+                self.assertEqual(resposta.json().get("motivo"), motivo, resposta.text)
+            obter_midia.assert_called_once()
+            sofia.assert_not_called()
+        with self.sessoes() as db:
+            self.assertEqual(self.agendamentos(db, lead_id)[0].status, "cancelado")
+
+    def test_sofia_preserva_encerramento_ocorrido_durante_geracao(self):
+        from fastapi.testclient import TestClient
+        from app.database import database
+        from app.models.models import Base
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "chave-ficticia"}):
+            with patch.object(Base.metadata, "create_all"):
+                import main
+
+        with self.sessoes() as db:
+            lead = self.nova_lead(db)
+            conversa = db.get(Conversa, lead.conversa_id)
+            conversa_id, chat_id = conversa.id, conversa.identificador
+            db.commit()
+
+        def gerar_resposta(conversa, *_args, **_kwargs):
+            with self.sessoes() as db:
+                atual = db.get(Conversa, conversa_id)
+                atual.humano_assumiu = True
+                atual.status_atendimento = "finalizado"
+                db.commit()
+            conversa.status_atendimento = "aguardando_humano"
+            conversa.historico = "Agente: Texto simulado que deve ser descartado"
+            return "Texto simulado", {}
+
+        with (
+            patch.object(main, "SessionLocal", self.sessoes),
+            patch.object(database, "SessionLocal", self.sessoes),
+            patch.object(main, "carregar_contexto_empresa"),
+            patch.object(main, "conduzir_conversa", side_effect=gerar_resposta),
+            patch("requests.sessions.Session.request", side_effect=AssertionError("Rede proibida")),
+            TestClient(main.app) as client,
+        ):
+            resposta = client.post("/mensagem", json={
+                "empresa_id": self.empresa, "canal": "whatsapp", "identificador": chat_id,
+                "mensagem": "Olá", "mensagem_id_externo": str(uuid4()),
+            })
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(resposta.json().get("status"), "finalizado")
+            self.assertIsNone(resposta.json()["resposta_agente"])
+        with self.sessoes() as db:
+            conversa = db.get(Conversa, conversa_id)
+            self.assertTrue(conversa.humano_assumiu)
+            self.assertEqual(conversa.status_atendimento, "finalizado")
+            self.assertNotIn("Texto simulado", conversa.historico or "")
 
     def test_executores_manuais_registram_confirmacao_sem_sofia(self):
         from app.services.estados_mensagem import STATUS_PROCESSANDO
