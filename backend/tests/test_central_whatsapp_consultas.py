@@ -68,12 +68,8 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         self.colega = self.usuario(self.empresa, "vendedor")
         self.admin = self.usuario(self.empresa, "admin_empresa")
         self.vendedor_externo = self.usuario(self.outra_empresa, "vendedor")
-        titular = self.criar(Especialista(
-            empresa_id=self.empresa, nome="Titular fictício", usuario_id=self.vendedor,
-        )).id
-        colega = self.criar(Especialista(
-            empresa_id=self.empresa, nome="Colega fictício", usuario_id=self.colega,
-        )).id
+        titular = self.especialista(self.vendedor)
+        colega = self.especialista(self.colega)
         self.privada = self.conexao(self.empresa, titular)
         self.compartilhada = self.conexao(self.empresa, None)
         conexao_externa = self.conexao(self.outra_empresa, None)
@@ -136,6 +132,44 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         return self.db.query(Especialista.id).filter_by(
             empresa_id=self.empresa, usuario_id=usuario,
         ).scalar()
+
+    def test_comerciais_ativos_visiveis_sem_alterar_rastreamento_da_sofia(self):
+        from app.services.empresa_context_service import _carregar_especialistas
+
+        vendedor = self.usuario(self.empresa, "vendedor")
+        inativo = self.usuario(self.empresa, "vendedor", "inativo")
+        especialista = self.especialista(vendedor)
+        self.assertIsNotNone(especialista)
+        self.assertIsNone(self.especialista(inativo))
+        self.assertNotIn(especialista, {e.id for e in _carregar_especialistas(self.db, self.empresa)})
+        self.db.commit()
+        lista = self.consultar("atendentes", self.admin).json()
+        self.assertIn(especialista, {a["id"] for a in lista})
+        externo = self.db.query(Especialista.id).filter_by(usuario_id=self.vendedor_externo).scalar()
+        self.assertNotIn(externo, {a["id"] for a in lista})
+
+    def test_central_reserva_e_envia_lid_pela_sessao_da_conversa(self):
+        self.db.get(Conversa, self.atribuida).identificador = "123456789@lid"
+        sessao = self.db.get(ConexaoCanal, self.compartilhada).sessao_waha
+        self.db.commit()
+        self.assertEqual(self.alterar("assumir", self.atribuida, self.vendedor).status_code, 200)
+        token = gerar_token_api(usuario_id=self.vendedor, empresa_id=self.empresa)
+        headers = {"Authorization": f"Bearer {token}"}
+        with (
+            patch.dict(os.environ, {"ORION_CENTRAL_WHATSAPP_ENVIO_ATIVO": "1"}),
+            patch("app.routes.central_whatsapp_api.transportar_mensagem_waha",
+                  return_value=(True, None, "lid-ficticio")) as transporte,
+        ):
+            reserva = self.client.post("/api/central-whatsapp/reservar-mensagem", headers=headers, json={
+                "conversa_id": self.atribuida, "texto": "Simulação", "chave_solicitacao": "envio-lid",
+            })
+            self.assertEqual(reserva.status_code, 200, reserva.text)
+            envio = self.client.post("/api/central-whatsapp/executar-mensagem", headers=headers, json={
+                "conversa_id": self.atribuida, "mensagem_id": reserva.json()["mensagem_id"],
+            })
+            self.assertEqual(envio.status_code, 200, envio.text)
+            self.assertTrue(envio.json()["sucesso"])
+            transporte.assert_called_once_with(sessao, "123456789@lid", "Simulação")
 
     def test_contexto_comercial_reusa_escopo_e_filtra_vinculos_divergentes(self):
         outra_pessoa = self.criar(Cliente(empresa_id=self.outra_empresa, nome="Cliente externo"))
@@ -315,6 +349,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
 
         def limpar():
             with Session(self.engine) as db, db.begin():
+                db.query(Especialista).filter_by(empresa_id=empresa_id).delete()
                 db.execute(text("DELETE FROM usuarios WHERE empresa_id = :id"), {"id": empresa_id})
                 db.query(ConexaoCanal).filter_by(empresa_id=empresa_id).delete()
                 db.query(Empresa).filter_by(id=empresa_id).delete()
@@ -570,9 +605,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
 
     def test_transferencia_rejeita_destino_inativo_externo_e_conexao_privada(self):
         origem = self.especialista(self.vendedor)
-        externo = self.criar(Especialista(
-            empresa_id=self.outra_empresa, nome="Externo", usuario_id=self.vendedor_externo,
-        )).id
+        externo = self.db.query(Especialista.id).filter_by(usuario_id=self.vendedor_externo).scalar()
         inativo = self.criar(Especialista(
             empresa_id=self.empresa, nome="Inativo",
             usuario_id=self.usuario(self.empresa, "vendedor", "inativo"),
@@ -593,9 +626,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
     def test_supervisao_respeita_hierarquia_e_exclui_conexao_privada_externa(self):
         parceiro = self.usuario(self.empresa, "parceiro_admin")
         orion = self.usuario(self.empresa, "orion_admin")
-        externo = self.criar(Especialista(
-            empresa_id=self.outra_empresa, nome="Externo", usuario_id=self.vendedor_externo,
-        )).id
+        externo = self.db.query(Especialista.id).filter_by(usuario_id=self.vendedor_externo).scalar()
         privada = self.conversa(self.outra_empresa, self.conexao(self.outra_empresa, externo))
         self.db.commit()
         for usuario in (self.vendedor, self.admin, parceiro):
@@ -653,7 +684,6 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
                     RETURNING id
                 """), {"empresa": empresa_id, "email": f"{uuid4()}@example.invalid"}).scalar_one()
                 usuarios.append(usuario)
-                db.add(Especialista(empresa_id=empresa_id, nome="Teste", usuario_id=usuario))
             conexao = ConexaoCanal(
                 empresa_id=empresa_id, canal="whatsapp", provedor="waha",
                 sessao_waha=str(uuid4()), ativo=True,

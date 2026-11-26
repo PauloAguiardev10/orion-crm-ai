@@ -1,7 +1,8 @@
 ﻿from sqlalchemy.orm import Session
 
-from app.models.models import Conversa, ConexaoCanal, Especialista
-from app.services.central_whatsapp_atendimento import ATENDIMENTO_ENCERRADO
+from app.models.models import Conversa, ConexaoCanal
+from app.services.central_whatsapp_atendimento import ATENDIMENTO_ENCERRADO, atendentes_autorizados
+from app.services.followup_destinatario_service import chat_id_whatsapp_valido
 
 
 def preparar_destino_central(
@@ -13,13 +14,9 @@ def preparar_destino_central(
 ) -> tuple[dict | None, str]:
     """Valida o responsavel e o destino WhatsApp da Central."""
 
-    especialista = (
-        db.query(Especialista)
-        .filter(
-            Especialista.empresa_id == empresa_id,
-            Especialista.usuario_id == usuario_id,
-        )
-        .first()
+    especialista = next(
+        (item for item in atendentes_autorizados(db, empresa_id) if item.usuario_id == usuario_id),
+        None,
     )
 
     if especialista is None:
@@ -67,10 +64,7 @@ def preparar_destino_central(
 
     destinatario = (conversa.identificador or "").strip()
 
-    if (
-        not destinatario.endswith("@c.us")
-        or not destinatario[:-5].isdigit()
-    ):
+    if not chat_id_whatsapp_valido(destinatario):
         return None, "destinatario_invalido"
 
     return {

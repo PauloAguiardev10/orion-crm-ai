@@ -44,6 +44,7 @@ def carregar_leads(empresa_id=1):
             """
             SELECT
                 leads.id,
+                leads.especialista_id,
                 leads.empresa_id,
 
                 clientes.nome,
@@ -91,6 +92,7 @@ def carregar_leads(empresa_id=1):
 
             LEFT JOIN clientes
                 ON clientes.id = leads.cliente_id
+               AND clientes.empresa_id = leads.empresa_id
 
             LEFT JOIN especialistas
                 ON especialistas.id = leads.especialista_id
@@ -164,6 +166,28 @@ def carregar_leads(empresa_id=1):
     return leads
 
 
+ESCOPO_RESPONSAVEL_LEAD = """
+    FROM especialistas e
+    LEFT JOIN usuarios u ON u.id = e.usuario_id AND u.empresa_id = e.empresa_id
+    WHERE e.empresa_id = %s
+      AND (e.usuario_id IS NULL OR (u.status = 'ativo'
+           AND u.nivel IN ('vendedor', 'usuario', 'admin_empresa', 'parceiro_admin', 'orion_admin')))
+"""
+
+
+def carregar_responsaveis_leads(empresa_id):
+    conn = conectar()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT e.id, e.nome " + ESCOPO_RESPONSAVEL_LEAD + " ORDER BY e.nome, e.id",
+                (int(empresa_id),),
+            )
+            return cursor.fetchall()
+    finally:
+        conn.close()
+
+
 def atualizar_lead(
     lead_id,
     novo_status,
@@ -172,6 +196,10 @@ def atualizar_lead(
     mensalidade=0,
     motivo_perda="",
     observacao_comercial="",
+    *,
+    empresa_id,
+    especialista_id=None,
+    preservar_responsavel=False,
 ):
 
     garantir_colunas_leads()
@@ -180,29 +208,44 @@ def atualizar_lead(
     cursor = conn.cursor()
 
     try:
+        if not preservar_responsavel and especialista_id is not None:
+            cursor.execute("SELECT e.nome " + ESCOPO_RESPONSAVEL_LEAD + " AND e.id = %s",
+                           (int(empresa_id), int(especialista_id)))
+            registro = cursor.fetchone()
+            if registro is None:
+                return False
+            responsavel = registro[0]
         cursor.execute(
             """
             UPDATE leads
             SET
                 status = %s,
-                responsavel = %s,
+                responsavel = CASE WHEN %s THEN responsavel ELSE %s END,
+                especialista_id = CASE WHEN %s THEN especialista_id ELSE %s END,
                 valor_negocio = %s,
                 mensalidade = %s,
                 motivo_perda = %s,
                 observacao_comercial = %s,
                 atualizado_em = CURRENT_TIMESTAMP
-            WHERE id = %s
+            WHERE id = %s AND empresa_id = %s
             """,
             (
                 novo_status,
+                preservar_responsavel,
                 responsavel,
+                preservar_responsavel,
+                especialista_id,
                 float(valor_negocio or 0),
                 float(mensalidade or 0),
                 motivo_perda,
                 observacao_comercial,
                 int(lead_id),
+                int(empresa_id),
             ),
         )
+
+        if cursor.rowcount != 1:
+            return False
 
         # Quando o Luciano/especialista marca a lead como
         # "Em atendimento", sincroniza a conversa para
@@ -218,13 +261,14 @@ def atualizar_lead(
                 WHERE id = (
                     SELECT conversa_id
                     FROM leads
-                    WHERE id = %s
-                )
+                    WHERE id = %s AND empresa_id = %s
+                ) AND empresa_id = %s
                 """,
-                (int(lead_id),),
+                (int(lead_id), int(empresa_id), int(empresa_id)),
             )
 
         conn.commit()
+        return True
 
     except Exception:
         conn.rollback()

@@ -1,6 +1,13 @@
 """Validacao de vinculos e destinatario WAHA do follow-up."""
 
 
+def chat_id_whatsapp_valido(chat_id: str) -> bool:
+    if not isinstance(chat_id, str) or chat_id.count("@") != 1:
+        return False
+    numero, dominio = chat_id.split("@", 1)
+    return numero.isascii() and numero.isdigit() and dominio in ("c.us", "lid")
+
+
 def validar_destinatario_followup(
     *,
     empresa_id: int,
@@ -42,23 +49,7 @@ def validar_destinatario_followup(
     if canal != "whatsapp":
         return None, "canal_nao_suportado"
 
-    if not isinstance(chat_id, str):
-        return None, "chat_id_invalido"
-
-    if chat_id != chat_id.strip():
-        return None, "chat_id_invalido"
-
-    if chat_id.count("@") != 1:
-        return None, "chat_id_invalido"
-
-    numero, dominio = chat_id.split("@", 1)
-
-    if (
-        not numero
-        or not numero.isascii()
-        or not numero.isdigit()
-        or dominio not in ("c.us", "lid")
-    ):
+    if not chat_id_whatsapp_valido(chat_id):
         return None, "chat_id_invalido"
 
     return chat_id, "destinatario_validado"

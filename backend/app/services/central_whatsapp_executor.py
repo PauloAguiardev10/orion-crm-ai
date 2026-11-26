@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Mensagem
 from app.services.central_whatsapp_resultado import registrar_resultado_envio_central
+from app.services.followup_destinatario_service import chat_id_whatsapp_valido
 from app.services.estados_mensagem import (
     STATUS_PROCESSANDO,
     STATUS_ENVIO_CONFIRMADO_HTTP,
@@ -44,10 +45,7 @@ def executar_envio_central(
     if mensagem is None:
         return False, "mensagem_indisponivel"
 
-    if not sessao or not chat_id.endswith("@c.us"):
-        return False, "destinatario_invalido"
-
-    if not chat_id[:-5].isdigit():
+    if not sessao or not chat_id_whatsapp_valido(chat_id):
         return False, "destinatario_invalido"
 
     if not mensagem.midia_url and not (mensagem.texto or "").strip():

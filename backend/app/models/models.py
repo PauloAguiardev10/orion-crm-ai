@@ -416,6 +416,8 @@ class Especialista(Base):
         index=True,
     )
 
+    somente_atendimento_manual = Column(Boolean, nullable=False, server_default="false")
+
 
 class EspecialistaServico(Base):
     """

@@ -2,11 +2,8 @@ import streamlit as st
 
 from services.leads_service import (
     atualizar_lead,
+    carregar_responsaveis_leads,
     STATUS_LISTA
-)
-
-from services.configuracoes_service import (
-    carregar_especialistas
 )
 
 
@@ -99,18 +96,9 @@ def render_leads(leads):
         .str.lower()
     )
 
-    especialistas_df = carregar_especialistas(
-        st.session_state.get("empresa_id", 1)
-    )
-
-    responsaveis = (
-        especialistas_df["nome"].tolist()
-        if not especialistas_df.empty and "nome" in especialistas_df.columns
-        else ["Não atribuído"]
-    )
-
-    if "Não atribuído" not in responsaveis:
-        responsaveis.insert(0, "Não atribuído")
+    empresa_id = st.session_state.empresa_id
+    opcoes_responsavel = [(None, "Não atribuído"), *carregar_responsaveis_leads(empresa_id)]
+    responsaveis = list(dict.fromkeys(nome for _, nome in opcoes_responsavel))
 
     st.markdown("## 🔎 Filtros")
 
@@ -452,12 +440,21 @@ def render_leads(leads):
             )
 
         with c2:
-            responsavel = st.selectbox(
+            especialista_atual = valor_seguro(lead, "especialista_id", None)
+            especialista_atual = int(especialista_atual) if especialista_atual is not None else None
+            vinculo_atual = next(
+                (item for item in opcoes_responsavel if item[0] == especialista_atual and especialista_atual is not None),
+                (especialista_atual, responsavel_atual),
+            )
+            opcoes_lead = opcoes_responsavel if vinculo_atual in opcoes_responsavel else [*opcoes_responsavel, vinculo_atual]
+            nomes_opcoes = [nome for _, nome in opcoes_lead]
+            especialista_id, responsavel = st.selectbox(
                 f"Responsável Lead #{lead_id}",
-                responsaveis,
-                index=responsaveis.index(responsavel_atual)
-                if responsavel_atual in responsaveis
-                else 0,
+                opcoes_lead,
+                index=opcoes_lead.index(vinculo_atual),
+                format_func=lambda item: (
+                    f"{item[1]} (#{item[0]})" if nomes_opcoes.count(item[1]) > 1 else item[1]
+                ),
                 key=f"responsavel_{lead_id}"
             )
 
@@ -528,18 +525,23 @@ def render_leads(leads):
             f"Salvar Lead #{lead_id}",
             key=f"salvar_{lead_id}"
         ):
-            atualizar_lead(
+            atualizada = atualizar_lead(
                 lead_id,
                 normalizar_status(novo_status),
                 responsavel,
                 valor_negocio,
                 mensalidade,
                 motivo_perda,
-                observacao_comercial
+                observacao_comercial,
+                empresa_id=empresa_id,
+                especialista_id=especialista_id,
+                preservar_responsavel=(especialista_id, responsavel) == vinculo_atual,
             )
-
-            st.success("Lead atualizada com sucesso.")
-            st.rerun()
+            if atualizada:
+                st.success("Lead atualizada com sucesso.")
+                st.rerun()
+            else:
+                st.error("A lead ou o responsável não está disponível para esta empresa.")
 
         resumo = valor_seguro(lead, "resumo_vendedor", "")
 

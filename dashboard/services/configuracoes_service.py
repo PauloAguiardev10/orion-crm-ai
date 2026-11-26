@@ -75,6 +75,7 @@ def limpar_especialistas_duplicados(empresa_id=1):
                 SELECT MIN(nome) AS nome
                 FROM especialistas
                 WHERE empresa_id = %s
+                  AND usuario_id IS NULL
                 GROUP BY LOWER(TRIM(nome))
                 HAVING COUNT(*) > 1
             """, (
@@ -91,6 +92,7 @@ def limpar_especialistas_duplicados(empresa_id=1):
                     SELECT id
                     FROM especialistas
                     WHERE empresa_id = %s
+                    AND usuario_id IS NULL
                     AND LOWER(TRIM(nome)) = LOWER(TRIM(%s))
                     ORDER BY id ASC
                 """, (
@@ -454,7 +456,8 @@ def cadastrar_especialista(
 
                     SET
                         nome = %s,
-                        usuario_id = %s
+                        usuario_id = %s,
+                        somente_atendimento_manual = FALSE
 
                     WHERE id = %s
 

@@ -358,6 +358,7 @@ def _carregar_especialistas(
         db.query(Especialista)
         .filter(
             Especialista.empresa_id == empresa_id,
+            Especialista.somente_atendimento_manual.is_(False),
         )
         .order_by(
             Especialista.nome.asc(),
