@@ -10,6 +10,7 @@ def transportar_mensagem_waha(
     sessao: str,
     chat_id: str,
     texto: str,
+    *, reply_to: str | None = None, encaminhar: str | None = None,
 ) -> tuple[bool, str | None, str | None]:
     """Envia uma unica vez, sem tentativas automaticas."""
 
@@ -20,13 +21,15 @@ def transportar_mensagem_waha(
         destino = resolver_waha(sessao)
         if not destino.chave_api:
             return False, "falha_envio", None
+        endpoint = "forwardMessage" if encaminhar else "sendText"
         resposta = requests.post(
-            f"{destino.origem}/api/sendText",
+            f"{destino.origem}/api/{endpoint}",
             headers=destino.headers, allow_redirects=False,
             json={
                 "session": destino.sessao,
                 "chatId": chat_id,
-                "text": texto,
+                **({"messageId": encaminhar} if encaminhar else {"text": texto}),
+                **({"reply_to": reply_to} if reply_to else {}),
             },
             timeout=15,
         )

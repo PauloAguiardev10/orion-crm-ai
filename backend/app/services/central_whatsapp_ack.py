@@ -63,6 +63,8 @@ def registrar_ack_waha(db, evento):
     conexao, motivo = localizar_conexao_waha(db, sessao)
     if conexao is None:
         return motivo
+    if conexao.pareamento_waha_pendente:
+        return "conexao_waha_suspensa"
     bloquear_correlacao_ack(db, conexao.empresa_id, conexao.sessao_waha, mensagem_id)
     return _aplicar_ack(db, conexao, mensagem_id, ack, guardar=True)
 

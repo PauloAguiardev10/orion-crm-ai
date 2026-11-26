@@ -15,13 +15,13 @@ TIPOS_ANEXO = {"imagem": "Imagem", "audio": "Áudio", "video": "Vídeo", "docume
 
 ESTILO_CENTRAL = """
 <style>
-.st-key-orion_whatsapp {color:#e7efff}
+.st-key-orion_whatsapp {color:#E3EAF6;background:#080F1E;padding:12px;border-radius:14px}
 .st-key-orion_whatsapp [data-testid="stHorizontalBlock"] {align-items:flex-start}
 .st-key-orion_whatsapp .orion-wa-heading {font-size:1.37rem; font-weight:720; color:#f1f6ff; margin:0 0 2px}
 .st-key-orion_whatsapp .orion-wa-muted {color:#a2b4cf; font-size:.8rem}
 .st-key-orion_whatsapp .orion-wa-hero {
     padding:16px 20px; border:1px solid #254259; border-radius:13px;
-    background:linear-gradient(105deg,#102c43,#0f1930 65%,#1a1732)
+    background:#101D32
 }
 .st-key-orion_whatsapp .orion-wa-contact {display:flex; align-items:center; gap:12px; min-width:0}
 .st-key-orion_whatsapp .orion-wa-contact > div:nth-child(2) {min-width:0; flex:1}
@@ -35,7 +35,7 @@ ESTILO_CENTRAL = """
 .st-key-orion_whatsapp .orion-wa-time {font-size:.73rem; color:#a2b4cf; white-space:nowrap; margin-left:auto}
 .st-key-orion_whatsapp .orion-wa-unread {width:8px;height:8px;background:#38e8f1;border-radius:100%;flex:none}
 .st-key-orion_whatsapp .orion-wa-preview {font-size:.82rem;color:#a9bad1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:4px 0 0 54px}
-.st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"] {position:relative;padding:8px 10px;border:1px solid #24364e;border-radius:10px;background:#101a2c}
+.st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"] {position:relative;padding:8px 10px;border:1px solid #24364e;border-radius:10px;background:#101D32}
 .st-key-orion_whatsapp [class*="st-key-orion_wa_ativa_"] {padding:8px 10px;border:1px solid #347482;border-radius:10px;background:#132d40}
 .st-key-orion_whatsapp [class*="st-key-orion_wa_abrir_"] button {min-height:28px;font-size:.8rem}
 .st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"] [class*="st-key-orion_wa_abrir_"] {
@@ -44,11 +44,11 @@ ESTILO_CENTRAL = """
 .st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"] [class*="st-key-orion_wa_abrir_"] button {
     position:absolute;inset:0;width:100%;height:100%;opacity:0.02
 }
-.st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"]:has(button:focus-visible) {outline:2px solid #47d9e8}
+.st-key-orion_whatsapp [class*="st-key-orion_wa_linha_"]:has(button:focus-visible) {outline:2px solid #1676DF}
 .st-key-orion_whatsapp .st-key-orion_wa_voltar {display:none}
 .st-key-orion_whatsapp button[data-testid^="stBaseButton-primary"],
 .st-key-orion_whatsapp button[kind="primaryFormSubmit"] {
-    background:#47d9e8; border-color:#47d9e8; color:#102236; font-weight:700
+    background:#1676DF; border-color:#1676DF; color:#E3EAF6; font-weight:700
 }
 .st-key-orion_whatsapp button[data-testid^="stBaseButton-primary"]:hover,
 .st-key-orion_whatsapp button[kind="primaryFormSubmit"]:hover {
@@ -59,12 +59,12 @@ ESTILO_CENTRAL = """
 .st-key-orion_whatsapp .orion-wa-balao {width:fit-content;max-width:90%;padding:8px 12px;
     border:1px solid #2a3d57;border-radius:12px 12px 12px 3px;background:#172439;
     color:#eef5ff;overflow-wrap:anywhere;white-space:pre-wrap;margin-bottom:6px}
-.st-key-orion_whatsapp .orion-wa-enviada {margin-left:auto;border-color:#285661;border-radius:12px 12px 3px 12px;background:#153642}
+.st-key-orion_whatsapp .orion-wa-enviada {margin-left:auto;border-color:#285661;border-radius:12px 12px 3px 12px;background:#124A83}
 .st-key-orion_whatsapp [class*="st-key-orion_wa_voz_"] {
     width:min(355px,90%);padding:6px 10px;
     border:1px solid #2a3d57;border-radius:12px;background:#172439
 }
-.st-key-orion_whatsapp [class*="st-key-orion_wa_voz_enviada_"] {margin-left:auto;background:#153642;border-color:#285661}
+.st-key-orion_whatsapp [class*="st-key-orion_wa_voz_enviada_"] {margin-left:auto;background:#124A83;border-color:#285661}
 .st-key-orion_whatsapp [class*="st-key-orion_wa_voz_"] .orion-wa-balao {
     margin:0;padding:3px 0;background:transparent;border:0
 }

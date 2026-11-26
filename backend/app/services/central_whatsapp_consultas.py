@@ -64,11 +64,12 @@ def listar_conversas(
 ):
     # As interpolações contêm apenas cláusulas constantes, com parâmetros SQL.
     consulta = text(f"""
-        SELECT c.id, c.identificador, c.nome, c.status_atendimento,
+        SELECT c.id, c.identificador, c.nome, c.telefone, c.status_atendimento,
                c.atualizado_em, c.conexao_canal_id, c.especialista_id,
                responsavel.usuario_id AS especialista_usuario_id,
                responsavel.nome AS responsavel_nome,
-               c.humano_assumiu,
+               c.humano_assumiu, c.central_arquivada,
+               COALESCE(c.central_digitando_ate > now(), FALSE) AS digitando, cc.sofia_institucional, cc.operacao_suspensa,
                cc.especialista_id IS NULL AS corporativa,
                (:administrador AND cc.especialista_id IS NULL) AS pode_supervisionar,
                (cc.especialista_id IS NULL OR titular.usuario_id = :usuario_id)
@@ -84,6 +85,11 @@ def listar_conversas(
                (SELECT l.ultima_mensagem_id FROM central_conversa_leitura l
                 WHERE l.empresa_id = c.empresa_id AND l.conversa_id = c.id
                   AND l.usuario_id = :usuario_id) AS ultima_lida_id,
+               (SELECT COUNT(*) FROM mensagens m WHERE {ESCOPO_MENSAGEM}
+                AND m.from_me IS FALSE AND m.remetente = 'cliente'
+                AND m.id > COALESCE((SELECT l.ultima_mensagem_id FROM central_conversa_leitura l
+                    WHERE l.empresa_id = c.empresa_id AND l.conversa_id = c.id
+                      AND l.usuario_id = :usuario_id), 0)) AS nao_lidas,
                cc.nome_conexao AS conexao_nome,
                ultima.texto AS ultima_mensagem, ultima.tipo AS ultimo_tipo,
                ultima.criado_em AS ultima_mensagem_em
@@ -133,7 +139,8 @@ def listar_historico(
         SELECT pagina.*
         FROM autorizada c
         LEFT JOIN LATERAL (
-            SELECT m.id, m.remetente, m.texto, m.tipo,
+            SELECT m.id, m.remetente, m.texto, m.tipo, m.central_eventos,
+                   m.central_eventos->>'participante' AS participante,
                    m.midia_tipo, (m.midia_url IS NOT NULL) AS tem_anexo,
                    m.from_me, m.criado_em, m.status_envio, m.status_processamento,
                    autor.nome AS autor_nome

@@ -11,11 +11,13 @@ from services.central_whatsapp_service import SessaoCentralExpirada, listar_aten
 ERROS = {
     "limite_plano_nao_configurado": "O limite de conexões deste plano ainda não foi configurado.",
     "limite_plano_atingido": "O limite de conexões deste plano foi atingido.",
-    "capacidade_waha_indisponivel": "Nenhuma sess?o WhatsApp provisionada est? dispon?vel.",
+    "capacidade_waha_indisponivel": "Nenhuma sessão WhatsApp provisionada está disponível.",
     "limite_sessoes_provedor": "A instalação da WAHA recusou outra sessão.",
     "gestao_waha_desativada": "Gestão da WAHA desativada neste ambiente.",
     "conexao_legada_protegida": "A conexão legada está protegida contra alterações pelo CRM.",
     "vinculo_com_conversas_existentes": "A conexão já tem histórico e seu vínculo está protegido.",
+    "numero_waha_indisponivel": "O número não está disponível para este vínculo.",
+    "inventario_waha_pendente": "A verificação depende da conclusão do inventário de conexões.",
     "qr_nao_disponivel": "A sessão ainda não oferece um QR Code.",
 }
 ESTADOS = {
@@ -56,7 +58,11 @@ def _estado_conexao(conexao):
     st.write(f"**Situação operacional:** {ESTADOS.get(codigo, 'Estado desconhecido')}")
     if estado.get("numero"):
         st.write(f"**Número:** +{estado['numero']}")
-    if codigo == "SCAN_QR_CODE" and conexao["gerenciada"] and not conexao["suspensa"]:
+    if codigo == "WORKING" and estado.get("pareamento_pendente", conexao.get("pareamento_pendente")) and conexao["gerenciada"]:
+        confirmado = _api("POST", caminho + "/confirmar-numero")
+        if confirmado:
+            st.caption("N?mero confirmado para esta conex?o.")
+    if codigo == "SCAN_QR_CODE" and conexao["gerenciada"] and estado.get("pareamento_pendente", conexao.get("pareamento_pendente")):
         qr = _api("GET", caminho + "/qr", imagem=True)
         if qr:
             dados = base64.b64encode(qr).decode("ascii")
@@ -105,12 +111,17 @@ def render_conexoes_whatsapp():
 
     plano, limite = dados["plano"], dados["limite"]
     st.caption(f"Plano {plano} · " + (f"{limite} conexões" if limite is not None else "Limite não configurado"))
+    if dados.get("conexoes_contabilizadas") is not None:
+        st.caption(f"Conexões comerciais na franquia: {dados['conexoes_contabilizadas']}")
     if dados.get("limite_usuarios") is not None:
         st.caption(f"Usuários na franquia: {dados['usuarios_contabilizados']} · Limite: {dados['limite_usuarios']}")
     if limite is not None:
         with st.expander("Cadastrar conexão"):
-            formulario = _formulario(f"cadastrar_waha_{empresa_id}", atendentes)
+            chave = f"cadastrar_waha_{empresa_id}"
+            geracao = st.session_state.get(chave, 0)
+            formulario = _formulario(f"{chave}_{geracao}", atendentes)
             if formulario is not None and _api("POST", "conexoes", corpo=formulario):
+                st.session_state[chave] = geracao + 1
                 st.rerun()
     conexoes = {item["id"]: item for item in dados["conexoes"]}
     if not conexoes:
@@ -122,6 +133,9 @@ def render_conexoes_whatsapp():
     )
     conexao = conexoes[escolhida]
     _estado_conexao(conexao)
+    if conexao.get("sofia_institucional"):
+        st.caption("Conexão institucional da Sofia · fora da franquia comercial.")
+        return
     if not conexao["gerenciada"]:
         st.caption("Conexão legada protegida. Você pode consultar seu estado.")
         return
@@ -129,6 +143,12 @@ def render_conexoes_whatsapp():
     if st.button("Conectar ou reconectar", key=f"conectar_waha_{escolhida}"):
         if _api("POST", caminho + "/conectar"):
             st.rerun()
+    with st.expander("Gerar novo QR de autenticação"):
+        st.caption("Para sessões desconectadas. O pareamento e o histórico na WAHA podem ser perdidos. Use o mesmo número.")
+        confirmar_qr = st.checkbox("Confirmo um novo pareamento", key=f"confirmar_novo_qr_{escolhida}")
+        if st.button("Reautenticar", disabled=not confirmar_qr, key=f"reautenticar_waha_{escolhida}"):
+            if _api("POST", caminho + "/reautenticar", corpo={"confirmar": True}):
+                st.rerun()
     with st.expander("Editar conexão"):
         alteracoes = _formulario(f"editar_waha_{escolhida}", atendentes, conexao)
         if alteracoes is not None and _api("PUT", caminho, corpo=alteracoes):

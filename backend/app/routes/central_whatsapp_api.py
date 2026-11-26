@@ -1,31 +1,34 @@
+from typing import Literal
 from functools import partial
 from hashlib import sha256
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
-from app.models.models import Mensagem
+from app.models.models import ConexaoCanal, Conversa, Mensagem
+from app.services.central_whatsapp_contatos import identificar_telefone_waha, obter_foto_waha
 from app.services.central_whatsapp_midia import (
     FORMATOS, LIMITE_MIDIA, caminho_midia, enviar_midia_waha, guardar_midia, midia_ativa,
     validar_midia,
 )
 from app.services.waha_gestao_conexoes import (
-    atualizar_conexao, cadastrar_conexao, capacidade_usuarios, exigir_gerenciada, listar_conexoes,
+    atualizar_conexao, cadastrar_conexao, capacidade_usuarios, contar_conexoes_comerciais, exigir_gerenciada, listar_conexoes,
     obter_conexao, plano_conexoes,
 )
+from app.services.waha_numero_verificado import confirmar_numero_waha
 from app.services.waha_gestao_transporte import ErroGestaoWaha, TransporteGestaoWaha
 
 from app.services.followup_dependencia_api import (
-    exigir_usuario_api,
+    bearer, exigir_usuario_api,
     obter_db_api,
 )
 from app.services.central_whatsapp_atendimento import (
-    atendentes_autorizados,
+    ATENDIMENTO_HUMANO, atendentes_autorizados,
     gerenciar_atendimento_whatsapp,
 )
 from app.services.central_whatsapp_consultas import (
@@ -85,8 +88,117 @@ def _conexao_publica(conexao):
         "id": conexao.id, "nome": conexao.nome_conexao or f"WhatsApp legado #{conexao.id}",
         "especialista_id": conexao.especialista_id, "sofia_ativa": conexao.sofia_ativa,
         "gerenciada": conexao.gerenciada_crm, "suspensa": conexao.operacao_suspensa,
-        "ativa": conexao.ativo,
+        "pareamento_pendente": conexao.pareamento_waha_pendente,
+        "ativa": conexao.ativo, "sofia_institucional": conexao.sofia_institucional,
     }
+
+
+class NovaConversaWhatsApp(BaseModel):
+    conexao_id: int = Field(gt=0)
+    telefone: str = Field(pattern=r"^\+?[1-9][0-9]{7,14}$")
+
+
+@router.get("/conversas/iniciar")
+def listar_conexoes_para_inicio(
+    identidade: dict = Depends(exigir_empresa_central), db: Session = Depends(obter_db_api),
+):
+    empresa = identidade["empresa_id"]
+    titular = next((item for item in atendentes_autorizados(db, empresa)
+                    if item.usuario_id == identidade["usuario_id"]), None)
+    if titular is None or not identidade.get("empresa_propria", True):
+        return []
+    conexoes = db.query(ConexaoCanal).filter_by(
+        empresa_id=empresa, provedor="waha", canal="whatsapp", ativo=True, operacao_suspensa=False, sofia_institucional=False,
+    ).filter(
+        ConexaoCanal.sessao_waha.is_not(None),
+        (ConexaoCanal.especialista_id.is_(None)) | (ConexaoCanal.especialista_id == titular.id),
+    ).order_by(ConexaoCanal.id).all()
+    return [{"id": item.id, "nome": item.nome_conexao or f"WhatsApp #{item.id}"} for item in conexoes]
+
+
+@router.get("/conexoes/{conexao_id}/contatos")
+def consultar_contatos_waha(
+    conexao_id: int = Path(gt=0), deslocamento: int = Query(0, ge=0, le=100000),
+    busca: str = Query("", max_length=120),
+    identidade: dict = Depends(exigir_empresa_central), db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_contatos import listar_contatos_waha
+
+    if os.getenv("ORION_WAHA_CONTATOS_ATIVO") != "1":
+        raise HTTPException(403, "consulta_contatos_desativada")
+    if not any(c["id"] == conexao_id for c in listar_conexoes_para_inicio(identidade, db)):
+        raise HTTPException(404, "conexao_indisponivel")
+    sessao = db.query(ConexaoCanal.sessao_waha).filter_by(
+        id=conexao_id, empresa_id=identidade["empresa_id"],
+    ).scalar()
+    try:
+        return listar_contatos_waha(sessao, deslocamento, busca)
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+
+
+@router.get("/conexoes/{conexao_id}/contatos/foto")
+def consultar_foto_da_conexao(
+    conexao_id: int = Path(gt=0), chat: str = Query(max_length=80),
+    identidade: dict = Depends(exigir_empresa_central), db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_contatos import obter_foto_contato_cadastrado
+
+    if os.getenv("ORION_WAHA_CONTATOS_ATIVO") != "1" or not any(
+        c["id"] == conexao_id for c in listar_conexoes_para_inicio(identidade, db)
+    ):
+        raise HTTPException(404, "foto_indisponivel")
+    sessao = db.query(ConexaoCanal.sessao_waha).filter_by(
+        id=conexao_id, empresa_id=identidade["empresa_id"],
+    ).scalar()
+    try:
+        imagem, tipo = obter_foto_contato_cadastrado(sessao, chat)
+    except ValueError:
+        raise HTTPException(404, "foto_indisponivel") from None
+    return Response(imagem, media_type=tipo, headers={
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    })
+
+
+@router.post("/conversas/iniciar", status_code=201)
+def iniciar_conversa(
+    dados: NovaConversaWhatsApp,
+    identidade: dict = Depends(exigir_empresa_central),
+    db: Session = Depends(obter_db_api),
+):
+    empresa = identidade["empresa_id"]
+    titular = next((item for item in atendentes_autorizados(db, empresa)
+                    if item.usuario_id == identidade["usuario_id"]), None)
+    if titular is None or not identidade.get("empresa_propria", True):
+        raise HTTPException(403, "conversa_nao_autorizada")
+    conexao = db.query(ConexaoCanal).filter_by(
+        id=dados.conexao_id, empresa_id=empresa, provedor="waha", canal="whatsapp",
+        ativo=True, operacao_suspensa=False, sofia_institucional=False,
+    ).with_for_update().one_or_none()
+    if conexao is None or not conexao.sessao_waha or conexao.especialista_id not in (None, titular.id):
+        raise HTTPException(404, "conexao_indisponivel")
+    telefone = dados.telefone.lstrip("+")
+    try:
+        identificador = identificar_telefone_waha(conexao.sessao_waha, telefone)
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+    existentes = db.query(Conversa).filter_by(
+        empresa_id=empresa, conexao_canal_id=conexao.id, canal="whatsapp",
+    ).filter((Conversa.identificador.in_((identificador, f"{telefone}@c.us"))) | (Conversa.telefone == telefone)).limit(2).all()
+    if existentes:
+        if len(existentes) != 1 or existentes[0].especialista_id != titular.id:
+            raise HTTPException(409, "conversa_indisponivel")
+        return {"id": existentes[0].id}
+    conversa = Conversa(
+        empresa_id=empresa, conexao_canal_id=conexao.id, especialista_id=titular.id,
+        canal="whatsapp", identificador=identificador, telefone=telefone,
+        etapa="inicio", status_atendimento=ATENDIMENTO_HUMANO, humano_assumiu=True, historico="",
+    )
+    db.add(conversa)
+    db.flush()
+    resultado = {"id": conversa.id}
+    db.commit()
+    return resultado
 
 
 class DadosConexaoWaha(BaseModel):
@@ -115,6 +227,7 @@ def consultar_conexoes_waha(
         plano, limite = plano_conexoes(db, identidade["empresa_id"])
         return {"plano": plano, "limite": limite,
                 **capacidade_usuarios(db, identidade["empresa_id"], plano),
+                "conexoes_contabilizadas": contar_conexoes_comerciais(db, identidade["empresa_id"]),
                 "conexoes": [_conexao_publica(c) for c in listar_conexoes(db, identidade)]}
     except ErroGestaoWaha as erro:
         raise HTTPException(erro.status, erro.motivo) from None
@@ -148,6 +261,57 @@ def editar_conexao_waha(
         raise HTTPException(erro.status, erro.motivo) from None
 
 
+@router.post("/conexoes/{conexao_id}/historico/{conversa_id}")
+def importar_historico_noweb(
+    dados: ConfirmacaoDesconexao,
+    conexao_id: int = Path(gt=0), conversa_id: int = Path(gt=0),
+    identidade: dict = Depends(exigir_gestao_conexoes), db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_historico_noweb import sincronizar_conversa_noweb
+
+    if os.getenv("ORION_WAHA_HISTORICO_ATIVO") != "1":
+        raise HTTPException(403, "historico_noweb_desativado")
+    if not identidade.get("empresa_propria", True) or dados.confirmar is not True:
+        raise HTTPException(403, "importacao_nao_autorizada")
+    try:
+        conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
+        if not conexao.ativo or conexao.operacao_suspensa:
+            raise ErroGestaoWaha("conexao_indisponivel", 404)
+        importadas = sincronizar_conversa_noweb(db, conexao, conversa_id)
+        db.commit()
+        return {"importadas": importadas}
+    except ErroGestaoWaha as erro:
+        raise HTTPException(erro.status, erro.motivo) from None
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+
+
+@router.get("/conversas/{conversa_id}/foto")
+def consultar_foto_contato(
+    conversa_id: int = Path(gt=0), identidade: dict = Depends(exigir_empresa_central),
+    db: Session = Depends(obter_db_api),
+):
+    if not consultar_contexto_conversa(db, identidade=identidade, conversa_id=conversa_id):
+        raise HTTPException(404, "foto_indisponivel")
+    vinculada = db.query(Conversa.identificador, ConexaoCanal.sessao_waha).join(
+        ConexaoCanal, ConexaoCanal.id == Conversa.conexao_canal_id,
+    ).filter(
+        Conversa.id == conversa_id, Conversa.empresa_id == identidade["empresa_id"],
+        ConexaoCanal.empresa_id == Conversa.empresa_id, ConexaoCanal.ativo.is_(True),
+        ConexaoCanal.operacao_suspensa.is_(False), ConexaoCanal.provedor == "waha",
+        ConexaoCanal.canal == "whatsapp",
+    ).one_or_none()
+    if vinculada is None:
+        raise HTTPException(404, "foto_indisponivel")
+    try:
+        imagem, mime = obter_foto_waha(vinculada.sessao_waha, vinculada.identificador)
+    except ValueError:
+        raise HTTPException(404, "foto_indisponivel") from None
+    return Response(imagem, media_type=mime, headers={
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    })
+
+
 @router.get("/conexoes/{conexao_id}/estado")
 def consultar_estado_waha(
     conexao_id: int = Path(gt=0), identidade: dict = Depends(exigir_gestao_conexoes),
@@ -163,7 +327,10 @@ def consultar_estado_waha(
             if erro.status != 404:
                 raise
             resultado = {"estado": "NAO_PROVISIONADA", "numero": None}
-        return JSONResponse(resultado, headers={"Cache-Control": "private, no-store"})
+        if conexao.pareamento_waha_pendente:
+            resultado["numero"] = None
+        return JSONResponse({**resultado, "pareamento_pendente": conexao.pareamento_waha_pendente},
+                            headers={"Cache-Control": "private, no-store"})
     except ErroGestaoWaha as erro:
         raise HTTPException(erro.status, erro.motivo) from None
 
@@ -185,13 +352,16 @@ def conectar_sessao_waha(
                 raise
             transporte.criar(sessao)
             estado = "STOPPED"
+        if estado == "WORKING" and not conexao.operacao_suspensa:
+            return {"situacao": "conexao_solicitada"}
         if estado == "STOPPED":
             transporte.iniciar(sessao)
         elif estado == "FAILED":
             transporte.reiniciar(sessao)
         elif estado not in ("WORKING", "SCAN_QR_CODE", "STARTING"):
             raise ErroGestaoWaha("estado_waha_nao_suportado", 409)
-        conexao.operacao_suspensa = False
+        conexao.operacao_suspensa = True
+        conexao.pareamento_waha_pendente = True
         db.commit()
         return {"situacao": "conexao_solicitada"}
     except ErroGestaoWaha as erro:
@@ -216,8 +386,60 @@ def desconectar_sessao_waha(
             if erro.status != 404:
                 raise
         conexao.operacao_suspensa = True
+        conexao.pareamento_waha_pendente = False
         db.commit()
         return {"situacao": "conexao_suspensa"}
+    except ErroGestaoWaha as erro:
+        raise HTTPException(erro.status, erro.motivo) from None
+
+
+@router.post("/conexoes/{conexao_id}/confirmar-numero")
+def confirmar_pareamento_waha(
+    conexao_id: int = Path(gt=0), identidade: dict = Depends(exigir_gestao_conexoes),
+    db: Session = Depends(obter_db_api),
+):
+    try:
+        conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
+        exigir_gerenciada(conexao)
+        if not conexao.pareamento_waha_pendente:
+            return {"situacao": "sem_pareamento_pendente"}
+        estado = TransporteGestaoWaha(conexao.sessao_waha).consultar(conexao.sessao_waha)
+        confirmar_numero_waha(db, conexao, estado)
+        db.commit()
+        return {"situacao": "numero_confirmado"}
+    except ErroGestaoWaha as erro:
+        raise HTTPException(erro.status, erro.motivo) from None
+
+
+@router.post("/conexoes/{conexao_id}/reautenticar")
+def reautenticar_sessao_waha(
+    dados: ConfirmacaoDesconexao, conexao_id: int = Path(gt=0),
+    identidade: dict = Depends(exigir_gestao_conexoes), db: Session = Depends(obter_db_api),
+):
+    if not dados.confirmar:
+        raise HTTPException(422, "confirmacao_obrigatoria")
+    try:
+        conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
+        exigir_gerenciada(conexao)
+        sessao = conexao.sessao_waha
+        transporte = TransporteGestaoWaha(sessao)
+        estado = transporte.consultar(sessao)["estado"]
+        if estado not in ("STOPPED", "FAILED"):
+            raise ErroGestaoWaha("sessao_precisa_estar_desconectada", 409)
+        conexao.operacao_suspensa = True
+        conexao.pareamento_waha_pendente = False
+        try:
+            if estado == "FAILED":
+                transporte.desconectar(sessao)
+            transporte.esquecer_pareamento(sessao)
+            transporte.iniciar(sessao)
+        except ErroGestaoWaha:
+            db.commit()
+            raise
+        conexao.operacao_suspensa = True
+        conexao.pareamento_waha_pendente = True
+        db.commit()
+        return {"situacao": "nova_autenticacao_solicitada"}
     except ErroGestaoWaha as erro:
         raise HTTPException(erro.status, erro.motivo) from None
 
@@ -231,7 +453,7 @@ def obter_qr_waha(
         conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
         exigir_gerenciada(conexao)
         transporte = TransporteGestaoWaha(conexao.sessao_waha)
-        if conexao.operacao_suspensa or transporte.consultar(conexao.sessao_waha)["estado"] != "SCAN_QR_CODE":
+        if not conexao.pareamento_waha_pendente or transporte.consultar(conexao.sessao_waha)["estado"] != "SCAN_QR_CODE":
             raise ErroGestaoWaha("qr_nao_disponivel", 409)
         return Response(transporte.qr(conexao.sessao_waha), media_type="image/png", headers={
             "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
@@ -248,6 +470,29 @@ def _resposta_consulta(request, dados):
         return Response(status_code=304, headers=cabecalhos)
     resposta.headers.update(cabecalhos)
     return resposta
+
+
+def _autorizar_eventos(*, autorizar_leitura, empresa_id, db):
+    identidade = exigir_leitura_central(autorizar_leitura)
+    return exigir_empresa_central(empresa_id, identidade, db)
+
+
+@router.get("/eventos")
+def acompanhar_central(
+    request: Request, empresa_id: int | None = Query(None, gt=0),
+    conversa_id: int | None = Query(None, gt=0), credenciais=Depends(bearer),
+):
+    from app.services.central_whatsapp_eventos import snapshot, transmitir
+
+    if credenciais is None or credenciais.scheme.lower() != "bearer":
+        raise HTTPException(401, "autenticacao_obrigatoria")
+    token = credenciais.credentials
+    inicial = snapshot(token, empresa_id, conversa_id, _autorizar_eventos)
+    return StreamingResponse(
+        transmitir(request, token, empresa_id, conversa_id, _autorizar_eventos, inicial),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "private, no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/conversas")
@@ -334,6 +579,93 @@ def marcar_conversa_lida(
 
 class AssumirAtendimentoRequest(BaseModel):
     conversa_id: int = Field(gt=0)
+
+
+class AcaoMensagemWaha(BaseModel):
+    acao: Literal["reagir", "editar", "excluir"]
+    valor: str = Field("", max_length=4096)
+
+
+@router.get("/capacidades")
+def consultar_capacidades(identidade: dict = Depends(exigir_empresa_central)):
+    return {"presenca": os.getenv("ORION_WAHA_PRESENCA_ATIVA") == "1",
+            "arquivo": os.getenv("ORION_WAHA_ARQUIVO_ATIVO") == "1",
+            "acoes_mensagem": os.getenv("ORION_WAHA_ACOES_MENSAGEM_ATIVAS") == "1"
+                             and os.getenv("ORION_CENTRAL_WHATSAPP_ENVIO_ATIVO") == "1"}
+
+
+class ArquivarWhatsappRequest(BaseModel):
+    arquivada: StrictBool
+
+
+@router.post("/conversas/{conversa_id}/presenca")
+def acompanhar_presenca(
+    conversa_id: int = Path(gt=0), identidade: dict = Depends(exigir_empresa_central),
+    db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_acoes import assinar_presenca_waha
+
+    if not consultar_capacidades(identidade)["presenca"] or not consultar_contexto_conversa(
+        db, identidade=identidade, conversa_id=conversa_id,
+    ):
+        raise HTTPException(404, "presenca_indisponivel")
+    vinculada = db.query(Conversa.identificador, ConexaoCanal.sessao_waha).join(
+        ConexaoCanal, ConexaoCanal.id == Conversa.conexao_canal_id,
+    ).filter(
+        Conversa.id == conversa_id, Conversa.empresa_id == identidade["empresa_id"],
+        ConexaoCanal.empresa_id == Conversa.empresa_id, ConexaoCanal.canal == "whatsapp",
+        ConexaoCanal.provedor == "waha", ConexaoCanal.ativo.is_(True),
+        ConexaoCanal.operacao_suspensa.is_(False), ConexaoCanal.sofia_institucional.is_(False),
+    ).one_or_none()
+    if vinculada is None:
+        raise HTTPException(404, "presenca_indisponivel")
+    try:
+        assinar_presenca_waha(vinculada.sessao_waha, vinculada.identificador)
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+    return {"situacao": "confirmada_waha"}
+
+
+@router.post("/conversas/{conversa_id}/arquivar")
+def alterar_arquivo_whatsapp(
+    dados: ArquivarWhatsappRequest, conversa_id: int = Path(gt=0),
+    identidade: dict = Depends(exigir_empresa_central), db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_acoes import arquivar_conversa_waha
+
+    if not identidade.get("empresa_propria", True) or not consultar_capacidades(identidade)["arquivo"]:
+        raise HTTPException(403, "operacao_desativada")
+    try:
+        arquivar_conversa_waha(
+            db, empresa_id=identidade["empresa_id"], usuario_id=identidade["usuario_id"],
+            conversa_id=conversa_id, arquivar=dados.arquivada,
+        )
+        db.commit()
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+    return {"arquivada": dados.arquivada}
+
+
+@router.post("/conversas/{conversa_id}/mensagens/{mensagem_id}/acao")
+def alterar_mensagem_waha(
+    dados: AcaoMensagemWaha, conversa_id: int = Path(gt=0), mensagem_id: int = Path(gt=0),
+    identidade: dict = Depends(exigir_empresa_central), db: Session = Depends(obter_db_api),
+):
+    from app.services.central_whatsapp_acoes import executar_acao_mensagem
+
+    if not identidade.get("empresa_propria", True) or not consultar_capacidades(identidade)["acoes_mensagem"]:
+        raise HTTPException(403, "operacao_desativada")
+    if dados.acao == "reagir" and dados.valor not in ("", "👍", "❤️", "😂", "😮", "😢", "🙏"):
+        raise HTTPException(422, "reacao_invalida")
+    try:
+        executar_acao_mensagem(
+            db, empresa_id=identidade["empresa_id"], usuario_id=identidade["usuario_id"],
+            conversa_id=conversa_id, mensagem_id=mensagem_id, acao=dados.acao, valor=dados.valor,
+        )
+        db.commit()
+    except ValueError as erro:
+        raise HTTPException(409, str(erro)) from None
+    return {"situacao": "confirmada_waha"}
 
 
 @router.get("/conversas/{conversa_id}/mensagens/{mensagem_id}/anexo")
@@ -448,6 +780,8 @@ from app.services.central_whatsapp_reserva import reservar_mensagem_central
 
 
 class ReservarMensagemRequest(BaseModel):
+    encaminhar_conversa_id: int | None = Field(None, gt=0)
+    responder_mensagem_id: int | None = Field(None, gt=0)
     conversa_id: int = Field(gt=0)
     texto: str = Field(min_length=1, max_length=4096)
     chave_solicitacao: str = Field(min_length=1, max_length=180)
@@ -561,13 +895,19 @@ def reservar_mensagem(
             detail="envio_central_desativado",
         )
 
+    if dados.encaminhar_conversa_id is not None and (
+        dados.responder_mensagem_id is None or dados.encaminhar_conversa_id == dados.conversa_id
+    ):
+        raise HTTPException(422, "encaminhamento_invalido")
+
     try:
         mensagem_id, situacao = reservar_mensagem_central(
             db,
             empresa_id=identidade["empresa_id"],
             usuario_id=identidade["usuario_id"],
             conversa_id=dados.conversa_id,
-            texto=dados.texto,
+            texto=dados.texto, responder_mensagem_id=dados.responder_mensagem_id,
+            encaminhar_conversa_id=dados.encaminhar_conversa_id,
             chave_solicitacao=dados.chave_solicitacao,
         )
 
@@ -650,7 +990,7 @@ def consultar_pendencias_central(
         db,
         empresa_id=identidade["empresa_id"],
         usuario_id=identidade["usuario_id"],
-        conversa_id=conversa_id,
+        conversa_id=conversa_id, permitir_assumir=True,
     )
 
     if destino is None:
@@ -793,6 +1133,11 @@ def executar_mensagem(
             )
 
         transportador = transportar_mensagem_waha
+        referencia = dados_envio["resposta_waha"]
+        if referencia and referencia.startswith("ENC:"):
+            transportador = partial(transportador, encaminhar=referencia.removeprefix("ENC:"))
+        elif referencia:
+            transportador = partial(transportador, reply_to=referencia)
         if dados_envio["midia_tipo"] or dados_envio["midia_url"]:
             if not midia_ativa():
                 raise HTTPException(status_code=503, detail="envio_midia_desativado")

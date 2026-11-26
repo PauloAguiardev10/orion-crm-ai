@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import re
 import time
 import threading
 import traceback
@@ -41,6 +42,9 @@ app.include_router(followup_vendedor_router)
 
 from app.routes.central_whatsapp_api import router as central_whatsapp_router
 app.include_router(central_whatsapp_router)
+
+from app.services.central_whatsapp_ui import montar_central_ui
+montar_central_ui(app)
 
 
 @app.get("/status/waha")
@@ -160,6 +164,7 @@ def normalizar_telefone_crm(telefone: str | None) -> str | None:
 
 class MensagemRequest(BaseModel):
     _conexao_waha_id: int | None = PrivateAttr(default=None)
+    _sessao_waha: str | None = PrivateAttr(default=None)
     empresa_id: int = Field(default=1, ge=1)
     nome: str | None = None
     telefone: str | None = None
@@ -339,47 +344,11 @@ def obter_lid_luciano() -> str | None:
     return valor
 
 
-def buscar_telefone_real_no_banco(
-    chat_id: str,
-    empresa_id: int | None,
-) -> str | None:
-    """
-    Procura um telefone real já associado ao mesmo LID
-    em conversas anteriores da empresa.
-    """
-    if not chat_id or not empresa_id:
+def telefone_confirmado_waha(valor):
+    if not isinstance(valor, str):
         return None
-
-    db: Session = SessionLocal()
-
-    try:
-        conversa_anterior = (
-            db.query(Conversa)
-            .filter(
-                Conversa.empresa_id == empresa_id,
-                Conversa.identificador == chat_id,
-                Conversa.telefone.isnot(None),
-                ~Conversa.telefone.like("%@lid"),
-                ~Conversa.telefone.like("%@c.us"),
-            )
-            .order_by(Conversa.id.desc())
-            .first()
-        )
-
-        if not conversa_anterior:
-            return None
-
-        telefone = str(
-            conversa_anterior.telefone or ""
-        ).strip()
-
-        if telefone and telefone.isdigit():
-            return telefone
-
-        return None
-
-    finally:
-        db.close()
+    numero = re.fullmatch(r"\+?([1-9][0-9]{7,14})(?:@c\.us|@s\.whatsapp\.net)?", valor.strip())
+    return numero[1] if numero else None
 
 
 def obter_telefone_real_waha(
@@ -427,8 +396,8 @@ def obter_telefone_real_waha(
         resposta.raise_for_status()
         dados_lid = resposta.json()
 
-        if isinstance(dados_lid, dict):
-            telefone_real = normalizar_telefone_crm(
+        if isinstance(dados_lid, dict) and dados_lid.get("lid", chat_id) == chat_id:
+            telefone_real = telefone_confirmado_waha(
                 dados_lid.get("pn")
                 or dados_lid.get("phoneNumber")
                 or dados_lid.get("phone")
@@ -457,33 +426,22 @@ def obter_telefone_real_waha(
                 contato.get("pn"),
                 contato.get("phoneNumber"),
                 contato.get("phone"),
-                contato.get("number"),
-                contato.get("id"),
+
             ]
 
             for candidato in candidatos:
                 if isinstance(candidato, dict):
                     candidato = (
                         candidato.get("_serialized")
-                        or candidato.get("user")
                     )
 
-                telefone_real = normalizar_telefone_crm(candidato)
+                telefone_real = telefone_confirmado_waha(candidato)
                 if telefone_real:
                     TELEFONES_LID_CACHE[chave_cache] = telefone_real
                     return telefone_real
     except (requests.RequestException, ValueError, TypeError) as erro:
         print("[WAHA CONTATO] falha na consulta individual:", repr(erro), flush=True)
 
-    telefone_banco = buscar_telefone_real_no_banco(chat_id, empresa_id)
-    if telefone_banco:
-        TELEFONES_LID_CACHE[chave_cache] = telefone_banco
-        return telefone_banco
-
-    print(
-        f"[WAHA LID] telefone não resolvido; mantendo identificador técnico {chat_id}",
-        flush=True,
-    )
     return None
 def buscar_conexao_canal_meta(
     db: Session,
@@ -559,6 +517,7 @@ def receber_mensagem(dados: MensagemRequest):
                 identificador=dados.identificador,
                 canal=dados.canal,
                 conexao_canal_id=dados._conexao_waha_id,
+                especialista_id=conexao.especialista_id if dados._conexao_waha_id is not None else None,
                 nome=dados.nome,
                 telefone=telefone_normalizado,
                 etapa="inicio",
@@ -632,12 +591,25 @@ def receber_mensagem(dados: MensagemRequest):
             from_me=False,
             mensagem_id_externo=dados.mensagem_id_externo,
             retornar_id=True,
+            conexao_canal_id=dados._conexao_waha_id, sessao_waha=dados._sessao_waha,
         )
 
         if resultado_persistencia == "erro":
             raise RuntimeError(
                 "Falha ao registrar mensagem recebida no CRM."
             )
+
+        if resultado_persistencia == "criada" and dados._sessao_waha:
+            from app.models.models import Mensagem
+
+            entrada = db.query(Mensagem).filter_by(
+                id=mensagem_interna_id, empresa_id=dados.empresa_id, conversa_id=conversa.id,
+            ).one()
+            if entrada.tipo == "excluida":
+                entrada.status_processamento = "concluida"
+                db.commit()
+                return {"status": "mensagem_duplicada", "estado_processamento": "concluida"}
+            dados.mensagem = entrada.texto or dados.mensagem
 
         if resultado_persistencia == "criada":
             from app.services.mensagem_service import (
@@ -1374,6 +1346,27 @@ def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_w
     return processar_webhook_waha(payload, autenticado)
 
 
+def contato_interno_luciano(empresa_id, sessao, chat_id, autenticado, conexao_id):
+    conexao_configurada = os.getenv("ORION_LUCIANO_CONEXAO_ID", "1")
+    if (
+        not conexao_configurada.isascii() or not conexao_configurada.isdecimal()
+        or str(empresa_id) != os.getenv("ORION_LUCIANO_EMPRESA_ID", "1")
+        or chat_id != obter_lid_luciano()
+    ):
+        return False
+    if autenticado is True:
+        if str(conexao_id) != conexao_configurada:
+            return False
+    elif not (empresa_id == 1 and sessao == "default" and conexao_configurada == "1"
+              and not os.getenv("WAHA_WEBHOOK_HMAC_KEY")):
+        return False
+    with SessionLocal() as db:
+        return db.query(ConexaoCanal.id).filter_by(
+            id=int(conexao_configurada), empresa_id=empresa_id, sessao_waha=sessao,
+            ativo=True, canal="whatsapp", provedor="waha", sofia_institucional=True,
+        ).one_or_none() is not None
+
+
 def processar_webhook_waha(payload: dict, autenticado: bool):
     evento = payload.get("event")
     if evento == "message.ack":
@@ -1385,6 +1378,21 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
             motivo = registrar_ack_waha(db_ack, payload)
         return {"status": "processado" if motivo in ("ack_registrado", "ack_pendente") else "ignorado",
                 "motivo": motivo}
+    if evento == "presence.update" and autenticado is True and os.getenv("ORION_WAHA_PRESENCA_ATIVA") == "1":
+        from app.services.central_whatsapp_eventos_mensagem import sincronizar_digitacao
+
+        with SessionLocal() as db_presenca, db_presenca.begin():
+            registrada = sincronizar_digitacao(db_presenca, payload)
+        return {"status": "processado" if registrada else "ignorado"}
+
+    if evento in ("message.edited", "message.revoked", "message.reaction") and autenticado is True:
+        from app.services.central_whatsapp_eventos_mensagem import sincronizar_evento_mensagem
+
+        with SessionLocal() as db_evento, db_evento.begin():
+            alterada = sincronizar_evento_mensagem(db_evento, payload)
+        if evento != "message.reaction":
+            return {"status": "processado" if alterada else "ignorado"}
+
     if evento not in ("message", "message.any", "message.reaction"):
         return {"status": "ignorado", "motivo": "evento_diferente_de_message"}
 
@@ -1413,6 +1421,18 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
         flush=True,
     )
 
+    grupo = mensagem.get("to" if mensagem.get("fromMe") is True else "from")
+    if isinstance(grupo, str) and grupo.endswith("@g.us"):
+        if autenticado is not True or evento not in ("message", "message.any"):
+            return {"status": "ignorado", "motivo": "grupo_nao_autorizado"}
+        from app.services.central_whatsapp_grupos import registrar_mensagem_grupo
+
+        sessao_grupo = obter_sessao_waha(payload, mensagem)
+        with SessionLocal() as db_grupo, db_grupo.begin():
+            motivo = registrar_mensagem_grupo(db_grupo, sessao_grupo, grupo, mensagem, mensagem_id)
+        return {"status": "processado" if motivo == "grupo_mensagem_registrada" else "ignorado",
+                "motivo": motivo}
+
     if evento == "message.reaction" and mensagem.get("fromMe") is not False:
         return {"status": "ignorado", "motivo": "evento_sem_resposta_do_cliente"}
 
@@ -1440,6 +1460,9 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
             if conexao is None:
                 return {"status": "ignorado", "motivo": motivo_conexao}
 
+            if conexao.operacao_suspensa:
+                return {"status": "ignorado", "motivo": "conexao_waha_suspensa"}
+
             automatica, motivo_origem = verificar_saida_automatica_registrada(
                 db_saida,
                 conexao.empresa_id,
@@ -1457,13 +1480,24 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
                 autenticado is True and evento == "message.any"
                 and mensagem.get("source") == "app"
                 and mensagem_id and len(mensagem_id) <= 180
-                and proteger_followup_de_saida_manual(
+                and not conexao.operacao_suspensa
+            ):
+                from app.services.central_whatsapp_saida_waha import registrar_saida_aplicativo
+
+                db_saida.refresh(conexao, with_for_update=True)
+                if not conexao.ativo or conexao.operacao_suspensa:
+                    return {"status": "ignorado", "motivo": "conexao_waha_suspensa"}
+                protegida = proteger_followup_de_saida_manual(
                     db_saida, conexao=conexao,
                     destinatario=dados_saida["destinatario"], mensagem_id=mensagem_id,
                 )
-            ):
+                motivo = registrar_saida_aplicativo(
+                    db_saida, conexao=conexao, destinatario=dados_saida["destinatario"],
+                    mensagem_id=mensagem_id, payload=mensagem,
+                )
                 db_saida.commit()
-                return {"status": "processado", "motivo": "followup_bloqueado_saida_manual"}
+                return {"status": "processado",
+                        "motivo": "followup_bloqueado_saida_manual" if protegida else motivo}
 
             return {
                 "status": "ignorado",
@@ -1479,7 +1513,11 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
 
     texto = mensagem.get("body") if evento != "message.reaction" else None
     chat_id = mensagem.get("from")
-    nome = dados_internos.get("notifyName")
+    nome = dados_internos.get("notifyName") or mensagem.get("pushName") or dados_internos.get("pushName")
+    nome = nome.strip()[:150] if isinstance(nome, str) and nome.strip() else None
+
+    if not isinstance(chat_id, str) or not chat_id.strip():
+        return {"status": "ignorado", "motivo": "sem_texto_ou_chat_id"}
 
     if chat_id == "status@broadcast":
         return {
@@ -1518,18 +1556,8 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
         if conexao_id is None:
             return {"status": "ignorado", "motivo": motivo}
 
-    if not isinstance(chat_id, str) or not chat_id.strip():
-        return {
-            "status": "ignorado",
-            "motivo": "sem_texto_ou_chat_id",
-        }
-
-    lid_luciano = obter_lid_luciano()
-
-    if (
-        lid_luciano
-        and chat_id == lid_luciano
-    ):
+    if contato_interno_luciano(empresa_id, sessao, chat_id, autenticado,
+                               conexao_id if autenticado is True else None):
         return {
             "status": "ignorado",
             "motivo": "contato_interno_luciano",
@@ -1693,6 +1721,7 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
     )
     if autenticado is True:
         dados._conexao_waha_id = conexao_id
+        dados._sessao_waha = sessao
 
     resultado = receber_mensagem(dados)
 

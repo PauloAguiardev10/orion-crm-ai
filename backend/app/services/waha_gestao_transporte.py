@@ -84,6 +84,11 @@ class TransporteGestaoWaha:
                    "PASSKEY_REQUIRED", "PASSKEY_CONFIRMATION_REQUIRED"}
         estado = dados.get("status")
         eu = dados.get("me")
+        if estado == "WORKING" and (not isinstance(eu, dict) or not eu.get("id")):
+            try:
+                eu = self._requisitar("GET", f"/api/sessions/{quote(sessao, safe='')}/me")
+            except ErroGestaoWaha:
+                eu = None
         conta = eu.get("id") if isinstance(eu, dict) else None
         numero = re.fullmatch(r"([0-9]{5,20})(?::[0-9]+)?@(?:c\.us|s\.whatsapp\.net)", conta or "") \
             if isinstance(conta, str) else None
@@ -93,18 +98,20 @@ class TransporteGestaoWaha:
     def criar(self, sessao):
         sessao = self._sessao_fisica(sessao)
         webhook = os.getenv("ORION_WAHA_WEBHOOK_URL", "").strip()
-        chave = self._destino().chave_hmac
+        rota = self._destino()
+        chave = rota.chave_hmac
         if self.sessao and self.sessao.startswith(PREFIXO):
             instancia = self.sessao[len(PREFIXO):].split(":", 1)[0]
-            webhook = f"{webhook.rstrip('/')}/{instancia}" if webhook else ""
+            webhook = rota.webhook or (f"{webhook.rstrip('/')}/{instancia}" if webhook else "")
         url = urlsplit(webhook)
-        if url.scheme not in ("http", "https") or not url.hostname or url.username or not chave:
+        if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or url.query or url.fragment or not chave:
             raise ErroGestaoWaha("webhook_waha_nao_configurado")
         self._requisitar("POST", "/api/sessions", corpo={
             "name": sessao, "start": False,
             "config": {"metadata": {"orionSessao": self.sessao or sessao}, "webhooks": [{
                 "url": webhook, "hmac": {"key": chave},
-                "events": ["message", "message.any", "message.reaction", "message.ack"],
+                "events": ["message", "message.any", "message.reaction", "message.ack", "message.edited", "message.revoked",
+                           *(["presence.update"] if os.getenv("ORION_WAHA_PRESENCA_ATIVA") == "1" else [])],
             }]},
         })
 
@@ -119,6 +126,10 @@ class TransporteGestaoWaha:
     def desconectar(self, sessao):
         sessao = self._sessao_fisica(sessao)
         self._requisitar("POST", f"/api/sessions/{quote(sessao, safe='')}/stop")
+
+    def esquecer_pareamento(self, sessao):
+        sessao = self._sessao_fisica(sessao)
+        self._requisitar("POST", f"/api/sessions/{quote(sessao, safe='')}/logout")
 
     def qr(self, sessao):
         sessao = self._sessao_fisica(sessao)

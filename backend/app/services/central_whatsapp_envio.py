@@ -2,7 +2,7 @@
 
 from app.models.models import Conversa, ConexaoCanal
 from app.services.central_whatsapp_atendimento import ATENDIMENTO_ENCERRADO, atendentes_autorizados
-from app.services.followup_destinatario_service import chat_id_whatsapp_valido
+from app.services.central_whatsapp_grupos import destinatario_central_valido
 
 
 def preparar_destino_central(
@@ -11,6 +11,7 @@ def preparar_destino_central(
     empresa_id: int,
     usuario_id: int,
     conversa_id: int,
+    permitir_assumir: bool = False,
 ) -> tuple[dict | None, str]:
     """Valida o responsavel e o destino WhatsApp da Central."""
 
@@ -28,14 +29,16 @@ def preparar_destino_central(
             Conversa.id == conversa_id,
             Conversa.empresa_id == empresa_id,
             Conversa.canal == "whatsapp",
-            Conversa.especialista_id == especialista.id,
-            Conversa.humano_assumiu.is_(True),
+            (Conversa.especialista_id == especialista.id) | (
+                Conversa.especialista_id.is_(None) & Conversa.humano_assumiu.is_not(True)
+                if permitir_assumir else False
+            ),
             Conversa.status_atendimento.is_distinct_from(ATENDIMENTO_ENCERRADO),
         )
         .first()
     )
 
-    if conversa is None:
+    if conversa is None or (not permitir_assumir and conversa.humano_assumiu is not True):
         return None, "conversa_nao_autorizada"
 
     conexao = (
@@ -53,6 +56,9 @@ def preparar_destino_central(
     if conexao is None or not conexao.sessao_waha:
         return None, "conexao_waha_indisponivel"
 
+    if conexao.sofia_institucional:
+        return None, "conexao_institucional_exclusiva"
+
     if conexao.operacao_suspensa:
         return None, "conexao_waha_suspensa"
 
@@ -64,10 +70,11 @@ def preparar_destino_central(
 
     destinatario = (conversa.identificador or "").strip()
 
-    if not chat_id_whatsapp_valido(destinatario):
+    if not destinatario_central_valido(conexao.sessao_waha, destinatario):
         return None, "destinatario_invalido"
 
     return {
+        "assumir": conversa.humano_assumiu is not True,
         "empresa_id": empresa_id,
         "conversa_id": conversa.id,
         "cliente_id": conversa.cliente_id,

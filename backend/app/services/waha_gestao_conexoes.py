@@ -24,6 +24,13 @@ def _limite_configurado(db, plano, recurso):
     }).scalar_one()
 
 
+def contar_conexoes_comerciais(db, empresa_id):
+    return db.execute(text("""
+        SELECT count(*) FROM conexoes_canais
+        WHERE empresa_id = :empresa AND lower(btrim(canal)) = 'whatsapp' AND NOT sofia_institucional
+    """), {"empresa": empresa_id}).scalar_one()
+
+
 def capacidade_usuarios(db, empresa_id, plano):
     contabilizados = db.execute(text("""
         SELECT COUNT(*) FROM usuarios WHERE empresa_id = :empresa
@@ -70,10 +77,7 @@ def cadastrar_conexao(db, identidade, dados):
     if limite is None:
         raise ErroGestaoWaha("limite_plano_nao_configurado", 409)
     _validar_titular(db, identidade, dados["especialista_id"])
-    utilizadas = db.execute(text("""
-        SELECT count(*) FROM conexoes_canais
-        WHERE empresa_id = :empresa AND lower(btrim(canal)) = 'whatsapp'
-    """), {"empresa": empresa_id}).scalar_one()
+    utilizadas = contar_conexoes_comerciais(db, empresa_id)
     if utilizadas >= limite:
         raise ErroGestaoWaha("limite_plano_atingido", 409)
 
@@ -114,7 +118,7 @@ def cadastrar_conexao(db, identidade, dados):
 
 def exigir_gerenciada(conexao):
     if (
-        not conexao.ativo or not conexao.gerenciada_crm or not conexao.sessao_waha
+        conexao.sofia_institucional or not conexao.ativo or not conexao.gerenciada_crm or not conexao.sessao_waha
         or not conexao.sessao_waha.startswith(PREFIXO)
     ):
         raise ErroGestaoWaha("conexao_legada_protegida", 409)

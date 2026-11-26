@@ -21,6 +21,7 @@ class DestinoWaha:
     sessao: str
     chave_api: str = field(repr=False)
     chave_hmac: str = field(default="", repr=False)
+    webhook: str = field(default="", repr=False)
 
     @property
     def headers(self):
@@ -78,6 +79,9 @@ def resolver_waha(sessao, *, saude_legada=False):
                 or _origem(configuracao["origem"]) == origem
             ):
                 raise ValueError
-        return DestinoWaha(origem, fisica, chave, hmac)
+        webhook = dados.get("webhook_url", "")
+        if not isinstance(webhook, str):
+            raise ValueError
+        return DestinoWaha(origem, fisica, chave, hmac, webhook.strip())
     except (KeyError, TypeError, ValueError):
         raise ConfiguracaoWahaInvalida("instancia_waha_indisponivel") from None

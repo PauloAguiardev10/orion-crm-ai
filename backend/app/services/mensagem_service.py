@@ -15,6 +15,8 @@ def registrar_mensagem(
     from_me: bool,
     cliente_id: int | None = None,
     mensagem_id_externo: str | None = None,
+    conexao_canal_id: int | None = None,
+    sessao_waha: str | None = None,
 ) -> tuple[Mensagem | None, bool]:
     """Registra uma mensagem sem efetuar commit da transacao."""
 
@@ -32,6 +34,9 @@ def registrar_mensagem(
         raise ValueError(
             "Conversa nao encontrada para a empresa informada."
         )
+
+    if conexao_canal_id is not None and conversa.conexao_canal_id != conexao_canal_id:
+        raise ValueError("Conexao nao corresponde ao vinculo da conversa.")
 
     if cliente_id is not None:
         if conversa.cliente_id != cliente_id:
@@ -62,12 +67,18 @@ def registrar_mensagem(
         from_me=from_me,
         mensagem_id_externo=mensagem_id_externo,
         status_processamento="recebida",
+        conexao_canal_id=conexao_canal_id, sessao_waha=sessao_waha,
     )
 
     db.add(registro)
     if conversa.canal == "whatsapp":
         conversa.atualizado_em = func.now()
     db.flush()
+
+    if conexao_canal_id is not None and sessao_waha and mensagem_id_externo:
+        from app.services.central_whatsapp_eventos_mensagem import aplicar_eventos_pendentes
+
+        aplicar_eventos_pendentes(db, registro, mensagem_id_externo)
 
     if from_me is False and remetente == "cliente":
         from app.services.followup_processamento_service import (
@@ -89,6 +100,8 @@ def persistir_mensagem_segura(
     cliente_id: int | None = None,
     mensagem_id_externo: str | None = None,
     retornar_id: bool = False,
+    conexao_canal_id: int | None = None,
+    sessao_waha: str | None = None,
 ) -> str | tuple[str, int | None]:
     """Retorna o resultado e, opcionalmente, o ID interno."""
 
@@ -107,6 +120,7 @@ def persistir_mensagem_segura(
             from_me=from_me,
             cliente_id=cliente_id,
             mensagem_id_externo=mensagem_id_externo,
+            conexao_canal_id=conexao_canal_id, sessao_waha=sessao_waha,
         )
 
         db.commit()
@@ -334,6 +348,10 @@ def registrar_resultado_envio(
             from app.services.central_whatsapp_ack import aplicar_ack_pendente
 
             aplicar_ack_pendente(db, empresa_id, sessao_waha, mensagem_id_waha)
+            from app.services.central_whatsapp_eventos_mensagem import aplicar_eventos_pendentes
+
+            registro = db.query(Mensagem).filter_by(id=mensagem_id, empresa_id=empresa_id).populate_existing().one()
+            aplicar_eventos_pendentes(db, registro, mensagem_id_waha)
 
     return atualizados == 1
 

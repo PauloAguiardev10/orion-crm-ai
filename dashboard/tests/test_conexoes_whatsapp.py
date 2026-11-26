@@ -11,7 +11,7 @@ class GestaoConexoesWhatsAppPainelTest(unittest.TestCase):
         png = b"\x89PNG\r\n\x1a\n"
         conexao = {
             "id": 7, "nome": "Sessão simulada", "sofia_ativa": True,
-            "gerenciada": True, "suspensa": False, "especialista_id": None,
+            "gerenciada": True, "suspensa": True, "pareamento_pendente": True, "especialista_id": None,
         }
         estado = {"estado": "SCAN_QR_CODE", "numero": None}
 

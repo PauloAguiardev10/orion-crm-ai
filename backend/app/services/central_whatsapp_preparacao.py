@@ -55,6 +55,7 @@ def preparar_envio_central(
         **destino,
         "mensagem_id": mensagem.id,
         "texto": texto,
+        "resposta_waha": mensagem.central_resposta_waha,
         "midia_tipo": mensagem.midia_tipo,
         "midia_url": mensagem.midia_url,
     }, "envio_preparado"

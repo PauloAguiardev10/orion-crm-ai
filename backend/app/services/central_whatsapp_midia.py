@@ -15,6 +15,7 @@ LIMITE_MIDIA = 8 * 1024 * 1024
 FORMATOS = {
     "image/jpeg": ("imagem", "sendImage", (".jpg", ".jpeg")),
     "image/png": ("imagem", "sendImage", (".png",)),
+    "image/webp": ("figurinha", "sendSticker", (".webp",)),
     "audio/ogg": ("audio", "sendVoice", (".ogg", ".opus")),
     "video/mp4": ("video", "sendVideo", (".mp4",)),
     "application/pdf": ("documento", "sendFile", (".pdf",)),
@@ -45,6 +46,8 @@ def validar_midia(nome, mime, dados):
     assinatura = {
         "image/jpeg": dados.startswith(b"\xff\xd8\xff"),
         "image/png": dados.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": dados.startswith(b"RIFF") and dados[8:12] == b"WEBP"
+                     and dados[12:16] in (b"VP8 ", b"VP8L", b"VP8X"),
         "audio/ogg": dados.startswith(b"OggS") and dados[28:36] == b"OpusHead",
         "video/mp4": dados[4:8] == b"ftyp",
         "application/pdf": dados.startswith(b"%PDF-"),
@@ -141,7 +144,7 @@ def enviar_midia_waha(sessao, chat_id, legenda, *, nome, mime, dados):
             "filename": nome, "data": base64.b64encode(dados).decode("ascii"),
         },
     }
-    if legenda and tipo != "audio":
+    if legenda and tipo not in ("audio", "figurinha"):
         corpo["caption"] = legenda
     try:
         resposta = requests.post(

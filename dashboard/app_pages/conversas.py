@@ -14,10 +14,13 @@ from app_pages.central_whatsapp_layout import (
 )
 from uuid import uuid4
 from contextlib import nullcontext
+import os
+from pathlib import Path
 import requests
 from base64 import b64encode
 from html import escape
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit.components.v1 import html as render_html
 
 
@@ -153,7 +156,61 @@ def rotulo_envio(mensagem):
     return ROTULOS_ENVIO.get(estado)
 
 
-@st.fragment(run_every=5)
+def render_importacao_noweb(conversa, *, token, empresa_id):
+    conexao_id = conversa.get("conexao_canal_id")
+    if not conexao_id:
+        return
+    with st.expander("Sincronizar hist?rico NOWEB"):
+        st.caption("Importa texto e dados dispon?veis deste contato. Use somente em conversas autorizadas.")
+        confirmar = st.checkbox("Confirmo a importação desta conversa", key=f"confirmar_noweb_{conversa['id']}")
+        if not st.button("Importar hist?rico", disabled=not confirmar, key=f"importar_noweb_{conversa['id']}"):
+            return
+        origem = os.getenv("ORION_API_INTERNA_URL", "http://127.0.0.1:8000").rstrip("/")
+        try:
+            resultado = requests.post(
+                f"{origem}/api/central-whatsapp/conexoes/{conexao_id}/historico/{conversa['id']}",
+                params={"empresa_id": empresa_id}, headers={"Authorization": f"Bearer {token}"},
+                json={"confirmar": True}, timeout=35, allow_redirects=False,
+            )
+            if resultado.status_code == 200:
+                st.success(f"Mensagens importadas: {resultado.json()['importadas']}.")
+                return
+        except (requests.RequestException, ValueError):
+            pass
+        st.warning("Histórico NOWEB indisponível para esta conversa.")
+
+
+def render_inicio_conversa(*, token, empresa_id, selecao, sufixo):
+    if not st.toggle("Nova conversa", key=f"nova_conversa_{sufixo}"):
+        return
+    endpoint = os.getenv("ORION_API_INTERNA_URL", "http://127.0.0.1:8000").rstrip("/")
+    endpoint += "/api/central-whatsapp/conversas/iniciar"
+    credenciais = {"headers": {"Authorization": f"Bearer {token}"},
+                    "params": {"empresa_id": empresa_id}, "timeout": 8, "allow_redirects": False}
+    try:
+        resposta = requests.get(endpoint, **credenciais)
+        if resposta.status_code != 200:
+            st.warning("Conexões indispon?veis.")
+            return
+        conexoes = {item["id"]: item["nome"] for item in resposta.json()}
+        if not conexoes:
+            st.info("Nenhuma conexão disponível para iniciar conversa.")
+            return
+        with st.form(f"form_nova_conversa_{sufixo}"):
+            conexao = st.selectbox("Conexão para envio", conexoes, format_func=conexoes.get)
+            telefone = st.text_input("Telefone com c?digo do pa?s", max_chars=16)
+            iniciar = st.form_submit_button("Abrir atendimento")
+        if iniciar:
+            resposta = requests.post(endpoint, json={"conexao_id": conexao, "telefone": telefone.strip()},
+                                     **credenciais)
+            if resposta.status_code == 201:
+                st.session_state[selecao] = resposta.json()["id"]
+                st.rerun()
+            st.warning("Não foi possível abrir a conversa. Confira o telefone e a conexão escolhida.")
+    except (requests.RequestException, ValueError):
+        st.warning("Serviço de novas conversas indisponível.")
+
+
 def render_central_whatsapp():
     usuario_id = st.session_state.get("usuario_id")
     token = st.session_state.get("token_central")
@@ -185,6 +242,7 @@ def render_central_whatsapp():
 
     with st.container(key="orion_whatsapp"):
         st.markdown(ESTILO_CENTRAL, unsafe_allow_html=True)
+        st.image(str(Path(__file__).resolve().parents[1] / "assets" / "logo_orion.png"), width=132)
         st.markdown(
             '<div class="orion-wa-hero"><div class="orion-wa-heading">Central WhatsApp</div>'
             '<div class="orion-wa-muted">Conversas e atendimento comercial</div></div>',
@@ -223,6 +281,7 @@ def render_central_whatsapp():
                 vistas[item["id"]] = max(vistas.get(item["id"], 0), lida)
         with paineis[0], st.container(key="orion_wa_lista_painel"):
             st.markdown("**Conversas**")
+            render_inicio_conversa(token=token, empresa_id=empresa_id, selecao=chave_selecao, sufixo=sufixo)
             try:
                 opcoes = listar_filtros_whatsapp(token=token, empresa_id=empresa_id, cache=estado_local["filtros"])
             except (ValueError, requests.RequestException, SessaoCentralExpirada):
@@ -241,6 +300,20 @@ def render_central_whatsapp():
                 st.session_state[chave_selecao] = None
                 st.rerun()
             cartao_contato(conversa)
+            if st.toggle("Mostrar foto do contato", key=f"foto_contato_{sufixo}_{selecionada}"):
+                origem = os.getenv("ORION_API_INTERNA_URL", "http://127.0.0.1:8000").rstrip("/")
+                try:
+                    foto = requests.get(
+                        f"{origem}/api/central-whatsapp/conversas/{selecionada}/foto",
+                        params={"empresa_id": empresa_id}, headers={"Authorization": f"Bearer {token}"},
+                        timeout=12, allow_redirects=False,
+                    )
+                    if foto.status_code == 200:
+                        st.image(foto.content, width=48)
+                    else:
+                        st.caption("Foto indisponível.")
+                except requests.RequestException:
+                    st.caption("Foto indisponível.")
             estado = conversa.get("status_atendimento")
             if estado:
                 st.caption(STATUS_ATENDIMENTO.get(estado, estado))
@@ -291,11 +364,14 @@ def render_central_whatsapp():
                         historico = [item for item in pagina if item["id"] not in por_mensagem] + historico
                     except (ValueError, requests.RequestException, SessaoCentralExpirada):
                         st.warning("Não foi possível carregar mensagens anteriores.")
+            termo = st.text_input("Pesquisar nas mensagens carregadas",
+                                  key=f"orion_wa_pesquisa_historico_{sufixo}_{selecionada}").strip().casefold()
+            visiveis = [m for m in historico if not termo or termo in (m.get("texto") or "").casefold()]
             with st.container(height=495, key=f"orion_wa_historico_{selecionada}", autoscroll=False):
-                if not historico:
-                    st.info("Nenhuma mensagem registrada.")
+                if not visiveis:
+                    st.info("Nenhuma mensagem encontrada." if termo else "Nenhuma mensagem registrada.")
                 dia_anterior = None
-                for mensagem in historico:
+                for mensagem in visiveis:
                     data = horario(mensagem.get("criado_em"))
                     dia = data.date() if data else None
                     if dia and dia != dia_anterior:
@@ -331,6 +407,8 @@ def render_central_whatsapp():
                     detalhes = {}
                     st.caption("Dados comerciais temporariamente indisponíveis.")
                 render_ficha(conversa, detalhes)
+                if st.session_state.get("nivel") in ("orion_admin", "parceiro_admin", "admin_empresa"):
+                    render_importacao_noweb(conversa, token=token, empresa_id=empresa_id)
                 render_acoes_atendimento(
                     conversa, usuario_id=int(usuario_id), token=token, empresa_id=empresa_id,
                 )
@@ -404,12 +482,11 @@ def render_lista_conversas(conversas, opcoes, estado, vistas, selecionada, chave
 
 def render_compositor(conversa, mensagens, *, usuario_id, empresa_id):
     pode_responder = (
-        conversa.get('especialista_id') is not None
-        and conversa.get("humano_assumiu") is True
+        conversa.get("pode_assumir") is True
+        and not conversa.get("sofia_institucional")
+        and not conversa.get("operacao_suspensa")
         and conversa.get("status_atendimento") != "finalizado"
         and empresa_id in (None, st.session_state.get("empresa_login_id"))
-        and conversa.get("especialista_usuario_id") is not None
-        and int(conversa["especialista_usuario_id"]) == int(usuario_id)
     )
 
     if pode_responder:
@@ -635,7 +712,15 @@ def render_conversas(leads):
     )
     if central.open:
         with central:
-            render_central_whatsapp()
+            pausar = st.toggle("Pausar atualiza??es autom?ticas", key="central_pausar_atualizacoes")
+            url_central = os.getenv("ORION_CENTRAL_UI_URL", "").strip()
+            token = st.session_state.get("token_central")
+            if url_central and token and not pausar and not st.toggle("Usar Central classica"):
+                central = components.declare_component("orion_central_whatsapp", url=url_central)
+                central(token=token, empresa=st.session_state.get("empresa_ativa_id"),
+                        usuario=st.session_state.get("usuario_id"), key="orion_central_react")
+            else:
+                st.fragment(run_every=None if pausar else 10)(render_central_whatsapp)()
     if comercial.open:
         with comercial:
             render_historico_comercial(leads)

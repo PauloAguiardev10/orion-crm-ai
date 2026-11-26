@@ -271,6 +271,248 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         self.db.refresh(agendamento)
         self.assertEqual(agendamento.status, "cancelado")
 
+    def test_reserva_manual_assume_sem_alterar_ao_consultar(self):
+        conversa = self.db.get(Conversa, self.atribuida)
+        conversa.humano_assumiu = False
+        self.db.commit()
+        headers = {"Authorization": "Bearer " + gerar_token_api(
+            usuario_id=self.vendedor, empresa_id=self.empresa,
+        )}
+        base = "/api/central-whatsapp"
+        corpo = {"conversa_id": conversa.id, "texto": "Teste", "chave_solicitacao": "primeira-manual"}
+        with patch.dict(os.environ, {"ORION_CENTRAL_WHATSAPP_ENVIO_ATIVO": "1"}):
+            resultado = self.client.get(f"{base}/pendencias", headers=headers,
+                                        params={"conversa_id": conversa.id})
+            self.assertEqual(resultado.status_code, 200, resultado.text)
+            self.db.refresh(conversa)
+            self.assertFalse(conversa.humano_assumiu)
+            resposta = self.client.post(f"{base}/reservar-mensagem", headers=headers, json=corpo)
+            self.assertEqual(resposta.status_code, 200, resposta.text)
+            self.db.refresh(conversa)
+            self.assertTrue(conversa.humano_assumiu)
+            self.assertEqual(conversa.status_atendimento, "em_atendimento_humano")
+
+    def test_inicio_no_crm_valida_conexao_e_reutiliza_identificador_confirmado(self):
+        base = "/api/central-whatsapp/conversas/iniciar"
+        headers = {"Authorization": "Bearer " + gerar_token_api(
+            usuario_id=self.vendedor, empresa_id=self.empresa,
+        )}
+        corpo = {"conexao_id": self.privada, "telefone": "+5511999900111"}
+        with patch("app.routes.central_whatsapp_api.identificar_telefone_waha",
+                   return_value="123456789@lid") as identificar:
+            primeira = self.client.post(base, headers=headers, json=corpo)
+            self.assertEqual(primeira.status_code, 201, primeira.text)
+            self.assertEqual(self.client.post(base, headers=headers, json=corpo).json(), primeira.json())
+            conversa = self.db.get(Conversa, primeira.json()["id"])
+            self.assertEqual(conversa.identificador, "123456789@lid")
+            self.assertTrue(conversa.humano_assumiu)
+            self.assertEqual(conversa.especialista_id, self.especialista(self.vendedor))
+            self.assertEqual(self.client.post(
+                base, headers=headers, params={"empresa_id": self.outra_empresa}, json=corpo,
+            ).status_code, 403)
+            self.assertEqual(identificar.call_count, 2)
+
+    def test_mensagem_do_celular_abre_conversa_sem_duplicar_e_isola_conexoes(self):
+        from app.services.central_whatsapp_saida_waha import registrar_saida_aplicativo
+
+        parametros = {"destinatario": "123456789@lid", "mensagem_id": "evento-celular",
+                      "payload": {"body": "Mensagem ficticia"}}
+        privada = self.db.get(ConexaoCanal, self.privada)
+        compartilhada = self.db.get(ConexaoCanal, self.compartilhada)
+        for conexao in (privada, compartilhada):
+            self.assertEqual(registrar_saida_aplicativo(self.db, conexao=conexao, **parametros),
+                             "saida_aplicativo_registrada")
+            self.assertEqual(registrar_saida_aplicativo(self.db, conexao=conexao, **parametros),
+                             "mensagem_duplicada")
+        registros = self.db.query(Mensagem).filter_by(
+            empresa_id=self.empresa, mensagem_id_externo=parametros["mensagem_id"],
+        ).all()
+        self.assertCountEqual([item.conexao_canal_id for item in registros],
+                              [self.privada, self.compartilhada])
+
+    def test_institucional_nao_consome_vaga_e_nao_pode_iniciar_conversa(self):
+        self.provisionar_vagas(1)
+        headers = {"Authorization": "Bearer " + gerar_token_api(
+            usuario_id=self.admin, empresa_id=self.empresa,
+        )}
+        institucional = self.db.get(ConexaoCanal, self.privada)
+        institucional.sofia_institucional = True
+        self.db.commit()
+        base = "/api/central-whatsapp"
+        self.assertEqual(self.client.post(
+            f"{base}/conexoes/{institucional.id}/conectar", headers=headers,
+        ).status_code, 409)
+        self.assertEqual(self.client.post(f"{base}/conexoes", headers=headers, json={
+            "nome_conexao": "Comercial",
+        }).status_code, 201)
+        self.assertEqual(institucional.especialista_id, self.especialista(self.vendedor))
+        self.assertEqual(self.client.get(f"{base}/conexoes", headers=headers).json()[
+            "conexoes_contabilizadas"
+        ], 3)
+        self.assertNotIn(institucional.id, [
+            item["id"] for item in self.client.get(f"{base}/conversas/iniciar", headers=headers).json()
+        ])
+
+    def test_numero_confirmado_so_pode_pertencer_a_uma_conexao(self):
+        from app.services.waha_numero_verificado import confirmar_numero_waha
+
+        externa = self.db.get(Conversa, self.fora).conexao_canal_id
+        self.db.execute(text("""
+            INSERT INTO waha_numeros_verificados (numero_e164, conexao_id)
+            SELECT '+1555' || lpad(id::text, 9, '0'), id
+            FROM conexoes_canais
+            WHERE ativo AND canal = 'whatsapp' AND provedor = 'waha'
+              AND NOT gerenciada_crm AND id NOT IN (:a, :b)
+            ON CONFLICT DO NOTHING
+        """), {"a": self.privada, "b": externa})
+        primeira = self.db.get(ConexaoCanal, self.privada)
+        segunda = self.db.get(ConexaoCanal, externa)
+        for conexao in (primeira, segunda):
+            conexao.gerenciada_crm = True
+            conexao.operacao_suspensa = True
+            conexao.pareamento_waha_pendente = True
+        self.db.flush()
+        estado = {"estado": "WORKING", "numero": "5511999900119"}
+        confirmar_numero_waha(self.db, primeira, estado)
+        self.assertFalse(primeira.operacao_suspensa)
+        with self.assertRaisesRegex(ErroGestaoWaha, "numero_waha_indisponivel"):
+            confirmar_numero_waha(self.db, segunda, estado)
+        self.assertTrue(segunda.operacao_suspensa)
+        with self.assertRaisesRegex(ErroGestaoWaha, "numero_waha_indisponivel"):
+            confirmar_numero_waha(self.db, primeira, {**estado, "numero": "5511999900120"})
+
+    def test_grupo_isolado_por_sessao_e_sem_followup(self):
+        import json
+        from app.services.central_whatsapp_grupos import registrar_mensagem_grupo
+
+        sessao = self.db.get(ConexaoCanal, self.privada).sessao_waha
+        outra = self.db.get(ConexaoCanal, self.compartilhada).sessao_waha
+        chat = "123456789@g.us"
+        mensagem = {"body": "Mensagem de grupo", "participant": "5511999999999@c.us", "fromMe": False}
+        with patch.dict(os.environ, {"ORION_WAHA_GRUPOS_AUTORIZADOS": json.dumps({sessao: {chat: "Grupo piloto"}})}):
+            self.assertEqual(registrar_mensagem_grupo(self.db, outra, chat, mensagem, "teste-grupo"),
+                             "grupo_evento_indisponivel")
+            self.assertEqual(registrar_mensagem_grupo(self.db, sessao, chat, mensagem, "teste-grupo"),
+                             "grupo_mensagem_registrada")
+            self.assertEqual(registrar_mensagem_grupo(self.db, sessao, chat, mensagem, "teste-grupo"),
+                             "mensagem_duplicada")
+        self.db.flush()
+        conversa = self.db.query(Conversa).filter_by(identificador=chat, conexao_canal_id=self.privada).one()
+        registro = self.db.query(Mensagem).filter_by(conversa_id=conversa.id).one()
+        self.assertEqual(registro.central_eventos["participante"], mensagem["participant"])
+        self.assertIsNone(self.db.query(FollowupAgendamento.id).filter_by(conversa_id=conversa.id).first())
+
+    def test_edicao_e_reacao_antecipadas_sao_aplicadas_na_insercao(self):
+        from app.services.central_whatsapp_eventos_mensagem import sincronizar_evento_mensagem
+        from app.services.mensagem_service import registrar_mensagem
+
+        conversa = self.db.get(Conversa, self.direta)
+        sessao = self.db.get(ConexaoCanal, self.privada).sessao_waha
+        chat = conversa.identificador
+        alvo = f"false_{chat}_ORIGINAL"
+        edicao = {"event":"message.edited", "session":sessao, "timestamp":20,
+                  "payload":{"id":f"false_{chat}_EDICAO","editedMessageId":"ORIGINAL","body":"Revisada"}}
+        reacao = {"event":"message.reaction", "session":sessao, "timestamp":21,
+                  "payload":{"id":f"true_{chat}_REACAO","reaction":{"messageId":alvo,"text":"OK"}}}
+        self.assertTrue(sincronizar_evento_mensagem(self.db, edicao))
+        self.assertTrue(sincronizar_evento_mensagem(self.db, reacao))
+        mensagem, criada = registrar_mensagem(
+            self.db, empresa_id=self.empresa, conversa_id=conversa.id, remetente="cliente",
+            texto="Original", from_me=False, mensagem_id_externo=alvo,
+            conexao_canal_id=self.privada, sessao_waha=sessao,
+        )
+        self.assertTrue(criada)
+        self.assertEqual(mensagem.texto, "Revisada")
+        self.assertEqual(mensagem.central_eventos["reacao_conta"]["texto"], "OK")
+        self.assertEqual(self.db.execute(text(
+            "SELECT count(*) FROM central_eventos_mensagem_pendentes WHERE conexao_id = :id"
+        ), {"id":self.privada}).scalar_one(), 0)
+
+    def test_revogacao_antecipada_impede_edicao_posterior(self):
+        from app.services.central_whatsapp_eventos_mensagem import sincronizar_evento_mensagem
+        from app.services.mensagem_service import registrar_mensagem
+
+        conversa = self.db.get(Conversa, self.direta)
+        sessao = self.db.get(ConexaoCanal, self.privada).sessao_waha
+        chat = conversa.identificador
+        for tipo, campo, instante in (("message.revoked", "revokedMessageId", 10),
+                                      ("message.edited", "editedMessageId", 12)):
+            self.assertTrue(sincronizar_evento_mensagem(self.db, {
+                "event": tipo, "session": sessao, "timestamp": instante,
+                "payload": {"id": f"false_{chat}_ACAO", campo: "REVOGADA", "body": "Atrasada"},
+            }))
+        mensagem, _ = registrar_mensagem(
+            self.db, empresa_id=self.empresa, conversa_id=conversa.id, remetente="cliente",
+            texto="Original", from_me=False, mensagem_id_externo=f"false_{chat}_REVOGADA",
+            conexao_canal_id=self.privada, sessao_waha=sessao,
+        )
+        self.assertEqual(mensagem.tipo, "excluida")
+        self.assertNotEqual(mensagem.texto, "Atrasada")
+
+    def test_bloqueio_luciano_preserva_webhook_legado_e_escopo(self):
+        with patch.dict(os.environ, {
+            "DATABASE_URL": "sqlite://", "PYTHON_DOTENV_DISABLED": "1",
+            "OPENAI_API_KEY": "chave-ficticia", "LUCIANO_WHATSAPP_LID": "123456789@lid",
+            "ORION_LUCIANO_EMPRESA_ID": "1", "ORION_LUCIANO_CONEXAO_ID": "1",
+            "WAHA_WEBHOOK_HMAC_KEY": "",
+        }):
+            import main
+
+            with patch.object(main, "SessionLocal") as fabrica:
+                consulta = fabrica.return_value.__enter__.return_value.query.return_value
+                consulta.filter_by.return_value.one_or_none.return_value = (1,)
+                self.assertTrue(main.contato_interno_luciano(1, "default", "123456789@lid", False, None))
+                consulta.filter_by.assert_called_once_with(
+                    id=1, empresa_id=1, sessao_waha="default", ativo=True,
+                    canal="whatsapp", provedor="waha", sofia_institucional=True,
+                )
+                fabrica.reset_mock()
+                self.assertFalse(main.contato_interno_luciano(2, "default", "123456789@lid", False, None))
+                self.assertFalse(main.contato_interno_luciano(1, "outra", "123456789@lid", False, None))
+                self.assertFalse(main.contato_interno_luciano(1, "default", "123456789@lid", True, 2))
+                with patch.dict(os.environ, {"WAHA_WEBHOOK_HMAC_KEY": "teste-hmac"}):
+                    self.assertFalse(main.contato_interno_luciano(1, "default", "123456789@lid", False, None))
+                fabrica.assert_not_called()
+
+    def test_historico_noweb_exige_confirmacao_e_nao_importa_outro_chat(self):
+        from unittest.mock import Mock
+
+        conversa = self.db.get(Conversa, self.direta)
+        conversa.identificador = "5511999900111@c.us"
+        self.db.commit()
+        sessao = self.db.get(ConexaoCanal, self.privada).sessao_waha
+        historico = {
+            "id": "noweb-historico", "body": "Texto anterior", "timestamp": 1760000000,
+            "fromMe": False, "from": conversa.identificador,
+        }
+        respostas = [
+            {"name": sessao, "status": "WORKING", "engine": {"engine": "NOWEB"},
+             "config": {"noweb": {"store": {"enabled": True}}}},
+            [historico, {**historico, "id": "nao-importar", "from": "5511999900222@c.us"}],
+            {"name": "Contato ficticio"},
+        ]
+        headers = {"Authorization": "Bearer " + gerar_token_api(
+            usuario_id=self.admin, empresa_id=self.empresa,
+        )}
+        url = f"/api/central-whatsapp/conexoes/{self.privada}/historico/{self.direta}"
+        with patch.dict(os.environ, {
+            "WAHA_API_KEY": "chave-ficticia", "ORION_WAHA_HISTORICO_ATIVO": "1",
+        }), patch("app.services.central_whatsapp_historico_noweb.requests.Session") as classe:
+            http = classe.return_value.__enter__.return_value
+            http.get.side_effect = [Mock(status_code=200, json=Mock(return_value=item))
+                                    for item in respostas * 2]
+            negado = self.client.post(url, headers=headers, json={"confirmar": False})
+            self.assertEqual(negado.status_code, 403)
+            http.get.assert_not_called()
+            self.assertEqual(self.client.post(url, headers=headers, json={"confirmar": True}).json(),
+                             {"importadas": 1})
+            self.assertEqual(self.client.post(url, headers=headers, json={"confirmar": True}).json(),
+                             {"importadas": 0})
+        registros = self.db.query(Mensagem).filter_by(conversa_id=self.direta).all()
+        self.assertEqual([(m.mensagem_id_externo, m.remetente) for m in registros],
+                         [("noweb-historico", "historico")])
+        self.assertEqual(self.db.query(FollowupAgendamento).filter_by(conversa_id=self.direta).count(), 0)
+
     def test_gestao_conexoes_respeita_plano_hierarquia_e_vinculo(self):
         self.provisionar_vagas(3)
         base = "/api/central-whatsapp/conexoes"
@@ -325,6 +567,13 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             self.assertEqual(self.client.post(caminho + "/desconectar", headers=headers, json={"confirmar": True}).status_code, 200)
             transporte.desconectar.assert_called_once()
             self.assertEqual(self.client.get(caminho + "/qr", headers=headers).status_code, 409)
+            transporte.consultar.return_value = {"estado": "STOPPED", "numero": None}
+            self.assertEqual(self.client.post(caminho + "/reautenticar", headers=headers,
+                                              json={"confirmar": False}).status_code, 422)
+            transporte.esquecer_pareamento.assert_not_called()
+            self.assertEqual(self.client.post(caminho + "/reautenticar", headers=headers,
+                                              json={"confirmar": True}).status_code, 200)
+            transporte.esquecer_pareamento.assert_called_once()
 
     def test_franquia_preserva_legado_e_exclui_admin_orion(self):
         planos = self.db.execute(text("""

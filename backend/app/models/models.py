@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -581,6 +582,8 @@ class Conversa(Base):
         server_default="em_atendimento_ia",
     )
 
+    central_digitando_ate = Column(DateTime(timezone=True), nullable=True)
+    central_arquivada = Column(Boolean, nullable=False, server_default="false")
     humano_assumiu = Column(
         Boolean,
         nullable=True,
@@ -846,6 +849,8 @@ class ConexaoCanal(Base):
     especialista_id = Column(Integer, nullable=True)
     nome_conexao = Column(String(100), nullable=True)
     gerenciada_crm = Column(Boolean, nullable=False, server_default="false")
+    pareamento_waha_pendente = Column(Boolean, nullable=False, server_default="false")
+    sofia_institucional = Column(Boolean, nullable=False, server_default="false")
     sofia_ativa = Column(Boolean, nullable=False, server_default="true")
     operacao_suspensa = Column(Boolean, nullable=False, server_default="false")
 
@@ -918,6 +923,8 @@ class Mensagem(Base):
     especialista_id = Column(Integer, nullable=True)
     mensagem_id_externo = Column(String(180), nullable=True)
     mensagem_id_waha = Column(String(180), nullable=True)
+    central_resposta_waha = Column(String(180), nullable=True)
+    central_eventos = Column(JSON, nullable=True)
     sessao_waha = Column(String(120), nullable=True)
     criado_em = Column(DateTime, nullable=True, server_default=func.now())
     status_processamento = Column(String(30), nullable=True)

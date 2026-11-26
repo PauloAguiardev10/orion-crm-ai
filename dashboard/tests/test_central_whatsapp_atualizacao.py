@@ -10,7 +10,7 @@ class CentralWhatsAppAtualizacaoTest(unittest.TestCase):
     def test_atualizacao_preserva_selecao_rascunho_e_nao_lidas(self):
         primeira = {
             "id": 1, "nome": "Ana", "especialista_id": 7, "especialista_usuario_id": 42,
-            "humano_assumiu": True, "status_atendimento": "em_atendimento_humano",
+            "pode_assumir": True, "humano_assumiu": True, "status_atendimento": "em_atendimento_humano",
         }
         segunda = {"id": 2, "nome": "Bob", "ultima_recebida_id": 20}
         lista = [primeira, segunda]
