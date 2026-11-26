@@ -78,7 +78,7 @@ class FollowupAutomaticoTest(unittest.TestCase):
             db.commit()
 
     def criar_empresa(self, db):
-        empresa = Empresa(nome=f"Teste follow-up {uuid4()}", plano="Premium")
+        empresa = Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Teste follow-up {uuid4()}", plano="Premium")
         db.add(empresa)
         db.flush()
         db.add(FollowupConfiguracao(empresa_id=empresa.id, ativo=True))

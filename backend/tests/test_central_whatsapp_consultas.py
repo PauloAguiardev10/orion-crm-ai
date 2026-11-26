@@ -65,8 +65,8 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
 
         app.dependency_overrides[obter_db_api] = sessao_api
         self.client = self.enterContext(TestClient(app))
-        self.empresa = self.criar(Empresa(nome=f"Central teste {uuid4()}", plano="Premium")).id
-        self.outra_empresa = self.criar(Empresa(nome=f"Central teste {uuid4()}", plano="Premium")).id
+        self.empresa = self.criar(Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Central teste {uuid4()}", plano="Premium")).id
+        self.outra_empresa = self.criar(Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Central teste {uuid4()}", plano="Premium")).id
         self.vendedor = self.usuario(self.empresa, "vendedor")
         self.colega = self.usuario(self.empresa, "vendedor")
         self.admin = self.usuario(self.empresa, "admin_empresa")
@@ -353,7 +353,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
 
     def test_franquia_serializa_a_ultima_vaga_de_usuarios_e_conexoes(self):
         with Session(self.engine) as db, db.begin():
-            empresa = Empresa(nome=f"Franquia concorrente {uuid4()}", plano="Lite")
+            empresa = Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Franquia concorrente {uuid4()}", plano="Lite")
             db.add(empresa)
             db.flush()
             empresa_id = empresa.id
@@ -480,7 +480,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         alias = alias_waha(instancia, "default")
         self.enterContext(patch.dict(os.environ, configuracao_waha({instancia: ["default"]})))
         with Session(self.engine) as db, db.begin():
-            empresas = [Empresa(nome=f"Vaga {uuid4()}", plano="Lite") for _ in range(2)]
+            empresas = [Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Vaga {uuid4()}", plano="Lite") for _ in range(2)]
             db.add_all(empresas)
             db.flush()
             ids = [empresa.id for empresa in empresas]
@@ -518,7 +518,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
     def test_acks_concorrentes_gravam_estado_mais_avancado(self):
         sessao = f"ack-teste-{uuid4()}"
         with Session(self.engine) as db, db.begin():
-            empresa = Empresa(nome=sessao)
+            empresa = Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=sessao)
             db.add(empresa)
             db.flush()
             empresa_id = empresa.id
@@ -745,7 +745,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
 
     def test_tomada_transferencia_e_encerramento_concorrentes(self):
         with Session(self.engine) as db, db.begin():
-            empresa = Empresa(nome=f"Concorrência fictícia {uuid4()}")
+            empresa = Empresa(slug=str(uuid4()), tipo="cliente", status_financeiro="em_dia", bloqueio_automatico=True, nome=f"Concorrência fictícia {uuid4()}")
             db.add(empresa)
             db.flush()
             empresa_id = empresa.id
