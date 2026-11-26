@@ -11,6 +11,7 @@ from services.central_whatsapp_service import SessaoCentralExpirada, listar_aten
 ERROS = {
     "limite_plano_nao_configurado": "O limite de conexões deste plano ainda não foi configurado.",
     "limite_plano_atingido": "O limite de conexões deste plano foi atingido.",
+    "capacidade_waha_indisponivel": "Nenhuma sess?o WhatsApp provisionada est? dispon?vel.",
     "limite_sessoes_provedor": "A instalação da WAHA recusou outra sessão.",
     "gestao_waha_desativada": "Gestão da WAHA desativada neste ambiente.",
     "conexao_legada_protegida": "A conexão legada está protegida contra alterações pelo CRM.",

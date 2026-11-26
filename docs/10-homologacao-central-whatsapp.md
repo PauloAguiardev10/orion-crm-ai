@@ -114,3 +114,39 @@ Administradores e atendentes cadastrados na empresa ocupam vaga, inclusive conta
 - Validar cada artefato pelo checksum SHA-256 e catálogo do dump. Restaurar com `pg_restore --exit-on-error` em banco descartável e conferir tabelas, contagens, amostras referenciadas de mídia e vínculos da sessão Forway antes de autorizar o corte.
 - Homologar texto, voz nativa, imagem, vídeo e documento em conversa dedicada. Verificar reprodução, ACK, deduplicação e acesso autorizado. Validar QR, provisionamento e segunda sessão apenas se a edição instalada suportar a operação, sem alterar o pareamento da Forway.
 - Confirmar que a Sofia responde somente onde habilitada e que o Follow-up preserva sessão, agenda, cancelamento por atendimento humano e tratamento de reservas. Não alterar as flags operacionais atuais da Sofia ou do Follow-up sem validação no ambiente.
+
+## WAHA CORE com múltiplas instâncias
+
+O CRM mantém o nome interno da sessão em `conexoes_canais.sessao_waha`. Para conexões novas, ele usa `orion-waha:<instância>:<sessão física>`. O nome interno permanece o mesmo em conversas, mensagens e ACKs. Duas instâncias podem usar `default` sem compartilhar identidade. A sessão legada da Forway conserva o nome, os IDs, o volume e a rota de webhook existentes.
+
+### Configuração e implantação do piloto
+
+1. Faça backup do PostgreSQL, das configurações e dos volumes das sessões antes da implantação. Preserve a configuração da Forway. Confirme que `WAHA_API_URL` resolve a própria instância legada a partir do backend e do worker, e mantenha as variáveis existentes de chave e webhook.
+2. Provisione instâncias em rede privada, com origem, chave de API, HMAC e volume próprios. Fixe e registre o digest, a versão, a edição e a engine da imagem. Separe também o armazenamento de mídia. Reserve somente sessões novas e vazias. A API de gestão recusa uma sessão preexistente sem o marcador de propriedade do CRM.
+3. Configure `ORION_WAHA_INSTANCIAS` no backend e no worker. O catálogo contém referências aos nomes das variáveis de segredo, por exemplo:
+
+   ```json
+   {"piloto_a":{"origem":"http://waha-piloto-a:3000","api_key_env":"ORION_WAHA_A_API_KEY","hmac_env":"ORION_WAHA_A_HMAC","sessoes":["default"]}}
+   ```
+
+   Mantenha `ORION_WAHA_WEBHOOK_URL` apontando para a URL base da rota `/webhook/waha`. O cadastro acrescenta o identificador da instância ao registrar o webhook. Use o mesmo catálogo nos processos do backend e do worker. Cada rota de instância exige a assinatura SHA-512 da instância configurada.
+4. Aplique `20261127_waha_multi_instancia.sql` depois das migrações de gestão e franquia. Cadastre as vagas aprovadas em `waha_capacidade` pelo papel de operação. Exemplo para o piloto:
+
+   ```sql
+   INSERT INTO waha_capacidade (sessao_crm)
+   VALUES ('orion-waha:piloto_a:default');
+   ```
+
+   O papel da aplicação precisa de leitura da tabela e atualização de `conexao_id` para reservar a vaga. O cadastro valida o plano e o vendedor, e vincula conexão e vaga na mesma transação. Uma desconexão suspende a operação e preserva a reserva e o histórico. Troca de locatário ou reuso de uma vaga vinculada exige um procedimento operacional explícito com saneamento do estado da WAHA.
+5. Em homologação, habilite a gestão somente após conferir o catálogo, as vagas e o acesso de rede privado. Use o CRM para cadastrar uma conexão, selecionar o vendedor, conectar e abrir o QR. O QR é entregue pela API autenticada com `no-store`. A Forway permanece protegida contra ações de gestão.
+
+### Testes e critérios de homologação
+
+- Rodar o teste de multi-instância e as suítes da Central, de mídia, de gestão e de Follow-up contra o banco de testes após aplicar as migrações. Usar transporte simulado.
+- No piloto autorizado, conferir dois containers com `default`, HMAC trocado, ACK antes da confirmação HTTP, IDs repetidos, conversa com `@lid`, permissões por empresa/vendedor, QR, parada e retomada. Conferir também a continuidade da Forway, Sofia e Follow-up.
+- Confirmar que a imagem WAHA retorna os metadados de sessão no endpoint de consulta e entrega PNG no endpoint de QR utilizado. Validar as APIs e eventos efetivamente disponíveis no digest instalado.
+- Com mídia ainda desabilitada em produção, validar imagens, vídeo, documentos, voz em OGG/Opus, disponibilidade do FFmpeg e reprodução no navegador no ambiente piloto. Medir CPU, RAM, disco e latência em pareamento e reconexão antes de ampliar a capacidade.
+
+### Rollback
+
+Suspenda as novas conexões com o código atual e desabilite a gestão. Confirme que workers e webhooks das instâncias piloto deixaram de operar antes de reverter a aplicação. Preserve o cadastro, as reservas, os históricos e os volumes. O código anterior desconhece os aliases novos e pode tentar usar o host legado, portanto mantenha as conexões piloto suspensas e seus webhooks desativados durante o rollback. Conserve a tabela aditiva para retomada ou remova-a somente se estiver vazia e após verificação do backup. Valide Forway, Sofia e Follow-up pelo caminho legado.

@@ -19,6 +19,9 @@ from app.agents.sdr_agent import (
 )
 from app.database.database import SessionLocal, engine
 from app.services.empresa_context_service import carregar_contexto_empresa
+from app.services.waha_destino import (
+    PREFIXO, ConfiguracaoWahaInvalida, alias_waha, resolver_waha,
+)
 from app.services.waha_health_service import consultar_saude_sessao
 from app.models.models import (
     Base,
@@ -406,19 +409,20 @@ def obter_telefone_real_waha(
     if telefone_cache:
         return telefone_cache
 
-    headers = {
-        "X-Api-Key": os.getenv("WAHA_API_KEY", ""),
-    }
-
-    sessao_url = quote(str(sessao), safe="")
+    try:
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida:
+        return None
+    headers = rota.headers
+    sessao_url = quote(rota.sessao, safe="")
     lid_numero = chat_id.replace("@lid", "").strip()
     lid_url = quote(lid_numero, safe="")
 
     try:
         resposta = requests.get(
-            f"http://localhost:3000/api/{sessao_url}/lids/{lid_url}",
+            f"{rota.origem}/api/{sessao_url}/lids/{lid_url}",
             headers=headers,
-            timeout=4,
+            timeout=4, allow_redirects=False,
         )
         resposta.raise_for_status()
         dados_lid = resposta.json()
@@ -437,10 +441,10 @@ def obter_telefone_real_waha(
 
     try:
         resposta = requests.get(
-            "http://localhost:3000/api/contacts",
+            f"{rota.origem}/api/contacts",
             headers=headers,
-            params={"contactId": chat_id, "session": sessao},
-            timeout=4,
+            params={"contactId": chat_id, "session": rota.sessao},
+            timeout=4, allow_redirects=False,
         )
         resposta.raise_for_status()
         contato = resposta.json()
@@ -1244,14 +1248,19 @@ def definir_presenca_digitacao(
     digitando: bool,
     headers: dict,
 ) -> bool:
+    try:
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida:
+        return False
+    headers = rota.headers
     presenca = "typing" if digitando else "paused"
 
     try:
         resposta = requests.post(
-            f"http://localhost:3000/api/{quote(str(sessao), safe='')}/presence",
+            f"{rota.origem}/api/{quote(rota.sessao, safe='')}/presence",
             headers=headers,
             json={"chatId": chat_id, "presence": presenca},
-            timeout=5,
+            timeout=5, allow_redirects=False,
         )
         resposta.raise_for_status()
         return True
@@ -1262,10 +1271,10 @@ def definir_presenca_digitacao(
 
     try:
         resposta = requests.post(
-            f"http://localhost:3000/api/{endpoint}",
+            f"{rota.origem}/api/{endpoint}",
             headers=headers,
-            json={"session": sessao, "chatId": chat_id},
-            timeout=5,
+            json={"session": rota.sessao, "chatId": chat_id},
+            timeout=5, allow_redirects=False,
         )
         resposta.raise_for_status()
         return True
@@ -1281,12 +1290,15 @@ def enviar_texto_waha(
     headers: dict,
 ) -> tuple[bool, str | None, str | None]:
     try:
+        rota = resolver_waha(sessao)
         envio = requests.post(
-            "http://localhost:3000/api/sendText",
-            headers=headers,
-            json={"session": sessao, "chatId": chat_id, "text": texto},
-            timeout=15,
+            f"{rota.origem}/api/sendText",
+            headers=rota.headers,
+            json={"session": rota.sessao, "chatId": chat_id, "text": texto},
+            timeout=15, allow_redirects=False,
         )
+        if 300 <= envio.status_code < 400:
+            return False, "timeout_envio_inconclusivo", None
         envio.raise_for_status()
 
         from app.services.followup_ids_waha import (
@@ -1310,9 +1322,31 @@ def enviar_texto_waha(
         )
         return False, "timeout_envio_inconclusivo", None
 
-    except requests.RequestException as erro:
+    except (requests.RequestException, ConfiguracaoWahaInvalida) as erro:
         print(f"[WAHA SEND] falha no envio: {repr(erro)}", flush=True)
         return False, "falha_envio", None
+
+
+@app.post("/webhook/waha/{instancia}")
+async def webhook_waha_instancia(instancia: str, request: Request, payload: dict):
+    from starlette.concurrency import run_in_threadpool
+    from app.services.followup_eventos_waha import assinatura_waha_valida
+
+    try:
+        sessao = alias_waha(instancia, payload.get("session"))
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida:
+        raise HTTPException(401, "Origem WAHA invalida") from None
+    if (
+        request.headers.get("X-Webhook-Hmac-Algorithm") != "sha512"
+        or not assinatura_waha_valida(
+            await request.body(), rota.chave_hmac, request.headers.get("X-Webhook-Hmac", ""),
+        )
+    ):
+        raise HTTPException(401, "Assinatura WAHA invalida")
+    return await run_in_threadpool(
+        processar_webhook_waha, {**payload, "session": sessao}, True,
+    )
 
 
 async def autenticar_webhook_waha(request: Request) -> bool:
@@ -1333,6 +1367,14 @@ async def autenticar_webhook_waha(request: Request) -> bool:
 
 @app.post("/webhook/waha")
 def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_waha)):
+    mensagem = payload.get("payload")
+    sessao = obter_sessao_waha(payload, mensagem if isinstance(mensagem, dict) else {})
+    if sessao.strip().startswith(PREFIXO):
+        raise HTTPException(401, "Origem WAHA invalida")
+    return processar_webhook_waha(payload, autenticado)
+
+
+def processar_webhook_waha(payload: dict, autenticado: bool):
     evento = payload.get("event")
     if evento == "message.ack":
         if autenticado is not True:
@@ -1450,9 +1492,7 @@ def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_w
         mensagem,
     )
 
-    empresa_id = obter_empresa_id_por_sessao(
-        sessao,
-    )
+    empresa_id = None if sessao.startswith(PREFIXO) else obter_empresa_id_por_sessao(sessao)
     if empresa_id is None and autenticado is True:
         from app.services.followup_conexoes_waha import localizar_conexao_waha
 
@@ -1752,35 +1792,9 @@ def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_w
                 db_notificacao.close()
 
         if chat_id_destinatario:
-            headers_notificacao = {
-                "Content-Type": "application/json",
-                "X-Api-Key": os.getenv(
-                    "WAHA_API_KEY",
-                    "",
-                ),
-            }
-
-            try:
-                envio_notificacao = requests.post(
-                    "http://localhost:3000/api/sendText",
-                    headers=headers_notificacao,
-                    json={
-                        "session": sessao,
-                        "chatId": chat_id_destinatario,
-                        "text": resultado["notificacao_luciano"],
-                    },
-                    timeout=15,
-                )
-
-                envio_notificacao.raise_for_status()
-
-            except requests.RequestException:
-                traceback.print_exc()
+            enviar_texto_waha(sessao, chat_id_destinatario, resultado["notificacao_luciano"], {})
         else:
-            print(
-                f"ALERTA: notificacao nao enviada para empresa "
-                f"{empresa_id}: destinatario nao configurado."
-            )
+            print(f"ALERTA: destinatario de notificacao nao configurado para empresa {empresa_id}.")
 
     status_envio = None
     resposta_mensagem_id = None
@@ -1817,10 +1831,7 @@ def webhook_waha(payload: dict, autenticado: bool = Depends(autenticar_webhook_w
 
         delay = calcular_delay_resposta(resposta)
 
-        headers = {
-            "Content-Type": "application/json",
-            "X-Api-Key": os.getenv("WAHA_API_KEY", ""),
-        }
+        headers = {}
 
         definir_presenca_digitacao(
             sessao,

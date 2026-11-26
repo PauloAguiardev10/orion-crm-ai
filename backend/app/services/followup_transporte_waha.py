@@ -1,6 +1,6 @@
-import os
 import requests
 
+from app.services.waha_destino import ConfiguracaoWahaInvalida, resolver_waha
 from app.services.followup_ids_waha import (
     extrair_id_resposta_waha,
 )
@@ -16,28 +16,23 @@ def transportar_mensagem_waha(
     if not sessao or not chat_id or not texto:
         return False, "falha_envio", None
 
-    chave = os.getenv("WAHA_API_KEY", "").strip()
-
-    if not chave:
-        return False, "falha_envio", None
-
-    url = os.getenv(
-        "WAHA_API_URL",
-        "http://localhost:3000",
-    ).rstrip("/")
-
     try:
+        destino = resolver_waha(sessao)
+        if not destino.chave_api:
+            return False, "falha_envio", None
         resposta = requests.post(
-            f"{url}/api/sendText",
-            headers={"X-Api-Key": chave},
+            f"{destino.origem}/api/sendText",
+            headers=destino.headers, allow_redirects=False,
             json={
-                "session": sessao,
+                "session": destino.sessao,
                 "chatId": chat_id,
                 "text": texto,
             },
             timeout=15,
         )
 
+        if 300 <= resposta.status_code < 400:
+            return False, "timeout_envio_inconclusivo", None
         resposta.raise_for_status()
 
         try:
@@ -59,5 +54,5 @@ def transportar_mensagem_waha(
         # Nao permitir repeticao automatica de um envio incerto.
         return False, "timeout_envio_inconclusivo", None
 
-    except requests.RequestException:
+    except (requests.RequestException, ConfiguracaoWahaInvalida):
         return False, "falha_envio", None

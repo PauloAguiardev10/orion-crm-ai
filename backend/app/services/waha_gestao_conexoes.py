@@ -1,7 +1,7 @@
-from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.services.waha_destino import PREFIXO, ConfiguracaoWahaInvalida, resolver_waha
 from app.models.models import ConexaoCanal, Conversa, Empresa
 from app.services.central_whatsapp_atendimento import atendentes_autorizados
 from app.services.waha_gestao_transporte import ErroGestaoWaha
@@ -70,10 +70,35 @@ def cadastrar_conexao(db, identidade, dados):
     if limite is None:
         raise ErroGestaoWaha("limite_plano_nao_configurado", 409)
     _validar_titular(db, identidade, dados["especialista_id"])
+    utilizadas = db.execute(text("""
+        SELECT count(*) FROM conexoes_canais
+        WHERE empresa_id = :empresa AND lower(btrim(canal)) = 'whatsapp'
+    """), {"empresa": empresa_id}).scalar_one()
+    if utilizadas >= limite:
+        raise ErroGestaoWaha("limite_plano_atingido", 409)
+
+    vagas = db.execute(text("""
+        SELECT sessao_crm FROM waha_capacidade
+        WHERE conexao_id IS NULL ORDER BY sessao_crm
+    """)).scalars().all()
+    for candidata in vagas:
+        try:
+            resolver_waha(candidata)
+        except ConfiguracaoWahaInvalida:
+            continue
+        sessao = db.execute(text("""
+            SELECT sessao_crm FROM waha_capacidade
+            WHERE sessao_crm = :sessao AND conexao_id IS NULL
+            FOR UPDATE SKIP LOCKED
+        """), {"sessao": candidata}).scalar_one_or_none()
+        if sessao is not None:
+            break
+    else:
+        raise ErroGestaoWaha("capacidade_waha_indisponivel", 409)
     conexao = ConexaoCanal(
         empresa_id=empresa_id, canal="whatsapp", provedor="waha", ativo=True,
         gerenciada_crm=True, operacao_suspensa=True,
-        sessao_waha=f"orion-{empresa_id}-{uuid4().hex}", **dados,
+        sessao_waha=sessao, **dados,
     )
     db.add(conexao)
     try:
@@ -82,13 +107,15 @@ def cadastrar_conexao(db, identidade, dados):
         if getattr(getattr(erro.orig, "diag", None), "constraint_name", None) == "orion_limite_conexoes":
             raise ErroGestaoWaha("limite_plano_atingido", 409) from None
         raise
+    db.execute(text("UPDATE waha_capacidade SET conexao_id = :id WHERE sessao_crm = :sessao"),
+               {"id": conexao.id, "sessao": sessao})
     return conexao
 
 
 def exigir_gerenciada(conexao):
     if (
         not conexao.ativo or not conexao.gerenciada_crm or not conexao.sessao_waha
-        or not conexao.sessao_waha.startswith(f"orion-{conexao.empresa_id}-")
+        or not conexao.sessao_waha.startswith(PREFIXO)
     ):
         raise ErroGestaoWaha("conexao_legada_protegida", 409)
 

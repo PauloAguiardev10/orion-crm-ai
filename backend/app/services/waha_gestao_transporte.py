@@ -4,6 +4,8 @@ from urllib.parse import quote, urlsplit
 
 import requests
 
+from app.services.waha_destino import PREFIXO, ConfiguracaoWahaInvalida, resolver_waha
+
 
 class ErroGestaoWaha(Exception):
     def __init__(self, motivo, status=503):
@@ -13,17 +15,33 @@ class ErroGestaoWaha(Exception):
 
 
 class TransporteGestaoWaha:
+    def __init__(self, sessao=None):
+        self.sessao = sessao
+
+    def _destino(self):
+        try:
+            return resolver_waha(self.sessao or "default")
+        except ConfiguracaoWahaInvalida:
+            raise ErroGestaoWaha("gestao_waha_indisponivel") from None
+
+    def _sessao_fisica(self, sessao):
+        if self.sessao is None:
+            return sessao
+        if self.sessao != sessao:
+            raise ErroGestaoWaha("sessao_waha_divergente")
+        return self._destino().sessao
+
     def _requisitar(self, metodo, caminho, *, corpo=None, imagem=False):
         if os.getenv("ORION_WAHA_GESTAO_ATIVA") != "1":
             raise ErroGestaoWaha("gestao_waha_desativada")
-        chave = os.getenv("WAHA_API_KEY", "").strip()
-        if not chave:
+        rota = self._destino()
+        if not rota.chave_api:
             raise ErroGestaoWaha("gestao_waha_indisponivel")
-        origem = os.getenv("WAHA_API_URL", "http://localhost:3000").rstrip("/")
+        origem = rota.origem
         try:
             with requests.request(
                 metodo, origem + caminho, json=corpo,
-                headers={"X-Api-Key": chave, "Accept": "image/png" if imagem else "application/json"},
+                headers={**rota.headers, "Accept": "image/png" if imagem else "application/json"},
                 timeout=(3, 8), allow_redirects=False, stream=imagem,
             ) as resposta:
                 if resposta.status_code == 404:
@@ -53,9 +71,15 @@ class TransporteGestaoWaha:
             raise ErroGestaoWaha("gestao_waha_indisponivel") from None
 
     def consultar(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         dados = self._requisitar("GET", f"/api/sessions/{quote(sessao, safe='')}")
         if not isinstance(dados, dict) or dados.get("name") != sessao:
             raise ErroGestaoWaha("sessao_waha_divergente")
+        if self.sessao and self.sessao.startswith(PREFIXO):
+            config = dados.get("config")
+            metadata = config.get("metadata") if isinstance(config, dict) else None
+            if not isinstance(metadata, dict) or metadata.get("orionSessao") != self.sessao:
+                raise ErroGestaoWaha("sessao_waha_divergente", 409)
         estados = {"STOPPED", "STARTING", "SCAN_QR_CODE", "WORKING", "FAILED",
                    "PASSKEY_REQUIRED", "PASSKEY_CONFIRMATION_REQUIRED"}
         estado = dados.get("status")
@@ -67,27 +91,35 @@ class TransporteGestaoWaha:
                 "numero": numero[1] if numero else None}
 
     def criar(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         webhook = os.getenv("ORION_WAHA_WEBHOOK_URL", "").strip()
-        chave = os.getenv("WAHA_WEBHOOK_HMAC_KEY", "").strip()
+        chave = self._destino().chave_hmac
+        if self.sessao and self.sessao.startswith(PREFIXO):
+            instancia = self.sessao[len(PREFIXO):].split(":", 1)[0]
+            webhook = f"{webhook.rstrip('/')}/{instancia}" if webhook else ""
         url = urlsplit(webhook)
         if url.scheme not in ("http", "https") or not url.hostname or url.username or not chave:
             raise ErroGestaoWaha("webhook_waha_nao_configurado")
         self._requisitar("POST", "/api/sessions", corpo={
             "name": sessao, "start": False,
-            "config": {"webhooks": [{
+            "config": {"metadata": {"orionSessao": self.sessao or sessao}, "webhooks": [{
                 "url": webhook, "hmac": {"key": chave},
                 "events": ["message", "message.any", "message.reaction", "message.ack"],
             }]},
         })
 
     def iniciar(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         self._requisitar("POST", f"/api/sessions/{quote(sessao, safe='')}/start")
 
     def reiniciar(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         self._requisitar("POST", f"/api/sessions/{quote(sessao, safe='')}/restart")
 
     def desconectar(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         self._requisitar("POST", f"/api/sessions/{quote(sessao, safe='')}/stop")
 
     def qr(self, sessao):
+        sessao = self._sessao_fisica(sessao)
         return self._requisitar("GET", f"/api/{quote(sessao, safe='')}/auth/qr", imagem=True)

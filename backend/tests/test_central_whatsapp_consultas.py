@@ -9,6 +9,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import uuid4
 
+from test_waha_multi_instancia import configuracao_waha
+from app.services.waha_destino import alias_waha
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -81,6 +84,16 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         self.fora = self.conversa(self.outra_empresa, conexao_externa)
         self.desativada = self.conversa(self.empresa, inativa, titular)
         self.db.commit()
+
+    def provisionar_vagas(self, total):
+        instancias = {f"teste_{uuid4().hex}": ["default"] for _ in range(total)}
+        self.enterContext(patch.dict(os.environ, configuracao_waha(instancias)))
+        vagas = [alias_waha(instancia, "default") for instancia in instancias]
+        for sessao in vagas:
+            self.db.execute(text("INSERT INTO waha_capacidade (sessao_crm) VALUES (:sessao)"),
+                            {"sessao": sessao})
+        self.db.commit()
+        return vagas
 
     def criar(self, registro):
         self.db.add(registro)
@@ -259,6 +272,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         self.assertEqual(agendamento.status, "cancelado")
 
     def test_gestao_conexoes_respeita_plano_hierarquia_e_vinculo(self):
+        self.provisionar_vagas(3)
         base = "/api/central-whatsapp/conexoes"
         def headers(usuario):
             return {"Authorization": "Bearer " + gerar_token_api(usuario_id=usuario, empresa_id=self.empresa)}
@@ -279,6 +293,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         self.assertEqual(self.client.put(f"{base}/{self.compartilhada}", headers=admin, json=corpo).status_code, 409)
 
     def test_qr_provisionamento_limite_provedor_e_desconexao_confirmada(self):
+        self.provisionar_vagas(3)
         base = "/api/central-whatsapp/conexoes"
         headers = {"Authorization": "Bearer " + gerar_token_api(usuario_id=self.admin, empresa_id=self.empresa)}
         png = b"\x89PNG\r\n\x1a\n"
@@ -441,6 +456,64 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             self.assertEqual(ack(numero, nome), "ack_sem_transicao")
         self.db.refresh(externo)
         self.assertEqual(externo.status_envio, "aceito_waha")
+
+    def test_ack_antecipado_isolado_entre_duas_default_da_mesma_empresa(self):
+        a, b = self.provisionar_vagas(2)
+        for conexao_id, alias in ((self.privada, a), (self.compartilhada, b)):
+            self.db.get(ConexaoCanal, conexao_id).sessao_waha = alias
+        self.db.flush()
+        for alias in (a, b):
+            self.assertEqual(registrar_ack_waha(self.db, {
+                "session": alias,
+                "payload": {"id": "mesmo-id", "fromMe": True, "ack": 2},
+            }), "ack_pendente")
+        conexoes = self.db.execute(text("""
+            SELECT conexao_id FROM central_ack_pendente
+            WHERE empresa_id = :empresa AND mensagem_waha = 'mesmo-id'
+        """), {"empresa": self.empresa}).scalars()
+        self.assertCountEqual(conexoes, [self.privada, self.compartilhada])
+
+    def test_uma_vaga_e_reservada_por_apenas_uma_empresa_concorrente(self):
+        from app.services.waha_gestao_conexoes import cadastrar_conexao
+
+        instancia = f"teste_{uuid4().hex}"
+        alias = alias_waha(instancia, "default")
+        self.enterContext(patch.dict(os.environ, configuracao_waha({instancia: ["default"]})))
+        with Session(self.engine) as db, db.begin():
+            empresas = [Empresa(nome=f"Vaga {uuid4()}", plano="Lite") for _ in range(2)]
+            db.add_all(empresas)
+            db.flush()
+            ids = [empresa.id for empresa in empresas]
+            db.execute(text("INSERT INTO waha_capacidade (sessao_crm) VALUES (:alias)"), {"alias": alias})
+
+        def limpar():
+            with Session(self.engine) as db, db.begin():
+                db.execute(text("DELETE FROM waha_capacidade WHERE sessao_crm = :alias"), {"alias": alias})
+                db.query(ConexaoCanal).filter(ConexaoCanal.empresa_id.in_(ids)).delete()
+                db.query(Empresa).filter(Empresa.id.in_(ids)).delete()
+
+        self.addCleanup(limpar)
+        inicio = Barrier(2, timeout=10)
+
+        def cadastrar(empresa_id):
+            try:
+                with Session(self.engine) as db, db.begin():
+                    inicio.wait()
+                    conexao = cadastrar_conexao(db, {"empresa_id": empresa_id}, {
+                        "nome_conexao": "Piloto", "especialista_id": None, "sofia_ativa": False,
+                    })
+                    return conexao.id
+            except ErroGestaoWaha as erro:
+                return erro.motivo
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resultados = list(executor.map(cadastrar, ids))
+        self.assertEqual(resultados.count("capacidade_waha_indisponivel"), 1)
+        vencedora = next(resultado for resultado in resultados if isinstance(resultado, int))
+        with Session(self.engine) as db:
+            self.assertEqual(db.execute(text(
+                "SELECT conexao_id FROM waha_capacidade WHERE sessao_crm = :alias"
+            ), {"alias": alias}).scalar_one(), vencedora)
 
     def test_acks_concorrentes_gravam_estado_mais_avancado(self):
         sessao = f"ack-teste-{uuid4()}"

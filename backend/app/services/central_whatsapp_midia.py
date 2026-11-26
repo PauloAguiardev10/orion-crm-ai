@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import requests
 
+from app.services.waha_destino import ConfiguracaoWahaInvalida, resolver_waha
 from app.services.followup_ids_waha import extrair_id_resposta_waha
 
 
@@ -89,6 +90,11 @@ def baixar_midia_waha(midia, *, sessao, mensagem_id):
         raise ValueError("formato_indisponivel")
     # Reconstrói a URL com a origem configurada e aceita apenas o arquivo
     # do próprio evento, no caminho de mídia documentado pela WAHA.
+    try:
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida as erro:
+        raise ValueError("transporte_indisponivel") from erro
+    sessao = rota.sessao
     segmentos = unquote(urlsplit(midia.get("url") or "").path).split("/")
     if segmentos[:3] != ["", "api", "files"] or len(segmentos) not in (4, 5):
         raise ValueError("caminho_midia_invalido")
@@ -103,14 +109,12 @@ def baixar_midia_waha(midia, *, sessao, mensagem_id):
     nome = midia.get("filename")
     if not isinstance(nome, str) or not NOME_SEGURO.fullmatch(nome):
         nome = "anexo" + FORMATOS[mime][2][0]
-    base = os.getenv("WAHA_API_URL", "http://localhost:3000").rstrip("/")
-    chave = os.getenv("WAHA_API_KEY", "").strip()
-    if not chave:
+    if not rota.chave_api:
         raise ValueError("transporte_indisponivel")
     destino = "/".join(quote(seg, safe="") for seg in segmentos)
     dados = bytearray()
     with requests.get(
-        base + destino, headers={"X-Api-Key": chave}, stream=True,
+        rota.origem + destino, headers=rota.headers, stream=True,
         allow_redirects=False, timeout=(3, 8),
     ) as resposta:
         if resposta.status_code != 200:
@@ -123,13 +127,15 @@ def baixar_midia_waha(midia, *, sessao, mensagem_id):
 
 
 def enviar_midia_waha(sessao, chat_id, legenda, *, nome, mime, dados):
-    chave = os.getenv("WAHA_API_KEY", "").strip()
-    if not chave:
+    try:
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida:
         return False, "falha_envio", None
-    base = os.getenv("WAHA_API_URL", "http://localhost:3000").rstrip("/")
+    if not rota.chave_api:
+        return False, "falha_envio", None
     tipo, endpoint, _ = FORMATOS[mime]
     corpo = {
-        "session": sessao, "chatId": chat_id,
+        "session": rota.sessao, "chatId": chat_id,
         "file": {
             "mimetype": MIME_VOZ if tipo == "audio" else mime,
             "filename": nome, "data": base64.b64encode(dados).decode("ascii"),
@@ -139,7 +145,7 @@ def enviar_midia_waha(sessao, chat_id, legenda, *, nome, mime, dados):
         corpo["caption"] = legenda
     try:
         resposta = requests.post(
-            f"{base}/api/{endpoint}", json=corpo, headers={"X-Api-Key": chave},
+            f"{rota.origem}/api/{endpoint}", json=corpo, headers=rota.headers,
             timeout=(3, 20), allow_redirects=False,
         )
         if resposta.status_code >= 500 or 300 <= resposta.status_code < 400:

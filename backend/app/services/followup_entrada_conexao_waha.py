@@ -17,4 +17,7 @@ def validar_conexao_entrada_waha(
     if conexao.empresa_id != empresa_id:
         return None, "empresa_divergente"
 
+    if conexao.operacao_suspensa and conexao.gerenciada_crm:
+        return None, "conexao_waha_suspensa"
+
     return conexao.id, "conexao_validada"

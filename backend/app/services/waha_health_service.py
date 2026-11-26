@@ -1,13 +1,10 @@
-import os
+from urllib.parse import quote
 from dataclasses import dataclass
 
 import requests
 
+from app.services.waha_destino import ConfiguracaoWahaInvalida, resolver_waha
 
-WAHA_BASE_URL = os.getenv(
-    "WAHA_BASE_URL",
-    "http://localhost:3000",
-).rstrip("/")
 
 WAHA_TIMEOUT_SEGUNDOS = 10
 
@@ -22,20 +19,6 @@ class WahaHealthResult:
     detalhe: str | None = None
 
 
-def _headers_waha() -> dict[str, str]:
-    api_key = os.getenv("WAHA_API_KEY", "").strip()
-
-    if not api_key:
-        raise RuntimeError(
-            "WAHA_API_KEY nao configurada"
-        )
-
-    return {
-        "Accept": "application/json",
-        "X-Api-Key": api_key,
-    }
-
-
 def normalizar_status_waha(status: object) -> str:
     valor = str(status or "UNKNOWN").strip().upper()
     return valor or "UNKNOWN"
@@ -47,9 +30,12 @@ def consultar_saude_sessao(
     sessao = str(sessao).strip() or "default"
 
     try:
+        rota = resolver_waha(sessao, saude_legada=True)
+        if not rota.chave_api:
+            raise ConfiguracaoWahaInvalida("chave_waha_ausente")
         resposta = requests.get(
-            f"{WAHA_BASE_URL}/api/sessions/{sessao}",
-            headers=_headers_waha(),
+            f"{rota.origem}/api/sessions/{quote(rota.sessao, safe='')}",
+            headers=rota.headers, allow_redirects=False,
             timeout=WAHA_TIMEOUT_SEGUNDOS,
         )
         resposta.raise_for_status()

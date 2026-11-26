@@ -158,7 +158,7 @@ def consultar_estado_waha(
         if not conexao.sessao_waha:
             return {"estado": "NAO_PROVISIONADA", "numero": None}
         try:
-            resultado = TransporteGestaoWaha().consultar(conexao.sessao_waha)
+            resultado = TransporteGestaoWaha(conexao.sessao_waha).consultar(conexao.sessao_waha)
         except ErroGestaoWaha as erro:
             if erro.status != 404:
                 raise
@@ -176,7 +176,7 @@ def conectar_sessao_waha(
     try:
         conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
         exigir_gerenciada(conexao)
-        transporte = TransporteGestaoWaha()
+        transporte = TransporteGestaoWaha(conexao.sessao_waha)
         sessao = conexao.sessao_waha
         try:
             estado = transporte.consultar(sessao)["estado"]
@@ -208,7 +208,7 @@ def desconectar_sessao_waha(
     try:
         conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
         exigir_gerenciada(conexao)
-        transporte = TransporteGestaoWaha()
+        transporte = TransporteGestaoWaha(conexao.sessao_waha)
         try:
             if transporte.consultar(conexao.sessao_waha)["estado"] != "STOPPED":
                 transporte.desconectar(conexao.sessao_waha)
@@ -230,7 +230,7 @@ def obter_qr_waha(
     try:
         conexao = obter_conexao(db, identidade, conexao_id, bloquear=True)
         exigir_gerenciada(conexao)
-        transporte = TransporteGestaoWaha()
+        transporte = TransporteGestaoWaha(conexao.sessao_waha)
         if conexao.operacao_suspensa or transporte.consultar(conexao.sessao_waha)["estado"] != "SCAN_QR_CODE":
             raise ErroGestaoWaha("qr_nao_disponivel", 409)
         return Response(transporte.qr(conexao.sessao_waha), media_type="image/png", headers={
