@@ -6,6 +6,7 @@ import requests
 
 from app.services.followup_destinatario_service import chat_id_whatsapp_valido
 from app.services.waha_destino import ConfiguracaoWahaInvalida, resolver_waha
+from app.services.waha_identificadores import chat_canonico
 
 
 def _consulta_contato(sessao, caminho, **params):
@@ -28,17 +29,21 @@ def _consulta_contato(sessao, caminho, **params):
 
 def identificar_telefone_waha(sessao, telefone):
     dados = _consulta_contato(sessao, "/api/contacts/check-exists", phone=telefone)
-    chat = dados.get("chatId")
+    chat = chat_canonico(dados.get("chatId"))
     if dados.get("numberExists") is not True or not chat_id_whatsapp_valido(chat):
         raise ValueError("telefone_nao_confirmado")
     return chat
 
 
 def obter_foto_waha(sessao, chat):
+    chat = chat_canonico(chat)
     if not chat_id_whatsapp_valido(chat):
         raise ValueError("contato_waha_indisponivel")
     dados = _consulta_contato(sessao, "/api/contacts/profile-picture", contactId=chat)
-    foto = dados.get("profilePictureURL")
+    return baixar_foto_verificada(dados.get("profilePictureURL"))
+
+
+def baixar_foto_verificada(foto):
     if not isinstance(foto, str):
         raise ValueError("foto_indisponivel")
     try:
@@ -64,10 +69,11 @@ def obter_foto_waha(sessao, chat):
     raise ValueError("foto_indisponivel")
 
 
-def listar_contatos_waha(sessao, deslocamento, busca=""):
-    import re
+def listar_contatos_waha(sessao, deslocamento, busca="", *, autorizados=None):
     from urllib.parse import quote
 
+    if autorizados == ():
+        return {"contatos": [], "proxima": None}
     try:
         rota = resolver_waha(sessao)
         if not rota.chave_api:
@@ -106,11 +112,12 @@ def listar_contatos_waha(sessao, deslocamento, busca=""):
             for item in contatos:
                 if not isinstance(item, dict) or item.get("isMe") or item.get("isGroup"):
                     continue
-                chat = item.get("id")
+                chat = chat_canonico(item.get("id"))
                 if not chat_id_whatsapp_valido(chat):
                     continue
-                match = re.fullmatch(r"([1-9][0-9]{7,14})@c\.us", chat)
-                telefone = match[1] if match else None
+                if autorizados is not None and chat not in autorizados:
+                    continue
+                telefone = telefone_confirmado_contato(item, chat)
                 valor = item.get("name") or item.get("pushname")
                 nome = valor[:150] if isinstance(valor, str) else None
                 if not termo or termo in (nome or "").casefold() or termo.lstrip("+") in (telefone or ""):
@@ -123,10 +130,41 @@ def listar_contatos_waha(sessao, deslocamento, busca=""):
         raise ValueError("contatos_noweb_indisponiveis") from None
 
 
+def obter_foto_grupo_waha(sessao, chat):
+    from urllib.parse import quote
+    from app.services.central_whatsapp_grupos import nome_grupo
+
+    if not nome_grupo(sessao, chat):
+        raise ValueError("foto_indisponivel")
+    try:
+        rota = resolver_waha(sessao)
+    except ConfiguracaoWahaInvalida as erro:
+        raise ValueError("foto_indisponivel") from erro
+    dados = _consulta_contato(sessao, f"/api/{quote(rota.sessao, safe='')}/chats/{quote(chat, safe='')}/picture")
+    return baixar_foto_verificada(dados.get("url"))
+
+
 def obter_foto_contato_cadastrado(sessao, chat):
+    chat = chat_canonico(chat)
     if not chat_id_whatsapp_valido(chat):
         raise ValueError("contato_waha_indisponivel")
     dados = _consulta_contato(sessao, "/api/contacts", contactId=chat)
-    if dados.get("id") != chat or dados.get("isMe") or dados.get("isGroup"):
+    if chat_canonico(dados.get("id")) != chat or dados.get("isMe") or dados.get("isGroup"):
         raise ValueError("contato_waha_indisponivel")
     return obter_foto_waha(sessao, chat)
+
+
+def telefone_confirmado_contato(dados, chat):
+    import re
+    chat = chat_canonico(chat)
+    id_contato = chat_canonico(dados.get("id"))
+    if id_contato == chat and chat.endswith("@c.us"):
+        valor = chat
+    elif dados.get("lid") == chat and isinstance(id_contato, str) and id_contato.endswith("@c.us"):
+        valor = id_contato
+    elif id_contato == chat:
+        valor = dados.get("pn") or dados.get("phoneNumber")
+    else:
+        return None
+    telefone = re.fullmatch(r"[+]?([1-9][0-9]{7,14})(?:@c\.us|@s\.whatsapp\.net)?", valor) if isinstance(valor, str) else None
+    return telefone[1] if telefone else None

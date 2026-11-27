@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import extra_streamlit_components as stx
 from datetime import datetime, timedelta, timezone
@@ -543,7 +544,7 @@ with st.sidebar:
 
 # A Visão Geral já possui cabeçalho próprio.
 
-if pagina != "🏠 Visão Geral":
+if pagina not in ("🏠 Visão Geral", "💬 Conversas"):
 
     render_titulo_pagina(pagina)
 
@@ -586,6 +587,8 @@ elif pagina == "💬 Conversas":
         )
     except (TypeError, ValueError, RuntimeError):
         st.session_state.pop("token_central", None)
+    if not (os.getenv("ORION_CENTRAL_UI_URL", "").strip() and st.session_state.get("token_central")):
+        render_titulo_pagina(pagina)
     render_conversas(leads)
 
 

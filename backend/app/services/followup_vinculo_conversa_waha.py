@@ -1,11 +1,14 @@
 ﻿from sqlalchemy.orm import Session
 from app.models.models import Conversa, ConexaoCanal
+from app.services.waha_identificadores import aliases_chat
 
 
 def localizar_conversa_entrada_waha(db, *, empresa_id, conexao_id, chat_id):
     conversas = db.query(Conversa).filter_by(
-        empresa_id=empresa_id, canal="whatsapp", identificador=chat_id,
-    ).order_by(Conversa.id.desc())
+        empresa_id=empresa_id, canal="whatsapp",
+    ).filter(Conversa.identificador.in_(aliases_chat(chat_id))).order_by(
+        (Conversa.identificador == chat_id).desc(), Conversa.id.desc(),
+    )
     vinculada = conversas.filter_by(conexao_canal_id=conexao_id).first()
     if vinculada is not None:
         return vinculada

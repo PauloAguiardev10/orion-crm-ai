@@ -15,6 +15,42 @@ with patch.dict(os.environ, {"DATABASE_URL": "sqlite://", "PYTHON_DOTENV_DISABLE
 
 
 class CentralReactTest(unittest.TestCase):
+    def test_worker_inicia_novamente_apos_reiniciar_fastapi(self):
+        from threading import Event
+        from app.services.central_whatsapp_sync import ciclo_sync_noweb
+
+        iniciado = Event()
+        def worker(parar):
+            iniciado.set()
+            parar.wait()
+
+        app = FastAPI(lifespan=ciclo_sync_noweb)
+        with patch.dict(os.environ, {"ORION_WAHA_HISTORICO_ATIVO": "1"}), patch(
+            "app.services.central_whatsapp_sync._executar_worker", side_effect=worker,
+        ) as executar:
+            for _ in range(2):
+                iniciado.clear()
+                with TestClient(app):
+                    self.assertTrue(iniciado.wait(2))
+                self.assertTrue(executar.call_args.args[0].is_set())
+            self.assertEqual(executar.call_count, 2)
+
+    def test_nova_sessao_comercial_configura_store_antes_de_iniciar(self):
+        from app.services.waha_gestao_transporte import TransporteGestaoWaha
+
+        sessao = "orion-waha:piloto:default"
+        rota = SimpleNamespace(sessao="default", chave_hmac="chave-teste",
+                               webhook="https://crm.invalid/webhook/waha/piloto")
+        transporte = TransporteGestaoWaha(sessao)
+        with patch.object(transporte, "_destino", return_value=rota), patch.object(transporte, "_requisitar") as http:
+            transporte.criar(sessao)
+            dados = http.call_args.kwargs["corpo"]
+            self.assertEqual(http.call_args.args, ("POST", "/api/sessions"))
+            self.assertEqual(dados["name"], "default")
+            self.assertIs(dados["start"], False)
+            self.assertEqual(dados["config"]["noweb"], {"store": {"enabled": True, "fullSync": True}})
+            self.assertEqual(dados["config"]["metadata"]["orionSessao"], sessao)
+
     def test_sse_exige_credencial_sem_executar_consultas(self):
         app = FastAPI()
         app.include_router(router)
@@ -93,3 +129,45 @@ class CentralReactTest(unittest.TestCase):
             self.assertEqual(resultado["contatos"][0]["nome"], alvo["name"])
             self.assertIsNone(resultado["proxima"])
             self.assertEqual([c.kwargs["params"]["offset"] for c in get.call_args_list[1:]], [0, 50])
+
+    def test_citacao_recebida_e_telefone_lid_exigem_vinculo_confirmado(self):
+        from app.services.central_whatsapp_citacoes import extrair_citacao_waha
+        from app.services.central_whatsapp_contatos import telefone_confirmado_contato
+
+        chat = "123456789@lid"
+        alvo = f"false_{chat}_EXEMPLO"
+        self.assertEqual(extrair_citacao_waha({"replyTo": {"id": alvo}}, chat), alvo)
+        self.assertIsNone(extrair_citacao_waha({"replyTo": {"id": alvo}}, "555555555@lid"))
+        self.assertIsNone(telefone_confirmado_contato({"id": chat, "number": "123456789"}, chat))
+        self.assertEqual(telefone_confirmado_contato({
+            "id": "5585999999999@c.us", "lid": chat,
+        }, chat), "5585999999999")
+
+    def test_catalogo_comercial_pagina_e_exclui_grupo_sem_autorizacao(self):
+        import json
+        from app.services.central_whatsapp_historico_noweb import (
+            chats_autorizados_noweb, pagina_catalogo_noweb,
+        )
+
+        sessao = "default"
+        contatos = [f"55859999{i:04d}@c.us" for i in range(101)]
+        estado = {"name": sessao, "status": "WORKING", "engine": "NOWEB",
+                  "config": {"noweb": {"store": {"enabled": True}}}}
+        with patch.dict(os.environ, {
+            "WAHA_API_URL": "http://waha.invalid", "WAHA_API_KEY": "ficticia",
+            "ORION_WAHA_CATALOGO_COMERCIAL": json.dumps([sessao]),
+            "ORION_WAHA_GRUPOS_AUTORIZADOS": "{}",
+            "ORION_WAHA_PAREAMENTO_CONTATOS": json.dumps({sessao: contatos[:12]}),
+        }), patch("app.services.central_whatsapp_historico_noweb.requests.Session") as cliente:
+            self.assertEqual(len(chats_autorizados_noweb(sessao)), 12)
+            get = cliente.return_value.__enter__.return_value.get
+            get.side_effect = [Mock(status_code=200, json=Mock(return_value=v)) for v in (
+                estado, [{"id": c.replace("@c.us", "@s.whatsapp.net")} for c in contatos[:100]],
+                estado, [{"id": contatos[-1].replace("@c.us", "@s.whatsapp.net")}, {"id": "123@g.us"}],
+                estado, [],
+            )]
+            paginas = [pagina_catalogo_noweb(sessao, offset) for offset in (0, 100, 200)]
+            self.assertEqual([chat for chats, _ in paginas for chat in chats], contatos)
+            self.assertIsNone(paginas[-1][1])
+            self.assertEqual([c.kwargs["params"]["offset"] for c in get.call_args_list[1::2]], [0, 100, 200])
+            self.assertEqual(pagina_catalogo_noweb("outra-sessao", 0), ([], None))

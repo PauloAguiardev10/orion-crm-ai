@@ -104,3 +104,42 @@ button:hover:not(:disabled){border-color:#3f80bc}
 .pin{display:inline-flex;vertical-align:middle;margin-right:5px;color:#76d9ff}
 .pin svg{width:13px;height:13px}
 .fixar-chat[aria-pressed=true]{color:#76d9ff;border-color:#478cbd}
+/* The host controls the iframe height. Only these two panes scroll. */
+html,body,#root{height:100%;overflow:hidden}
+.central{height:100%;grid-template-columns:minmax(240px,31%) minmax(0,1fr)}
+.central.com-ficha{grid-template-columns:minmax(220px,27%) minmax(0,1fr) minmax(190px,24%)}
+.lista>header{padding:8px 12px}
+.conexao-status{font-size:.68rem}
+.categorias{display:flex;gap:5px;flex-wrap:wrap;padding:8px 10px 0}
+.categorias button{font-size:.76rem;padding:4px 8px;border-radius:14px}
+.categorias button[aria-pressed=true]{background:#1b4877;border-color:#49aaff}
+.compositor,.chat>header,.lista>header{flex:none}
+.historico{min-height:0;padding:8px clamp(8px,3vw,38px)}
+.historico article{position:relative;padding:5px 10px}
+.acoes-mensagem{float:right;margin-left:8px}
+.acoes-mensagem>button{min-width:25px}
+.menu-mensagem{clear:both;max-width:300px;background:#152941;padding:6px;border:1px solid #304c6c;border-radius:6px}
+@media(max-width:720px){
+ .central,.central.com-ficha{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+ .ficha{top:0}
+}
+.referencia{margin:2px 0 4px;padding:3px 6px;border-left:2px solid #60b7f6;color:#bddcff;background:#0b1b30a0;font-size:.78rem}
+.historico{gap:2px}
+.historico article{padding:4px 8px}
+.historico p{margin:0}
+.meta-mensagem{min-height:12px}
+.cabecalho-contato{display:flex;gap:8px;align-items:center}
+.cabecalho-contato .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover}
+@media(hover:hover) and (pointer:fine){
+ .acoes-mensagem>button[aria-expanded=false]{opacity:0}
+ article:hover .acoes-mensagem>button, article:focus-within .acoes-mensagem>button{opacity:1}
+}
+@media(max-width:720px){
+ .chat>header{min-height:46px;padding:4px 6px;gap:4px}
+ .chat>header button{padding:4px 6px;font-size:.75rem}
+ .cabecalho-contato .avatar{width:28px;height:28px}
+ .compositor{gap:3px;padding:5px 4px}
+ .compositor>button{padding:5px}
+ .compositor>button svg{width:16px;height:16px}
+ .compositor textarea{min-width:65px;padding:5px 7px}
+}

@@ -70,6 +70,7 @@ createServer(async (req,res)=>{
   }
   res.setHeader("Content-Type","application/json");
   if(pathname.endsWith("/conversas/iniciar")) return res.end(JSON.stringify([{id:1,nome:"Comercial"}]));
+  if(pathname.endsWith("/contexto-ui")) return res.end(JSON.stringify({timezone:"America/Fortaleza"}));
   if(pathname.endsWith("/detalhes")) return res.end(JSON.stringify({telefone:"5511999999999",empresa_cliente:"Empresa fictícia",temperatura:"Morna",resumo_vendedor:"Solicitou detalhes da proposta.",followup_status:"Pendente"}));
   if(pathname.endsWith("/contatos")) return res.end(JSON.stringify({contatos:[{id:"5511999999999@c.us",nome:"Ana Martins",telefone:"5511999999999"}],proxima:null}));
   if(pathname.endsWith("/reservar-anexo")){

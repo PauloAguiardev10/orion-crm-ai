@@ -6,6 +6,7 @@ from app.services.mensagem_service import registrar_mensagem
 from app.services.central_whatsapp_midia import midia_ativa
 from app.services.central_whatsapp_midia_entrada import anexar_midia_waha
 from app.services.followup_service import REMETENTE_SAIDA_APLICATIVO
+from app.services.waha_identificadores import aliases_chat
 
 
 def registrar_saida_aplicativo(
@@ -38,8 +39,7 @@ def registrar_saida_aplicativo(
         empresa_id=conexao.empresa_id,
         conexao_canal_id=conexao.id,
         canal="whatsapp",
-        identificador=destinatario,
-    ).with_for_update().limit(2).all()
+    ).filter(Conversa.identificador.in_(aliases_chat(destinatario))).with_for_update().limit(2).all()
     if len(conversa) > 1:
         return "conversa_ambigua"
     conversa = conversa[0] if conversa else None

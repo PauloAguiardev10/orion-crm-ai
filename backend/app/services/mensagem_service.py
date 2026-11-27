@@ -17,6 +17,7 @@ def registrar_mensagem(
     mensagem_id_externo: str | None = None,
     conexao_canal_id: int | None = None,
     sessao_waha: str | None = None,
+    central_resposta_waha: str | None = None,
 ) -> tuple[Mensagem | None, bool]:
     """Registra uma mensagem sem efetuar commit da transacao."""
 
@@ -45,13 +46,17 @@ def registrar_mensagem(
             )
 
     if mensagem_id_externo:
+        from app.services.waha_identificadores import aliases_mensagem
+
+        ids = aliases_mensagem(mensagem_id_externo) if conversa.canal == "whatsapp" else (mensagem_id_externo,)
         existente = (
             db.query(Mensagem)
             .filter(
                 Mensagem.empresa_id == empresa_id,
                 Mensagem.conversa_id == conversa_id,
-                Mensagem.mensagem_id_externo == mensagem_id_externo,
+                Mensagem.mensagem_id_externo.in_(ids),
             )
+            .order_by((Mensagem.mensagem_id_externo == mensagem_id_externo).desc())
             .first()
         )
 
@@ -68,6 +73,7 @@ def registrar_mensagem(
         mensagem_id_externo=mensagem_id_externo,
         status_processamento="recebida",
         conexao_canal_id=conexao_canal_id, sessao_waha=sessao_waha,
+        central_resposta_waha=central_resposta_waha,
     )
 
     db.add(registro)
@@ -102,6 +108,7 @@ def persistir_mensagem_segura(
     retornar_id: bool = False,
     conexao_canal_id: int | None = None,
     sessao_waha: str | None = None,
+    central_resposta_waha: str | None = None,
 ) -> str | tuple[str, int | None]:
     """Retorna o resultado e, opcionalmente, o ID interno."""
 
@@ -121,6 +128,7 @@ def persistir_mensagem_segura(
             cliente_id=cliente_id,
             mensagem_id_externo=mensagem_id_externo,
             conexao_canal_id=conexao_canal_id, sessao_waha=sessao_waha,
+            central_resposta_waha=central_resposta_waha,
         )
 
         db.commit()

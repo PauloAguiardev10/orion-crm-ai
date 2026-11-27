@@ -24,6 +24,7 @@ from app.services.waha_destino import (
     PREFIXO, ConfiguracaoWahaInvalida, alias_waha, resolver_waha,
 )
 from app.services.waha_health_service import consultar_saude_sessao
+from app.services.central_whatsapp_sync import ciclo_sync_noweb
 from app.models.models import (
     Base,
     Cliente,
@@ -35,7 +36,7 @@ from app.models.models import (
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Agente SDR Forway")
+app = FastAPI(title="Agente SDR Forway", lifespan=ciclo_sync_noweb)
 
 from app.routes.followup_vendedor_api import router as followup_vendedor_router
 app.include_router(followup_vendedor_router)
@@ -165,6 +166,7 @@ def normalizar_telefone_crm(telefone: str | None) -> str | None:
 class MensagemRequest(BaseModel):
     _conexao_waha_id: int | None = PrivateAttr(default=None)
     _sessao_waha: str | None = PrivateAttr(default=None)
+    _citacao_waha: str | None = PrivateAttr(default=None)
     empresa_id: int = Field(default=1, ge=1)
     nome: str | None = None
     telefone: str | None = None
@@ -592,6 +594,7 @@ def receber_mensagem(dados: MensagemRequest):
             mensagem_id_externo=dados.mensagem_id_externo,
             retornar_id=True,
             conexao_canal_id=dados._conexao_waha_id, sessao_waha=dados._sessao_waha,
+            central_resposta_waha=dados._citacao_waha,
         )
 
         if resultado_persistencia == "erro":
@@ -1421,6 +1424,17 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
         flush=True,
     )
 
+    from app.services.waha_identificadores import chat_canonico, chat_no_id_mensagem
+
+    if autenticado is True and evento in ("message", "message.any") and mensagem.get("fromMe") is True:
+        mensagem = dict(mensagem)
+        if not mensagem.get("to") and not mensagem.get("chatId"):
+            mensagem["to"] = chat_no_id_mensagem(mensagem_id, True)
+        for campo in ("to", "chatId"):
+            if campo in mensagem:
+                mensagem[campo] = chat_canonico(mensagem[campo])
+        payload = {**payload, "payload": mensagem}
+
     grupo = mensagem.get("to" if mensagem.get("fromMe") is True else "from")
     if isinstance(grupo, str) and grupo.endswith("@g.us"):
         if autenticado is not True or evento not in ("message", "message.any"):
@@ -1513,6 +1527,8 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
 
     texto = mensagem.get("body") if evento != "message.reaction" else None
     chat_id = mensagem.get("from")
+    if autenticado is True:
+        chat_id = chat_canonico(chat_id)
     nome = dados_internos.get("notifyName") or mensagem.get("pushName") or dados_internos.get("pushName")
     nome = nome.strip()[:150] if isinstance(nome, str) and nome.strip() else None
 
@@ -1721,7 +1737,10 @@ def processar_webhook_waha(payload: dict, autenticado: bool):
     )
     if autenticado is True:
         dados._conexao_waha_id = conexao_id
+        from app.services.central_whatsapp_citacoes import extrair_citacao_waha
+
         dados._sessao_waha = sessao
+        dados._citacao_waha = extrair_citacao_waha(mensagem, chat_id)
 
     resultado = receber_mensagem(dados)
 

@@ -216,3 +216,71 @@ Resultado local do benchmark sintético no schema validado: 240 ciclos, mediana 
 - Grupos de texto exigem uma autorização explícita. Configure `ORION_WAHA_GRUPOS_AUTORIZADOS` no backend, por exemplo `{"orion-waha:piloto:default":{"123456789@g.us":"Grupo comercial piloto"}}`. Use a chave interna da sessão cadastrada. A recepção exige webhook assinado, identificação individual do participante e conexão ativa, não institucional. A Central grava a conversa no escopo dessa conexão, sem chamar Sofia ou Follow-up. As permissões comerciais existentes controlam o acesso e envio. Não habilitar grupos particulares. Homologar no digest instalado o campo de participante e a origem de envios pelo celular. O piloto cobre texto e não implementa importação histórica de grupos, administração de membros ou confirmação de leitura por participante.
 - A migração `20261201_central_eventos_antecipados.sql` segue a de `20261130`. Ela cria uma fila por conexão e identificador WAHA para edições, revogações e reações assinadas. A aplicação consome os eventos ao registrar o alvo ou confirmar o ID de envio. Revogação impede que edições atrasadas recriem o conteúdo. A retenção de sete dias é avaliada no consumo e na limpeza durante a chegada de eventos à conexão.
 - Em homologação, validar grupos em conexão comercial isolada, eventos antecipados e atraso da WAHA, além de ACKs, rascunho e rolagem em navegador. Para rollback da interface, selecionar a Central clássica. Preservar a tabela aditiva durante a reversão do backend e desconfigurar o piloto de grupos conforme a janela operacional.
+## Revisão da Central integrada ao Streamlit
+
+O modo React ocupa a área útil da aba Central e mantém a navegação lateral. Histórico comercial e gestão de conexões têm abas próprias. O retorno administrativo usa `ORION_CENTRAL_UI_URL` vazio no dashboard. Reinicie somente o processo autorizado a receber essa configuração. As flags de envio, Store ou mídia permanecem independentes do frontend.
+
+### Piloto de produção com autorização
+
+1. Registre SHA, versões, digest e engine da WAHA e faça backup verificável da configuração, do volume de sessão e do banco. Confira `WORKING`, número verificado e Store na própria sessão por consulta autorizada. Evite reconfigurar a sessão institucional da Forway.
+2. Para o piloto, prefira sessão comercial separada. Habilite NOWEB Store antes do pareamento se ainda não estiver habilitado. A WAHA alerta que mudar a configuração do Store com sessão já pareada pode perder dados locais do histórico. Avalie backup, compatibilidade e janela antes de qualquer alteração. Um novo QR só é necessário se o provedor exigir nova autenticação.
+3. A sincronização pós-pareamento utiliza o escopo comercial configurado abaixo, sem chamar a Sofia ou o Follow-up. A importação individual continua disponível para sessões que já estão pareadas.
+4. Habilite em janela autorizada as flags separadamente conforme a necessidade: `ORION_WAHA_CONTATOS_ATIVO`, `ORION_WAHA_HISTORICO_ATIVO`, `ORION_CENTRAL_WHATSAPP_MIDIA_ATIVA` e `ORION_CENTRAL_WHATSAPP_ENVIO_ATIVO`. As flags são por processo. Para ativar envio sem ampliar o acesso em uma instalação compartilhada, use um ambiente de homologação isolado ou confirme o impacto para todas as conexões liberadas antes da janela.
+5. Confirme no PostgreSQL o fuso configurado pela empresa. Para a Forway, a referência esperada é `America/Fortaleza`. A Central usa o fuso lido da empresa autenticada. Os timestamps de mensagem persistidos sem offset seguem a convenção UTC.
+6. Use o Node do `.nvmrc`, `npm ci`, `npm audit` e `npm run build` antes de disponibilizar o bundle ao FastAPI. Verifique SSE sem buffering no proxy e teste em 1366×768, 1920×1080 e mobile. Desative a URL da Central React para voltar à clássica. Em caso de problema operacional, desative primeiro a flag afetada. Preserve volumes, histórico, vínculos de sessão e reservas de números.
+
+### Teste local da página Streamlit
+
+Com a dependência Streamlit instalada no venv e Edge disponível, defina `ORION_TEST_PYTHON` como o executável do Python do venv, entre em `dashboard/central_ui` e execute `npm run build` e `npm exec -- playwright test --config=playwright.streamlit.config.ts`. O teste carrega o renderizador real da página Conversas no Streamlit com sessão e API fictícias, sem o fluxo de login de produção.
+## Sincronização comercial paginada
+
+O operador escolhe o escopo de uma destas formas. Em uma conta mista, configure `ORION_WAHA_PAREAMENTO_CONTATOS` com IDs explícitos por sessão, sem teto de dez. Para uma conta dedicada cujo conteúdo inteiro foi autorizado, inclua a chave interna da sessão na lista JSON `ORION_WAHA_CATALOGO_COMERCIAL`. A WAHA não classifica automaticamente o que é particular ou comercial. Mesmo em uma conta dedicada, grupos exigem entrada em `ORION_WAHA_GRUPOS_AUTORIZADOS`. A confirmação do número verificado dispara a tarefa. Para sessões existentes, a gestão oferece **Sincronizar escopo comercial autorizado**, sem alterar o pareamento.
+
+A tarefa usa a conexão comercial ativa e verificada e busca o catálogo NOWEB em páginas de 100 chats. Importa a primeira página de cada conversa autorizada, usando transações separadas. Uma nova solicitação percorre o catálogo novamente e deduplica o histórico. Na Central, abrir a conversa importa a página recente quando habilitado. Ao subir no histórico, o CRM consulta suas páginas locais e, quando necessário, avança o cursor de páginas do provedor. A data de corte é fixada ao abrir o chat para limitar a interferência de mensagens novas. Nenhuma importação passa pelo pipeline da Sofia ou do Follow-up.
+
+| Finalidade | Contrato NOWEB exigido |
+| --- | --- |
+| Confirmar compatibilidade | `GET /api/sessions/{session}`, estado WORKING, engine NOWEB e `config.noweb.store.enabled=true` |
+| Agenda e busca | `GET /api/contacts/all?session=…&limit=…&offset=…` e `GET /api/contacts?contactId=…&session=…` |
+| Catálogo autorizado | `GET /api/{session}/chats?limit=100&offset=…&sortBy=id&sortOrder=asc` |
+| Histórico paginado | `GET /api/{session}/chats/{chatId}/messages` com `limit`, `offset`, `filter.timestamp.lte` e `downloadMedia` |
+| Fotos | `GET /api/contacts/profile-picture` ou `GET /api/{session}/chats/{chatId}/picture`; proxy autenticado no CRM |
+| Eventos novos | Webhooks assinados `message` e `message.any`; para saídas do celular ou WhatsApp Web, homologar `fromMe`, `source` e o ID real da versão instalada |
+
+Use `ORION_WAHA_HISTORICO_ATIVO` para histórico e `ORION_WAHA_CONTATOS_ATIVO` para a agenda. Com mídia habilitada, a paginação pode recuperar anexos validados pelo mesmo armazenamento protegido da Central. Respeite a disponibilidade de mídia na WAHA, os limites por arquivo e a expiração no WhatsApp. Confirme nomes reais e o vínculo de LID no provedor. LID isolado não é telefone. O NOWEB Store depende dos dados recebidos no pareamento e não dá garantia de acervo completo. O parâmetro `fullSync` e a habilitação do Store devem ser avaliados em uma sessão piloto antes de parear. Não alterar a engine ou os volumes da Sofia para testar a Central. Em sessões já pareadas com Store desligado, a alternativa é manter sincronização prospectiva por webhook ou homologar uma conexão comercial separada com Store ativado. Uma sessão armazenada externa pode ser avaliada em laboratório somente mediante autorização e com outro número.
+
+A paginação com offset depende da estabilidade da janela do provedor. A data de corte e a deduplicação reduzem efeitos de mensagens novas. Revogações e mudanças no Store durante o percurso podem exigir nova consulta.
+
+## Contrato NOWEB observado no piloto
+
+A sessão de teste ficou em `WORKING` com `noweb.store.enabled=true` e `noweb.store.fullSync=true`. A WAHA retornou 100 contatos na primeira página, 34 conversas (28 individuais e 6 grupos), 20 mensagens em um histórico individual (11 enviadas e 9 recebidas) e 20 recebidas em um grupo. Esses resultados demonstram as consultas do Store.
+
+- Instâncias comerciais devem usar NOWEB e armazenamento persistente. A criação pelo CRM grava `config.noweb.store.enabled` e `config.noweb.store.fullSync` antes de iniciar a sessão e gerar o QR. Validar a configuração efetiva em `GET /api/sessions/{sessao}` antes do primeiro pareamento. Sessões existentes, incluindo a institucional, conservam sua configuração.
+- `GET /api/contacts/all` fornece `id`, `name`, `lid` e `phoneNumber`. `GET /api/{sessao}/chats` usa `@s.whatsapp.net` para conversas individuais e `@g.us` para grupos. O histórico é recuperado em `GET /api/{sessao}/chats/{chatId}/messages`, com paginação e `downloadMedia` condicionado à flag de mídia.
+- Autorizar o catálogo completo por sessão lógica em `ORION_WAHA_CATALOGO_COMERCIAL` somente para contas de uso exclusivamente comercial. Em sessões mistas, selecionar os contatos com `ORION_WAHA_PAREAMENTO_CONTATOS` e os grupos com `ORION_WAHA_GRUPOS_AUTORIZADOS`. Validar que um vendedor sem vínculo não acesse o catálogo, as fotos ou o histórico.
+- Homologar no piloto as mensagens do celular, WhatsApp Web e CRM, ACKs, grupos autorizados, histórico após interrupção, mídia e regressão da Sofia e do Follow-up. Histórico, fotos e mídias continuam sujeitos ao acervo disponível no provedor.
+
+## Sincronização durável
+
+O FastAPI inicia o worker quando `ORION_WAHA_HISTORICO_ATIVO=1`. O pareamento grava a tarefa na mesma transação que confirma o número. O worker também encontra conexões comerciais elegíveis já pareadas e segue com o CRM fechado. A sessão precisa estar em `WORKING`, usar NOWEB Store e devolver o número reservado pelo CRM. As regras de autorização por sessão e grupo continuam obrigatórias.
+
+`central_sync_noweb` guarda a próxima execução, o cursor do catálogo e da página de mensagens, as falhas, o código de diagnóstico e o último ciclo concluído. `central_sync_noweb_chats` guarda a data de corte concluída por chat. O progresso e as mensagens são confirmados juntos. Uma falha reverte a página em curso. Um bloqueio transacional no PostgreSQL limita a execução a uma página por vez mesmo com vários processos FastAPI.
+
+Cada ciclo revisita o catálogo autorizado e consulta o histórico desde o último corte concluído de cada chat, com 15 minutos de sobreposição. Chats novos recebem a primeira importação completa disponível. Uma revisão completa semanal por chat busca mensagens que chegaram tardiamente ao Store. O ciclo concluído volta à fila após cinco minutos. Falhas transitórias são repetidas com intervalo de 10 segundos a 15 minutos. Identidades ambíguas ou contatos sem confirmação exigida ficam registrados como ignorados no ciclo. O worker importa pelo caminho histórico. O histórico operacional continua no PostgreSQL, com atualizações via SSE.
+
+Para diagnóstico, consultar `conexao_id`, `empresa_id`, `executar_em`, `ultimo_sucesso`, `falhas` e `erro` na tabela de sincronização. O cursor contém identificadores de chats comerciais e deve ficar restrito à operação autorizada.
+
+### Publicação e retorno
+
+1. Fazer backup verificável do PostgreSQL e confirmar as migrações até `20261201_central_eventos_antecipados.sql`.
+2. Em janela autorizada, aplicar `20261202_central_sync_noweb.sql` com `psql -v ON_ERROR_STOP=1 -f backend/migrations/20261202_central_sync_noweb.sql` usando a conexão administrativa já configurada. A migração cria tabelas e índice, sem alteração nos registros existentes.
+3. Publicar o backend e manter a flag desligada até validar o escopo de cada sessão lógica. Manter a configuração e os volumes da sessão institucional. Para empacotar o frontend existente, usar `npm ci` e `npm run build` em `dashboard/central_ui`.
+4. Ativar a flag no piloto e parear uma conta comercial NOWEB autorizada. Fechar o CRM, interromper temporariamente backend e WAHA em momentos distintos, enviar mensagens entre dispositivos de homologação na janela autorizada e confirmar progresso, retomada, deduplicação e isolamento. Validar a paginação do digest instalado e a disponibilidade de mídia.
+5. Para interromper a sincronização, desativar `ORION_WAHA_HISTORICO_ATIVO` e reciclar o backend na janela autorizada. Preservar as tabelas de progresso para retomada. Em rollback do código, manter a flag desligada para evitar reativar o importador anterior.
+
+### Referências de arquitetura
+
+- A transferência inicial, o armazenamento local e a atualização contínua são responsabilidades distintas no desenho multi-device. [Engenharia da Meta](https://engineering.fb.com/2021/07/14/security/whatsapp-multi-device/)
+- O tratamento de eventos em segundo plano, a exclusão mútua por escopo e as retentativas são padrões adotados pelo Chatwoot. [Job de eventos WhatsApp do Chatwoot](https://github.com/chatwoot/chatwoot/blob/develop/app/jobs/webhooks/whatsapp_events_job.rb)
+- A configuração do Store, os contratos HTTP e as janelas paginadas são referências da integração existente. [WAHA CORE, sessão NOWEB](https://github.com/devlikeapro/waha/blob/core/src/core/engines/noweb/session.noweb.core.ts), [NOWEB Store](https://waha.devlike.pro/docs/engines/noweb/), [API de chats](https://waha.devlike.pro/docs/how-to/chats/)
+- O histórico inicial e o relacionamento entre LID e PN permanecem conceitos distintos. O Orion usa somente vínculos devolvidos pela sessão e mantém os IDs originais do provedor. [Histórico do Baileys](https://github.com/WhiskeySockets/Baileys/blob/master/src/Utils/history.ts), [Mapeamento LID do Baileys](https://github.com/WhiskeySockets/Baileys/blob/master/src/Signal/lid-mapping.ts)

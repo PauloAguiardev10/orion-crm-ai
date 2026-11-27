@@ -7,6 +7,13 @@ import requests
 from app.services.waha_destino import PREFIXO, ConfiguracaoWahaInvalida, resolver_waha
 
 
+def extrair_numero_conta(dados):
+    conta = dados.get("id") if isinstance(dados, dict) else None
+    numero = re.fullmatch(r"([0-9]{5,20})(?::[0-9]+)?@(?:c\.us|s\.whatsapp\.net)", conta or "") \
+        if isinstance(conta, str) else None
+    return numero[1] if numero else None
+
+
 class ErroGestaoWaha(Exception):
     def __init__(self, motivo, status=503):
         super().__init__(motivo)
@@ -89,11 +96,8 @@ class TransporteGestaoWaha:
                 eu = self._requisitar("GET", f"/api/sessions/{quote(sessao, safe='')}/me")
             except ErroGestaoWaha:
                 eu = None
-        conta = eu.get("id") if isinstance(eu, dict) else None
-        numero = re.fullmatch(r"([0-9]{5,20})(?::[0-9]+)?@(?:c\.us|s\.whatsapp\.net)", conta or "") \
-            if isinstance(conta, str) else None
         return {"estado": estado if isinstance(estado, str) and estado in estados else "DESCONHECIDO",
-                "numero": numero[1] if numero else None}
+                "numero": extrair_numero_conta(eu)}
 
     def criar(self, sessao):
         sessao = self._sessao_fisica(sessao)
@@ -108,7 +112,10 @@ class TransporteGestaoWaha:
             raise ErroGestaoWaha("webhook_waha_nao_configurado")
         self._requisitar("POST", "/api/sessions", corpo={
             "name": sessao, "start": False,
-            "config": {"metadata": {"orionSessao": self.sessao or sessao}, "webhooks": [{
+            "config": {"metadata": {"orionSessao": self.sessao or sessao},
+                       **({"noweb": {"store": {"enabled": True, "fullSync": True}}}
+                          if self.sessao and self.sessao.startswith(PREFIXO) else {}),
+                       "webhooks": [{
                 "url": webhook, "hmac": {"key": chave},
                 "events": ["message", "message.any", "message.reaction", "message.ack", "message.edited", "message.revoked",
                            *(["presence.update"] if os.getenv("ORION_WAHA_PRESENCA_ATIVA") == "1" else [])],

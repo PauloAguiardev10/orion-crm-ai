@@ -705,25 +705,56 @@ def render_compositor(conversa, mensagens, *, usuario_id, empresa_id):
                                 )
 
 
+def central_react_disponivel():
+    return bool(os.getenv("ORION_CENTRAL_UI_URL", "").strip() and st.session_state.get("token_central"))
+
+
 def render_conversas(leads):
-    render_conexoes_whatsapp()
-    central, comercial = st.tabs(
-        ["Central WhatsApp", "Histórico comercial"], key="orion_wa_aba", on_change="rerun",
-    )
+    if not central_react_disponivel():
+        render_conexoes_whatsapp()
+        central, comercial = st.tabs(["Central WhatsApp", "Histórico comercial"],
+                                     key="orion_wa_aba", on_change="rerun")
+        if central.open:
+            with central:
+                st.fragment(run_every=10)(render_central_whatsapp)()
+        if comercial.open:
+            with comercial:
+                render_historico_comercial(leads)
+        return
+
+    central, comercial, gestao = st.tabs(["Central WhatsApp", "Histórico comercial", "Conexões"],
+                                        key="orion_wa_abas_react", on_change="rerun")
     if central.open:
         with central:
-            pausar = st.toggle("Pausar atualiza??es autom?ticas", key="central_pausar_atualizacoes")
-            url_central = os.getenv("ORION_CENTRAL_UI_URL", "").strip()
-            token = st.session_state.get("token_central")
-            if url_central and token and not pausar and not st.toggle("Usar Central classica"):
-                central = components.declare_component("orion_central_whatsapp", url=url_central)
-                central(token=token, empresa=st.session_state.get("empresa_ativa_id"),
-                        usuario=st.session_state.get("usuario_id"), key="orion_central_react")
-            else:
-                st.fragment(run_every=None if pausar else 10)(render_central_whatsapp)()
+            st.markdown("""
+<style>
+.stMain:has(.st-key-orion_central_area) {overflow:hidden}
+.stMainBlockContainer:has(.st-key-orion_central_area) {
+  padding: 0 .6rem 0 !important; max-width:none; box-sizing:border-box;
+}
+.st-key-orion_central_area iframe {
+  display:block; width:100%; height:calc(100dvh - 6rem) !important;
+  border:0;
+}
+@media(max-width:720px) {
+  .stMainBlockContainer:has(.st-key-orion_central_area) {padding:0 .2rem 0 !important}
+  .st-key-orion_central_area iframe {height:calc(100dvh - 6rem) !important}
+}
+</style>
+""", unsafe_allow_html=True)
+            with st.container(key="orion_central_area"):
+                componente = components.declare_component(
+                    "orion_central_whatsapp", url=os.getenv("ORION_CENTRAL_UI_URL").strip(),
+                )
+                componente(token=st.session_state["token_central"],
+                           empresa=st.session_state.get("empresa_ativa_id"),
+                           usuario=st.session_state.get("usuario_id"), key="orion_central_react")
     if comercial.open:
         with comercial:
             render_historico_comercial(leads)
+    if gestao.open:
+        with gestao:
+            render_conexoes_whatsapp()
 
 
 def render_historico_comercial(leads):

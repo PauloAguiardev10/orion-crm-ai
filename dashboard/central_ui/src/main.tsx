@@ -1,20 +1,30 @@
 import {useEffect, useLayoutEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 import {aplicar, consumir, ErroApi, json, request, type Auth, type Delta} from "./api";
-import logo from "../../assets/logo_orion.png";
 import "./style.css";
 import {EstadoMensagem, Icone} from "./icones";
 
 type Chat = {id:number; nome?:string; telefone?:string; identificador:string; ultima_mensagem?:string; atualizado_em?:string; ultima_recebida_id?:number; ultima_lida_id?:number; nao_lidas?:number; central_arquivada?:boolean; digitando?:boolean; pode_assumir?:boolean; pode_supervisionar?:boolean; sofia_institucional?:boolean; operacao_suspensa?:boolean; humano_assumiu?:boolean; especialista_id?:number; responsavel_nome?:string; conexao_canal_id?:number; status_atendimento?:string};
-type Mensagem = {id:number; texto?:string; autor_nome?:string; remetente?:string; criado_em?:string; from_me?:boolean; status_envio?:string; status_processamento?:string; participante?:string; tipo?:string; central_eventos?:Record<string,{texto?:string}>; tem_anexo?:boolean; midia_tipo?:string};
+type Mensagem = {id:number; texto?:string; autor_nome?:string; remetente?:string; criado_em?:string; from_me?:boolean; status_envio?:string; status_processamento?:string; participante?:string; encaminhada?:boolean; citacao?:string; tipo?:string; central_eventos?:Record<string,{texto?:string}>; tem_anexo?:boolean; midia_tipo?:string};
 type Contato = {id:string; nome?:string; telefone?:string};
 type Conexao = {id:number; nome:string};
 type Detalhes = Record<string, string|number|null>;
 const emojis = ["😀","🙂","👍","🙏","❤️","🎉","✅","👋","😊","🙌","🤝","📎"];
-const nome = (c: Chat) => c.nome || c.telefone || (c.identificador.endsWith("@c.us") ? c.identificador.split("@")[0] : "Contato WhatsApp");
-const hora = (data?:string) => data && !Number.isNaN(Date.parse(data)) ? new Date(data).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "";
-const dia = (data?:string) => data && !Number.isNaN(Date.parse(data))
-  ? new Intl.DateTimeFormat("pt-BR",{dateStyle:"long"}).format(new Date(data)) : "";
+const telefoneVerificado=(valor:unknown)=>typeof valor==="string"&&/^\+?[1-9]\d{7,14}$/.test(valor)?valor:"";
+const formatarTelefone=(valor:string)=>{
+  const digitos=valor.replace(/^\+/,"");
+  const br=/^55(\d{2})(\d{4,5})(\d{4})$/.exec(digitos);
+  return br?"+55 ("+br[1]+") "+br[2]+"-"+br[3]:digitos?"+"+digitos:"";
+};
+const telefoneConversa=(c:Chat)=>telefoneVerificado(c.telefone)||
+  (c.identificador.endsWith("@c.us")?telefoneVerificado(c.identificador.split("@")[0]):"");
+const nome=(c:Chat)=>(c.nome&&!/@(?:lid|c\.us|g\.us)$/i.test(c.nome)?c.nome:"")
+  ||telefoneConversa(c)||(c.identificador.endsWith("@g.us")?"Grupo WhatsApp":"Contato WhatsApp");
+function dataServidor(valor?:string){
+  if(!valor) return null;
+  const data=new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(valor)?valor:valor+"Z");
+  return Number.isNaN(data.getTime())?null:data;
+}
 const atendimento:Record<string,string> = {aguardando_humano:"Aguardando atendimento",em_atendimento_humano:"Em atendimento",em_atendimento_ia:"Atendimento pela Sofia",finalizado:"Encerrado"};
 const post = (body: unknown): RequestInit => ({method:"POST", body:JSON.stringify(body)});
 
@@ -69,6 +79,19 @@ function Central({auth}:{auth:Auth}) {
   const [anteriores,setAnteriores]=useState<Mensagem[]>([]);
   const [online,setOnline]=useState(false);
   const [erro,setErro]=useState("");
+  const [fuso,setFuso]=useState("America/Sao_Paulo");
+  const [envioHabilitado,setEnvioHabilitado]=useState<boolean|null>(null);
+  const [importacaoHabilitada,setImportacaoHabilitada]=useState(false);
+  const [historicoProgressivo,setHistoricoProgressivo]=useState(false);
+  const cursorHistorico=useRef<{id:number|null;proxima:number|null;ate:number;ocupado:boolean;localEsgotado:boolean}>({id:null,proxima:0,ate:0,ocupado:false,localEsgotado:false});
+  const ancora=useRef<{id:number;altura:number;top:number}|null>(null);
+  const [categoria,setCategoria]=useState("tudo");
+  const formatar=(valor:string|undefined,opcoes:Intl.DateTimeFormatOptions)=>{
+    const data=dataServidor(valor);
+    return data?new Intl.DateTimeFormat("pt-BR",{...opcoes,timeZone:fuso}).format(data):"";
+  };
+  const hora=(valor?:string)=>formatar(valor,{hour:"2-digit",minute:"2-digit"});
+  const dia=(valor?:string)=>formatar(valor,{dateStyle:"long"});
   const [busca,setBusca]=useState("");
   const [verArquivo,setVerArquivo]=useState(false);
   const [presencaHabilitada,setPresencaHabilitada]=useState(false);
@@ -111,8 +134,13 @@ function Central({auth}:{auth:Auth}) {
 
   useEffect(()=>{
     const ctrl=new AbortController();
-    void json<{acoes_mensagem:boolean;arquivo:boolean;presenca:boolean}>(auth,"/capacidades",{signal:ctrl.signal})
-      .then(v=>{if(!ctrl.signal.aborted){setAcoesHabilitadas(v.acoes_mensagem);setArquivoHabilitado(v.arquivo);setPresencaHabilitada(v.presenca);}}).catch(()=>undefined);
+    void json<{timezone:string}>(auth,"/contexto-ui",{signal:ctrl.signal}).then(v=>{
+      if(ctrl.signal.aborted)return;
+      new Intl.DateTimeFormat("pt-BR",{timeZone:v.timezone});
+      setFuso(v.timezone);
+    }).catch(()=>undefined);
+    void json<{acoes_mensagem:boolean;arquivo:boolean;presenca:boolean;envio:boolean;historico:boolean;historico_progressivo?:boolean}>(auth,"/capacidades",{signal:ctrl.signal})
+      .then(v=>{if(!ctrl.signal.aborted){setAcoesHabilitadas(v.acoes_mensagem);setArquivoHabilitado(v.arquivo);setPresencaHabilitada(v.presenca);setEnvioHabilitado(v.envio);setImportacaoHabilitada(v.historico);setHistoricoProgressivo(v.historico_progressivo===true);}}).catch(()=>undefined);
     return ()=>ctrl.abort();
   },[auth]);
   useEffect(()=>{
@@ -166,6 +194,10 @@ function Central({auth}:{auth:Auth}) {
       const salva=sessionStorage.getItem(`${escopo}.scroll.${selecionada}`);
       el.scrollTop=salva===null ? el.scrollHeight : Number(salva);
       posicao.current={chat:selecionada,top:el.scrollTop,fundo:el.scrollHeight-el.scrollTop-el.clientHeight<35};
+    } else if(ancora.current?.id===selecionada){
+      el.scrollTop=ancora.current.top+el.scrollHeight-ancora.current.altura;
+      posicao.current={chat:selecionada,top:el.scrollTop,fundo:false};
+      ancora.current=null;
     } else el.scrollTop=posicao.current.fundo ? el.scrollHeight : posicao.current.top;
   },[mensagens,anteriores,selecionada,escopo,chat?.id]);
   useEffect(()=>{
@@ -175,13 +207,77 @@ function Central({auth}:{auth:Auth}) {
   },[auth,selecionada,mensagens,chat?.ultima_lida_id]);
   useEffect(()=>{
     if(!painel||!selecionada) return;
-    const abortar=new AbortController(); let url="";
-    setDetalhes({});setFoto("");setAtendentes([]);setDestino(0);
+    const abortar=new AbortController();
+    setDetalhes({});setAtendentes([]);setDestino(0);
     void json<Conexao[]>(auth,"/atendentes",{signal:abortar.signal}).then(v=>{if(!abortar.signal.aborted)setAtendentes(v);}).catch(()=>undefined);
     void json<Detalhes>(auth,`/conversas/${selecionada}/detalhes`,{signal:abortar.signal}).then(v=>{if(!abortar.signal.aborted)setDetalhes(v);}).catch(()=>undefined);
+    return ()=>abortar.abort();
+  },[auth,painel,selecionada]);
+  useEffect(()=>{
+    setFoto("");
+    if(!selecionada)return;
+    const abortar=new AbortController(); let url="";
     void request(auth,`/conversas/${selecionada}/foto`,{signal:abortar.signal}).then(r=>r.blob()).then(b=>{if(!abortar.signal.aborted){url=URL.createObjectURL(b);setFoto(url);}}).catch(()=>undefined);
     return ()=>{abortar.abort();if(url)URL.revokeObjectURL(url);};
-  },[auth,painel,selecionada]);
+  },[auth,selecionada]);
+
+  useEffect(()=>{
+    const cursor={id:selecionada,proxima:0 as number|null,ate:Math.floor(Date.now()/1000),ocupado:false,localEsgotado:false};
+    cursorHistorico.current=cursor;
+    ancora.current=null;
+    if(!historicoProgressivo||!selecionada)return;
+    const ctrl=new AbortController();
+    let timer:number|undefined;
+    let espera=1500;
+    async function importar(){
+      if(ctrl.signal.aborted||cursor.proxima!==0||cursor.ocupado)return;
+      cursor.ocupado=true;
+      try {
+        const pagina=await json<{proxima:number|null}>(auth,"/conversas/"+selecionada+"/historico-noweb?ate="+cursor.ate,
+          {method:"POST",signal:ctrl.signal});
+        cursor.proxima=pagina.proxima;
+      } catch(erro) {
+        if(ctrl.signal.aborted)return;
+        const indisponivel=erro instanceof ErroApi && erro.status===409 && erro.message==="historico_noweb_indisponivel";
+        if(erro instanceof ErroApi && erro.status<500 && erro.status!==429&&!indisponivel){
+          cursor.proxima=null;
+        } else {
+          timer=window.setTimeout(importar,espera);
+          espera=Math.min(30000,espera*2);
+        }
+      } finally {
+        cursor.ocupado=false;
+      }
+    }
+    void importar();
+    return ()=>{ctrl.abort();window.clearTimeout(timer);};
+  },[auth,selecionada,historicoProgressivo]);
+
+  async function carregarAnteriores(){
+    const cursor=cursorHistorico.current;
+    if(!selecionada||cursor.id!==selecionada||cursor.ocupado)return;
+    const id=selecionada;
+    const anterior=mensagensVisiveis[0]?.id;
+    if(!anterior&&(!historicoProgressivo||cursor.proxima===null))return;
+    cursor.ocupado=true;
+    const rota="/conversas/"+id;
+    const consultar=()=>json<Mensagem[]>(auth,rota+"/mensagens?limite=50"+(anterior?"&antes_id="+anterior:""));
+    try{
+      let lote=cursor.localEsgotado?[]:await consultar();
+      cursor.localEsgotado=lote.length<50;
+      if(!lote.length&&historicoProgressivo&&cursor.proxima!==null&&cursorHistorico.current===cursor){
+        const pagina=await json<{proxima:number|null}>(auth,rota+"/historico-noweb?ate="+cursor.ate+"&deslocamento="+cursor.proxima,{method:"POST"});
+        cursor.proxima=pagina.proxima;
+        lote=await consultar();
+      }
+      const el=historico.current;
+      if(cursorHistorico.current!==cursor||!lote.length||!el)return;
+      ancora.current={id,top:el.scrollTop,altura:el.scrollHeight};
+      setAnteriores(a=>[...lote,...a]);
+      if(lote.length)cursor.localEsgotado=false;
+    }catch(e){if(cursorHistorico.current===cursor)setErro(String(e));}
+    finally{cursor.ocupado=false;}
+  }
 
   function abrir(id:number|null){
     if(selecionada===id) return;
@@ -265,13 +361,16 @@ function Central({auth}:{auth:Auth}) {
   }
 
   return <main className={`central ${chat?"aberta":""} ${painel?"com-ficha":""}`}>
-    <nav className="barra" aria-label="Central"><img src={logo} alt="Orion Systems"/><span className={online?"online":"offline"}>{online?"Ao vivo":"Reconectando"}</span></nav>
     <aside className="lista">
-      <header><h1>Conversas</h1><button onClick={async()=>{
+      <header><div><h1>Conversas</h1><span className={"conexao-status "+(online?"online":"offline")}>{online?"Ao vivo":"Reconectando"}</span></div><button onClick={async()=>{
         setNova(v=>!v);
         if(!nova) try{setConexoes(await json(auth,"/conversas/iniciar"));}catch(e){setErro(String(e));}
       }}><Icone nome="nova"/> Nova conversa</button></header>
       <input aria-label="Pesquisar conversas" placeholder="Pesquisar nome ou telefone" value={busca} onChange={e=>setBusca(e.target.value)}/>
+      <div className="categorias" aria-label="Categorias de conversas">
+        {[["tudo","Tudo"],["nao-lidas","Não lidas"],["favoritas","Favoritas"],["grupos","Grupos"]].map(([id,rotulo])=>
+          <button key={id} aria-pressed={categoria===id} onClick={()=>setCategoria(id)}>{rotulo}</button>)}
+      </div>
       <select aria-label="Filtrar atendimentos" value={filtro} onChange={e=>setFiltro(e.target.value)}>
         <option value="">Todos os atendimentos</option><option value="em_atendimento_humano">Em atendimento</option><option value="aguardando_humano">Aguardando</option><option value="finalizado">Encerrados</option>
       </select>
@@ -287,7 +386,11 @@ function Central({auth}:{auth:Auth}) {
         </div>)}
       </section>}
       <div className="linhas">
-      {[...lista].sort((a,b)=>Number(fixadas.includes(b.id))-Number(fixadas.includes(a.id))).filter(c=>(!arquivoHabilitado||Boolean(c.central_arquivada)===verArquivo)&&(!filtro||c.status_atendimento===filtro)&&`${nome(c)} ${c.telefone||""}`.toLowerCase().includes(busca.toLowerCase())).map(c=>
+      {[...lista].sort((a,b)=>Number(fixadas.includes(b.id))-Number(fixadas.includes(a.id))).filter(c=>(categoria==="tudo"
+        ||categoria==="nao-lidas"&&(c.ultima_recebida_id||0)>(c.ultima_lida_id||0)
+        ||categoria==="favoritas"&&fixadas.includes(c.id)
+        ||categoria==="grupos"&&c.identificador.endsWith("@g.us"))
+        &&(!arquivoHabilitado||Boolean(c.central_arquivada)===verArquivo)&&(!filtro||c.status_atendimento===filtro)&&`${nome(c)} ${telefoneConversa(c)}`.toLowerCase().includes(busca.toLowerCase())).map(c=>
         <button className={`linha ${selecionada===c.id?"selecionada":""}`} key={c.id} onClick={()=>abrir(c.id)}>
           <span className="avatar">{nome(c).slice(0,2).toUpperCase()}</span><span className="resumo"><strong>{fixadas.includes(c.id)&&<span className="pin" title="Fixada neste navegador"><Icone nome="pino"/></span>}{nome(c)}</strong><small>{c.ultima_mensagem||"Conversa WhatsApp"}</small></span>
           <span className="linha-meta">{hora(c.atualizado_em)}{(c.ultima_recebida_id||0)>(c.ultima_lida_id||0)&&<b aria-label="Mensagens não lidas">{c.nao_lidas||"●"}</b>}</span>
@@ -296,35 +399,37 @@ function Central({auth}:{auth:Auth}) {
     </aside>
     <section className="chat">
       {erro&&<div className="alerta" role="status">{erro}<button aria-label="Dispensar aviso" onClick={()=>setErro("")}>×</button></div>}
-      {!chat?<div className="vazio"><img src={logo} alt="Orion Systems"/><p>Selecione uma conversa para começar.</p></div>:<>
-        <header><button className="voltar" onClick={()=>abrir(null)}>Voltar</button><div><strong>{nome(chat)}</strong><small>{chat.digitando?"Digitando…":chat.telefone||chat.responsavel_nome||""}</small></div><button className="fixar-chat" aria-label={fixadas.includes(chat.id)?"Desafixar neste navegador":"Fixar neste navegador"} title="Preferência interna deste navegador" aria-pressed={fixadas.includes(chat.id)} onClick={()=>setFixadas(a=>a.includes(chat.id)?a.filter(id=>id!==chat.id):[...a,chat.id])}><Icone nome="pino"/></button><button aria-expanded={painel} onClick={()=>setPainel(p=>!p)}>Informações</button></header>
+      {!chat?<div className="vazio"><p>Selecione uma conversa para começar.</p></div>:<>
+        <header><button className="voltar" onClick={()=>abrir(null)}>Voltar</button><div className="cabecalho-contato">{foto?<img className="avatar" alt="" src={foto}/>:<span className="avatar">{nome(chat).slice(0,2).toUpperCase()}</span>}<div><strong>{nome(chat)}</strong><small>{chat.digitando?"Digitando…":formatarTelefone(telefoneConversa(chat))||chat.responsavel_nome||""}</small></div></div><button className="fixar-chat" aria-label={fixadas.includes(chat.id)?"Desafixar neste navegador":"Fixar neste navegador"} title="Preferência interna deste navegador" aria-pressed={fixadas.includes(chat.id)} onClick={()=>setFixadas(a=>a.includes(chat.id)?a.filter(id=>id!==chat.id):[...a,chat.id])}><Icone nome="pino"/></button><button aria-expanded={painel} onClick={()=>setPainel(p=>!p)}>Informações</button></header>
         <div className="historico" ref={historico} onScroll={e=>{
           const el=e.currentTarget;posicao.current={chat:chat.id,top:el.scrollTop,fundo:el.scrollHeight-el.scrollTop-el.clientHeight<35};
           sessionStorage.setItem(`${escopo}.scroll.${chat.id}`,String(el.scrollTop));
+          if(el.scrollTop<32&&el.scrollHeight>el.clientHeight)void carregarAnteriores();
         }}>
-          {mensagensVisiveis.length>0&&<button className="anteriores" onClick={async()=>{
-            try{const antigos=await json<Mensagem[]>(auth,`/conversas/${chat.id}/mensagens?limite=50&antes_id=${mensagensVisiveis[0].id}`);setAnteriores(a=>[...antigos,...a]);}catch(e){setErro(String(e));}
-          }}>Carregar mensagens anteriores</button>}
+          {mensagensVisiveis.length>0&&<button className="anteriores" onClick={()=>void carregarAnteriores()}>Carregar mensagens anteriores</button>}
           {mensagensVisiveis.map((m,i)=><div className="linha-mensagem" key={m.id}>
             {dia(m.criado_em)&&dia(m.criado_em)!==dia(mensagensVisiveis[i-1]?.criado_em)&&<div className="data-mensagem">{dia(m.criado_em)}</div>}
             <article className={m.from_me?"enviada":"recebida"}>
             {(m.autor_nome||m.remetente==="sofia")&&<strong>{m.autor_nome||"Sofia"}</strong>}
             {m.participante&&<strong className="participante">{m.participante}</strong>}
+            {m.encaminhada&&<small className="referencia">Encaminhada</small>}
+            {m.citacao&&<blockquote className="referencia">{m.citacao}</blockquote>}
             {m.texto&&<p>{m.texto}</p>}
             {m.tipo!=="excluida"&&["reacao_cliente","reacao_conta"].map(k=>m.central_eventos?.[k]?.texto&&<span key={k} className="reacao">{m.central_eventos[k].texto}</span>)}
             {m.tem_anexo&&<Anexo auth={auth} chat={chat.id} mensagem={m}/>}
-            {acoesHabilitadas&&chat.humano_assumiu&&chat.pode_assumir&&!chat.sofia_institucional&&m.tipo!=="excluida"&&<div className="acoes-mensagem">
+            {chat.pode_assumir&&!chat.sofia_institucional&&!chat.operacao_suspensa&&m.tipo!=="excluida"&&<div className="acoes-mensagem">
               <button aria-label="Ações da mensagem" aria-expanded={menu===m.id} onClick={()=>{setMenu(menu===m.id?null:m.id);setEdicao(null);}}>⋯</button>
-              {menu===m.id&&<div className="acoes">
+              {menu===m.id&&<div className="acoes menu-mensagem">
+                <button onClick={()=>{setCitacao(m);setMenu(null);entrada.current?.focus();}}>Responder</button>
+                {chat.humano_assumiu&&<button onClick={()=>{setEncaminhar(m);setEncaminharDestino(0);setMenu(null);}}>Encaminhar</button>}
+                {acoesHabilitadas&&chat.humano_assumiu&&<>
                 {["👍","❤️","😂","😮","😢","🙏"].map(reacao=><button key={reacao} onClick={()=>void acaoMensagem(m.id,"reagir",reacao)}>{reacao}</button>)}
                 <button onClick={()=>void acaoMensagem(m.id,"reagir")}>Remover reação</button>
                 {m.from_me&&m.remetente==="humano"&&<><button onClick={()=>{if(window.confirm("Excluir esta mensagem no WhatsApp?"))void acaoMensagem(m.id,"excluir");}}>Excluir</button>
                 {!m.tem_anexo&&<button onClick={()=>setEdicao(m.texto||"")}>Editar</button>}</>}
-                {edicao!==null&&<><textarea aria-label="Editar mensagem" maxLength={4096} value={edicao} onChange={e=>setEdicao(e.target.value)}/><button disabled={!edicao.trim()} onClick={()=>void acaoMensagem(m.id,"editar",edicao)}>Salvar</button></>}
+                {edicao!==null&&<><textarea aria-label="Editar mensagem" maxLength={4096} value={edicao} onChange={e=>setEdicao(e.target.value)}/><button disabled={!edicao.trim()} onClick={()=>void acaoMensagem(m.id,"editar",edicao)}>Salvar</button></>}</>}
               </div>}
             </div>}
-            {m.tipo!=="excluida"&&chat.pode_assumir&&!chat.sofia_institucional&&!chat.operacao_suspensa&&<button className="responder" onClick={()=>{setCitacao(m);entrada.current?.focus();}}>Responder</button>}
-            {m.tipo!=="excluida"&&chat.humano_assumiu&&chat.pode_assumir&&!chat.sofia_institucional&&<button onClick={()=>{setEncaminhar(m);setEncaminharDestino(0);}}>Encaminhar</button>}
             <small className="meta-mensagem">{hora(m.criado_em)} {m.from_me&&<EstadoMensagem envio={m.status_envio} processamento={m.status_processamento} remetente={m.remetente}/>}</small>
           </article></div>)}
         </div>
@@ -350,17 +455,25 @@ function Central({auth}:{auth:Auth}) {
           <input hidden ref={arquivoInput} type="file" accept=".jpg,.jpeg,.png,.webp,.ogg,.opus,.mp4,.pdf" onChange={e=>{setArquivo(e.target.files?.[0]||null);e.target.value="";}}/>
           <textarea ref={entrada} rows={1} aria-label="Mensagem" placeholder="Digite uma mensagem" maxLength={4096} value={rascunho} onChange={e=>setRascunhos(a=>({...a,[chat.id]:e.target.value}))}/>
           <button type="button" aria-label={gravando?"Parar gravação":"Gravar áudio"} onClick={gravar}><Icone nome={gravando?"parar":"microfone"}/></button>
-          <button className="enviar" disabled={enviando||gravando||(!rascunho.trim()&&!arquivo)}><Icone nome="enviar"/> Enviar</button>
+          {envioHabilitado===false&&<small className="arquivo">Envio ainda desativado neste ambiente. O rascunho permanece disponível.</small>}
+          <button className="enviar" disabled={envioHabilitado===false||enviando||gravando||(!rascunho.trim()&&!arquivo)}><Icone nome="enviar"/> Enviar</button>
         </form>}
       </>}
     </section>
     {chat&&painel&&<aside className="ficha"><header><strong>Informações</strong><button aria-label="Fechar informações" onClick={()=>setPainel(false)}>×</button></header>
+      {importacaoHabilitada&&chat.conexao_canal_id&&!chat.identificador.endsWith("@g.us")&&<button onClick={async()=>{
+        if(!window.confirm("Confirma a importação somente do histórico autorizado desta conversa?"))return;
+        try{
+          const r=await json<{importadas:number}>(auth,"/conexoes/"+chat.conexao_canal_id+"/historico/"+chat.id,post({confirmar:true}));
+          setErro("Mensagens importadas: "+r.importadas+".");
+        }catch(e){setErro(String(e));}
+      }}>Importar histórico autorizado</button>}
       {arquivoHabilitado&&chat.humano_assumiu&&chat.pode_assumir&&!chat.sofia_institucional&&<button onClick={async()=>{
         try{await json(auth,"/conversas/"+chat.id+"/arquivar",post({arquivada:!chat.central_arquivada}));}
         catch(e){setErro(String(e));}
       }}>{chat.central_arquivada?"Desarquivar":"Arquivar"}</button>}
       {foto&&<img src={foto} alt="Foto do contato"/>}<h2>{nome(chat)}</h2>
-      {Object.entries({telefone:detalhes.telefone,empresa:detalhes.empresa_cliente,responsavel:chat.responsavel_nome,atendimento:atendimento[chat.status_atendimento||""]||chat.status_atendimento,temperatura:detalhes.temperatura,resumo:detalhes.resumo_vendedor,follow_up:detalhes.followup_status}).filter(([,v])=>v!=null).map(([k,v])=><p key={k}><small>{k.replaceAll("_"," ")}</small>{v}</p>)}
+      {Object.entries({telefone:formatarTelefone(telefoneVerificado(detalhes.telefone)||telefoneConversa(chat))||null,empresa:detalhes.empresa_cliente,responsavel:chat.responsavel_nome,atendimento:atendimento[chat.status_atendimento||""]||chat.status_atendimento,temperatura:detalhes.temperatura,resumo:detalhes.resumo_vendedor,follow_up:detalhes.followup_status}).filter(([,v])=>v!=null).map(([k,v])=><p key={k}><small>{k.replaceAll("_"," ")}</small>{v}</p>)}
       {chat.humano_assumiu&&chat.especialista_id&&chat.status_atendimento!=="finalizado"&&(chat.pode_assumir||chat.pode_supervisionar)&&<button onClick={async()=>{
         try{await json(auth,"/encerrar-atendimento",post({conversa_id:chat.id,responsavel_atual_id:chat.especialista_id}));}catch(e){setErro(String(e));}
       }}>Encerrar atendimento</button>}
@@ -383,7 +496,7 @@ function Integracao(){
     };
     addEventListener("message",receber);
     enviar("streamlit:componentReady",{apiVersion:1});
-    const altura=()=>enviar("streamlit:setFrameHeight",{height:Math.max(610,Math.min(850,screen.availHeight-150))});
+    const altura=()=>enviar("streamlit:setFrameHeight",{height:640});
     altura();addEventListener("resize",altura);
     return ()=>{removeEventListener("message",receber);removeEventListener("resize",altura);};
   },[]);

@@ -1,5 +1,26 @@
 ﻿import {test,expect} from "@playwright/test";
 
+test("retoma o histórico NOWEB após falha transitória sem trocar o cursor",async({page})=>{
+  await page.route("**/api/central-whatsapp/capacidades*",route=>
+    route.fulfill({json:{envio:true,historico_progressivo:true}}));
+  const cortes:string[]=[];
+  await page.route("**/api/central-whatsapp/conversas/*/historico-noweb*",route=>{
+    cortes.push(new URL(route.request().url()).searchParams.get("ate")!);
+    return cortes.length===1
+      ? route.fulfill({status:409,json:{detail:"historico_noweb_indisponivel"}})
+      : route.fulfill({json:{proxima:null}});
+  });
+  await page.goto("/");
+  const central=page.frameLocator("iframe");
+  await central.getByRole("button",{name:/Ana Martins/}).click();
+  const entrada=central.getByRole("textbox",{name:"Mensagem",exact:true});
+  await entrada.fill("Rascunho durante a recuperação");
+  await expect.poll(()=>cortes.length).toBe(2);
+  expect(cortes[0]).toBe(cortes[1]);
+  await expect(entrada).toHaveValue("Rascunho durante a recuperação");
+  await expect(entrada).toBeFocused();
+});
+
 test("mantém rascunho, foco, seleção e rolagem durante eventos e reconexão",async({page,request},info)=>{
   await page.goto("/");
   const central=page.frameLocator("iframe");

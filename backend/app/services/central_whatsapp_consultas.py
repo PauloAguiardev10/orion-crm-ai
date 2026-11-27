@@ -141,6 +141,17 @@ def listar_historico(
         LEFT JOIN LATERAL (
             SELECT m.id, m.remetente, m.texto, m.tipo, m.central_eventos,
                    m.central_eventos->>'participante' AS participante,
+                   coalesce(m.central_resposta_waha LIKE 'ENC:%', FALSE) AS encaminhada,
+                   CASE WHEN m.central_resposta_waha IS NOT NULL AND m.central_resposta_waha NOT LIKE 'ENC:%'
+                        THEN coalesce((
+                            SELECT left(origem.texto, 280) FROM mensagens origem
+                            WHERE origem.empresa_id = m.empresa_id AND origem.conversa_id = m.conversa_id
+                              AND (origem.conexao_canal_id IS NULL OR origem.conexao_canal_id = c.conexao_canal_id)
+                              AND origem.tipo IS DISTINCT FROM 'excluida'
+                              AND (origem.mensagem_id_waha = m.central_resposta_waha
+                                   OR origem.mensagem_id_externo = m.central_resposta_waha)
+                            ORDER BY origem.id DESC LIMIT 1
+                        ), 'Mensagem citada') END AS citacao,
                    m.midia_tipo, (m.midia_url IS NOT NULL) AS tem_anexo,
                    m.from_me, m.criado_em, m.status_envio, m.status_processamento,
                    autor.nome AS autor_nome

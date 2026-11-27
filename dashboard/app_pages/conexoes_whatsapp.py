@@ -61,7 +61,7 @@ def _estado_conexao(conexao):
     if codigo == "WORKING" and estado.get("pareamento_pendente", conexao.get("pareamento_pendente")) and conexao["gerenciada"]:
         confirmado = _api("POST", caminho + "/confirmar-numero")
         if confirmado:
-            st.caption("N?mero confirmado para esta conex?o.")
+            st.caption("Número confirmado para esta conexão.")
     if codigo == "SCAN_QR_CODE" and conexao["gerenciada"] and estado.get("pareamento_pendente", conexao.get("pareamento_pendente")):
         qr = _api("GET", caminho + "/qr", imagem=True)
         if qr:
@@ -143,6 +143,12 @@ def render_conexoes_whatsapp():
     if st.button("Conectar ou reconectar", key=f"conectar_waha_{escolhida}"):
         if _api("POST", caminho + "/conectar"):
             st.rerun()
+    if propria and not conexao.get("suspensa") and st.button(
+        "Sincronizar escopo comercial autorizado", key=f"sincronizar_noweb_{escolhida}",
+    ):
+        if _api("POST", caminho + "/sincronizar-noweb"):
+            st.success("Sincronização solicitada. Os resultados aparecem na Central.")
+
     with st.expander("Gerar novo QR de autenticação"):
         st.caption("Para sessões desconectadas. O pareamento e o histórico na WAHA podem ser perdidos. Use o mesmo número.")
         confirmar_qr = st.checkbox("Confirmo um novo pareamento", key=f"confirmar_novo_qr_{escolhida}")
