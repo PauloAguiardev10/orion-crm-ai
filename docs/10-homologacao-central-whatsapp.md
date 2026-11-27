@@ -262,6 +262,12 @@ A sessão de teste ficou em `WORKING` com `noweb.store.enabled=true` e `noweb.st
 
 ## Sincronização durável
 
+### Recuperação de anexos
+
+A homologação de `cc61531` mediu 67 ms para consultar 20 mensagens sem anexos e 12.021 ms com anexos, acima do timeout de leitura de oito segundos do catálogo. O catálogo passa a consultar com `downloadMedia=false` e mantém o tamanho da página da configuração anterior. A fila `central_sync_midias` registra apenas identificadores internos e do provedor, progresso e diagnóstico. Com histórico e mídia habilitados, um worker separado solicita um anexo por mensagem autorizada e usa timeout de leitura de 45 segundos. Falhas têm retentativas independentes com espera crescente e encerram após oito tentativas. O catálogo continua avançando durante essas falhas. [API de mensagem por ID do NOWEB](https://waha.devlike.pro/docs/how-to/chats/#get-message-by-id)
+
+Aplicar `20261203_central_sync_midias.sql` depois de `20261202_central_sync_noweb.sql` e antes de publicar o backend. A migração acrescenta uma tabela e um índice. Preservar a configuração das flags no momento da retomada para manter o tamanho das páginas do cursor já salvo. Acompanhar `executar_em`, `falhas`, `erro` e `concluido` da fila. Os diagnósticos usam códigos de timeout, status HTTP, incompatibilidade e falha de mídia. Não incluem corpos de respostas ou credenciais.
+
 O FastAPI inicia o worker quando `ORION_WAHA_HISTORICO_ATIVO=1`. O pareamento grava a tarefa na mesma transação que confirma o número. O worker também encontra conexões comerciais elegíveis já pareadas e segue com o CRM fechado. A sessão precisa estar em `WORKING`, usar NOWEB Store e devolver o número reservado pelo CRM. As regras de autorização por sessão e grupo continuam obrigatórias.
 
 `central_sync_noweb` guarda a próxima execução, o cursor do catálogo e da página de mensagens, as falhas, o código de diagnóstico e o último ciclo concluído. `central_sync_noweb_chats` guarda a data de corte concluída por chat. O progresso e as mensagens são confirmados juntos. Uma falha reverte a página em curso. Um bloqueio transacional no PostgreSQL limita a execução a uma página por vez mesmo com vários processos FastAPI.

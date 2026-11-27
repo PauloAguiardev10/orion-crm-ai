@@ -479,9 +479,12 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
         import json
         from unittest.mock import Mock
         from app.services.central_whatsapp_sync import executar_passo
+        from app.services.central_whatsapp_sync_midias import executar_midia, TIMEOUT_MIDIA
+        from requests import ReadTimeout
 
-        ddl = (Path(__file__).resolve().parents[1] / "migrations/20261202_central_sync_noweb.sql").read_text()
-        self.db.connection().exec_driver_sql(ddl.strip().removeprefix("BEGIN;").removesuffix("COMMIT;"))
+        for nome in ("20261202_central_sync_noweb.sql", "20261203_central_sync_midias.sql"):
+            ddl = (Path(__file__).resolve().parents[1] / "migrations" / nome).read_text()
+            self.db.connection().exec_driver_sql(ddl.strip().removeprefix("BEGIN;").removesuffix("COMMIT;"))
 
         conexao = self.db.get(ConexaoCanal, self.privada)
         conexao.gerenciada_crm = True
@@ -505,12 +508,13 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
                   "config": {"noweb": {"store": {"enabled": True}}, "metadata": {"orionSessao": sessao}},
                   "me": {"id": numero + "@c.us"}}
         primeira = {"id": f"false_{jid}_msg1", "from": jid, "fromMe": False, "body": "Primeira",
-                    "timestamp": instante - 2}
+                    "timestamp": instante - 2, "hasMedia": True, "media": None}
         lid = "180000014516@lid"
         repetida = {**primeira, "id": f"false_{lid}_msg1", "from": lid}
         nova = {**primeira, "id": f"false_{jid}_msg2", "timestamp": instante + 10}
         indisponivel = False
         numero_trocado = False
+        anexo_expirado = False
         janelas = []
 
         def get(url, **kw):
@@ -520,6 +524,17 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
                 return Mock(status_code=503 if indisponivel else 200, json=Mock(return_value=dados))
             if url.endswith("/api/contacts"):
                 return Mock(status_code=200, json=Mock(return_value={"id": chat, "name": "Contato teste", "lid": lid}))
+            if params.get("downloadMedia") == "true":
+                self.assertEqual(kw["timeout"], TIMEOUT_MIDIA)
+                if url.endswith("_msg1"):
+                    if anexo_expirado:
+                        return Mock(status_code=200, json=Mock(return_value=primeira))
+                    raise ReadTimeout("simulação sem dados privados")
+                if kw["timeout"][1] < 12.021:
+                    raise ReadTimeout("latência simulada da página observada")
+                dados = {**nova, "media": {"url": "https://waha.invalid/api/files/fixture.pdf"}}
+                return Mock(status_code=200, json=Mock(return_value=dados))
+            self.assertEqual(params["downloadMedia"], "false")
             janelas.append(params)
             mensagens = [repetida, nova] if "filter.timestamp.gte" in params else [primeira, repetida]
             return Mock(status_code=200, json=Mock(return_value=[] if params["offset"] else mensagens))
@@ -540,6 +555,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             "ORION_WAHA_PAREAMENTO_CONTATOS": json.dumps({sessao: [chat, "123456@g.us"]}),
             "ORION_WAHA_CATALOGO_COMERCIAL": "[]", "ORION_WAHA_GRUPOS_AUTORIZADOS": "{}",
             "WAHA_API_KEY": "chave-ficticia",
+            "ORION_CENTRAL_WHATSAPP_MIDIA_ATIVA": "1",
         }), patch("app.services.central_whatsapp_historico_noweb.requests.Session") as classe:
             classe.return_value.__enter__.return_value.get.side_effect = get
             headers = {"Authorization": "Bearer " + gerar_token_api(usuario_id=self.admin, empresa_id=self.empresa)}
@@ -563,6 +579,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             indisponivel = True
             self.assertTrue(passo(3))
             self.assertEqual(progresso()["falhas"], 1)
+            self.assertEqual(progresso()["erro"], "noweb_http_503")
             self.db.commit()
             self.assertFalse(passo(4))
             indisponivel = False
@@ -574,7 +591,7 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             self.db.commit()
             numero_trocado = False
             self.assertTrue(passo(35))
-            self.assertEqual(progresso()["cursor"]["mensagens"], 50)
+            self.assertEqual(progresso()["cursor"]["mensagens"], 20)
             self.db.commit()
             self.assertTrue(passo(37))
             self.assertTrue(passo(39))
@@ -586,6 +603,22 @@ class CentralWhatsAppConsultasTest(unittest.TestCase):
             self.assertTrue(passo(344))
             self.assertTrue(passo(346))
             self.assertEqual(self.db.execute(text("SELECT count(*) FROM central_sync_noweb")).scalar_one(), 1)
+            fila = text("SELECT concluido, falhas, erro FROM central_sync_midias ORDER BY mensagem_id")
+            self.assertEqual(self.db.execute(fila).all(), [(False, 0, None), (False, 0, None)])
+            with patch("app.services.central_whatsapp_sync_midias.baixar_midia_waha",
+                       return_value=("teste.pdf", "application/pdf", b"%PDF-1.4")) as baixar, patch(
+                "app.services.central_whatsapp_sync_midias.guardar_midia", return_value="fixture:teste.pdf",
+            ):
+                self.assertTrue(executar_midia(self.db, agora + timedelta(seconds=350)))
+                self.assertTrue(executar_midia(self.db, agora + timedelta(seconds=351)))
+            self.assertEqual(self.db.execute(fila).all(), [(False, 1, "noweb_timeout"), (True, 0, None)])
+            self.assertEqual(baixar.call_args.kwargs["timeout"], TIMEOUT_MIDIA)
+            self.db.commit()
+            anexo_expirado = True
+            with Session(bind=self.db.get_bind(), join_transaction_mode="create_savepoint") as processo:
+                self.assertTrue(executar_midia(processo, agora + timedelta(seconds=365)))
+                processo.commit()
+            self.assertEqual(self.db.execute(fila).all(), [(False, 2, "midia_indisponivel"), (True, 0, None)])
         conversa = self.db.query(Conversa).filter_by(
             empresa_id=self.empresa, conexao_canal_id=self.privada, identificador=chat,
         ).one()

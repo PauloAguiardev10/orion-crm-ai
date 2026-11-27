@@ -87,7 +87,13 @@ def guardar_midia(empresa_id, nome, dados):
     return referencia
 
 
-def baixar_midia_waha(midia, *, sessao, mensagem_id):
+class ErroHTTPArquivoWaha(ValueError):
+    def __init__(self, status):
+        super().__init__("midia_indisponivel")
+        self.status = status
+
+
+def baixar_midia_waha(midia, *, sessao, mensagem_id, timeout=(3, 8)):
     mime = str(midia.get("mimetype") or "").partition(";")[0].strip().lower()
     if mime not in FORMATOS or midia.get("error"):
         raise ValueError("formato_indisponivel")
@@ -118,10 +124,10 @@ def baixar_midia_waha(midia, *, sessao, mensagem_id):
     dados = bytearray()
     with requests.get(
         rota.origem + destino, headers=rota.headers, stream=True,
-        allow_redirects=False, timeout=(3, 8),
+        allow_redirects=False, timeout=timeout,
     ) as resposta:
         if resposta.status_code != 200:
-            raise ValueError("midia_indisponivel")
+            raise ErroHTTPArquivoWaha(resposta.status_code)
         for bloco in resposta.iter_content(chunk_size=65536):
             if len(dados) + len(bloco) > LIMITE_MIDIA:
                 raise ValueError("tamanho_midia_invalido")

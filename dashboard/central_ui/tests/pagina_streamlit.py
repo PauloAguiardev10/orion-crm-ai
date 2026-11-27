@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+if dependencias := os.getenv("ORION_TEST_DASH_DEPS"):
+    sys.path.insert(0, dependencias)
+
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

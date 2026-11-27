@@ -733,15 +733,50 @@ def render_conversas(leads):
   padding: 0 .6rem 0 !important; max-width:none; box-sizing:border-box;
 }
 .st-key-orion_central_area iframe {
-  display:block; width:100%; height:calc(100dvh - 6rem) !important;
+  display:block; width:100%; height:var(--orion-central-altura, calc(100dvh - 6rem)) !important;
   border:0;
 }
 @media(max-width:720px) {
   .stMainBlockContainer:has(.st-key-orion_central_area) {padding:0 .2rem 0 !important}
-  .st-key-orion_central_area iframe {height:calc(100dvh - 6rem) !important}
 }
 </style>
 """, unsafe_allow_html=True)
+            st.html("""
+<script>
+(() => {
+  window.orionCentralCancelarAjuste?.();
+  const principal = document.querySelector(".stMain");
+  if (!principal) return;
+  let quadro;
+  function ajustar() {
+    cancelAnimationFrame(quadro);
+    quadro = requestAnimationFrame(() => {
+      const iframe = principal.querySelector(".st-key-orion_central_area iframe");
+      if (!iframe) return;
+      const visivel = window.visualViewport;
+      const fimJanela = visivel ? visivel.offsetTop + visivel.height : window.innerHeight;
+      const fimPainel = principal.getBoundingClientRect().bottom;
+      const altura = Math.max(0, Math.floor(Math.min(fimJanela, fimPainel) - iframe.getBoundingClientRect().top));
+      iframe.style.setProperty("--orion-central-altura", altura + "px");
+    });
+  }
+  const alteracoes = new MutationObserver(ajustar);
+  alteracoes.observe(principal, {subtree: true, childList: true});
+  const tamanho = new ResizeObserver(ajustar);
+  tamanho.observe(principal);
+  window.addEventListener("resize", ajustar);
+  window.visualViewport?.addEventListener("resize", ajustar);
+  window.orionCentralCancelarAjuste = () => {
+    alteracoes.disconnect();
+    tamanho.disconnect();
+    window.removeEventListener("resize", ajustar);
+    window.visualViewport?.removeEventListener("resize", ajustar);
+    cancelAnimationFrame(quadro);
+  };
+  ajustar();
+})();
+</script>
+""", unsafe_allow_javascript=True)
             with st.container(key="orion_central_area"):
                 componente = components.declare_component(
                     "orion_central_whatsapp", url=os.getenv("ORION_CENTRAL_UI_URL").strip(),

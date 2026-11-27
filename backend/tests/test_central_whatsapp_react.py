@@ -15,6 +15,27 @@ with patch.dict(os.environ, {"DATABASE_URL": "sqlite://", "PYTHON_DOTENV_DISABLE
 
 
 class CentralReactTest(unittest.TestCase):
+    def test_fotos_noweb_usam_campos_distintos_e_grupo_autorizado(self):
+        from app.services.central_whatsapp_contatos import obter_foto_contato_cadastrado, obter_foto_grupo_waha
+
+        chat = "5511990001111@c.us"
+        grupo = "120363001234567890@g.us"
+        foto = "https://pps.whatsapp.net/teste.jpg"
+        rota = SimpleNamespace(sessao="default")
+        with patch.dict(os.environ, {
+            "ORION_WAHA_GRUPOS_AUTORIZADOS": '{"default":{"120363001234567890@g.us":"Grupo teste"}}',
+        }), patch("app.services.central_whatsapp_contatos.resolver_waha", return_value=rota), patch(
+            "app.services.central_whatsapp_contatos._consulta_contato",
+            side_effect=[{"id": chat, "name": "Contato teste"}, {"profilePictureURL": foto}, {"url": foto}],
+        ) as consultar, patch("app.services.central_whatsapp_contatos.baixar_foto_verificada") as baixar:
+            obter_foto_contato_cadastrado("default", chat.replace("@c.us", "@s.whatsapp.net"))
+            obter_foto_grupo_waha("default", grupo)
+            with self.assertRaisesRegex(ValueError, "foto_indisponivel"):
+                obter_foto_grupo_waha("outra-sessao", grupo)
+            self.assertEqual(consultar.call_count, 3)
+            self.assertEqual(baixar.call_args_list[0].args, (foto,))
+            self.assertEqual(baixar.call_args_list[1].args, (foto,))
+
     def test_worker_inicia_novamente_apos_reiniciar_fastapi(self):
         from threading import Event
         from app.services.central_whatsapp_sync import ciclo_sync_noweb

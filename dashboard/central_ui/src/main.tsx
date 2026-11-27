@@ -450,12 +450,12 @@ function Central({auth}:{auth:Auth}) {
           }}>{item}</button>)}</div>}
           {citacao&&<div className="arquivo"><span>Resposta a: {citacao.texto||"Mensagem"}</span><button type="button" onClick={()=>setCitacao(null)}>Remover citação</button></div>}
           {arquivo&&<div className="arquivo">{arquivo.name}<button type="button" onClick={()=>setArquivo(null)}>Remover</button></div>}
+          {envioHabilitado===false&&<small className="arquivo">Envio ainda desativado neste ambiente. O rascunho permanece disponível.</small>}
           <button type="button" aria-label="Emojis" onClick={()=>setEmoji(v=>!v)}><Icone nome="emoji"/></button>
           <button type="button" aria-label="Anexar arquivo" onClick={()=>arquivoInput.current?.click()}><Icone nome="anexo"/></button>
           <input hidden ref={arquivoInput} type="file" accept=".jpg,.jpeg,.png,.webp,.ogg,.opus,.mp4,.pdf" onChange={e=>{setArquivo(e.target.files?.[0]||null);e.target.value="";}}/>
           <textarea ref={entrada} rows={1} aria-label="Mensagem" placeholder="Digite uma mensagem" maxLength={4096} value={rascunho} onChange={e=>setRascunhos(a=>({...a,[chat.id]:e.target.value}))}/>
           <button type="button" aria-label={gravando?"Parar gravação":"Gravar áudio"} onClick={gravar}><Icone nome={gravando?"parar":"microfone"}/></button>
-          {envioHabilitado===false&&<small className="arquivo">Envio ainda desativado neste ambiente. O rascunho permanece disponível.</small>}
           <button className="enviar" disabled={envioHabilitado===false||enviando||gravando||(!rascunho.trim()&&!arquivo)}><Icone nome="enviar"/> Enviar</button>
         </form>}
       </>}

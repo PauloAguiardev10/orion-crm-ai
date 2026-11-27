@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 import requests
+from sqlalchemy import text
 
 from app.models.models import Conversa, Mensagem
 from app.services.central_whatsapp_citacoes import extrair_citacao_waha
@@ -21,6 +22,12 @@ from app.services.central_whatsapp_ack import ACKS
 
 class NumeroNowebDivergente(ValueError):
     pass
+
+
+class ErroConsultaNoweb(ValueError):
+    def __init__(self, codigo):
+        super().__init__("historico_noweb_indisponivel")
+        self.codigo = codigo
 
 
 def chats_autorizados_noweb(sessao):
@@ -45,20 +52,28 @@ def catalogo_comercial_ativo(sessao):
     return isinstance(autorizadas, list) and sessao in autorizadas
 
 
-def _consultar_noweb(cliente, rota, caminho, params=None, *, aceitar_ausente=False):
-    resposta = cliente.get(rota.origem + caminho, headers=rota.headers, params=params,
-                           timeout=(3, 8), allow_redirects=False)
+def _consultar_noweb(cliente, rota, caminho, params=None, *, aceitar_ausente=False, timeout=(3, 8)):
+    try:
+        resposta = cliente.get(rota.origem + caminho, headers=rota.headers, params=params,
+                               timeout=timeout, allow_redirects=False)
+    except requests.Timeout as erro:
+        raise ErroConsultaNoweb("noweb_timeout") from erro
+    except requests.RequestException as erro:
+        raise ErroConsultaNoweb("noweb_conexao") from erro
     if aceitar_ausente and resposta.status_code == 404:
         return None
     if resposta.status_code != 200:
-        raise ValueError
-    return resposta.json()
+        raise ErroConsultaNoweb(f"noweb_http_{resposta.status_code}")
+    try:
+        return resposta.json()
+    except ValueError as erro:
+        raise ErroConsultaNoweb("noweb_dados_incompativeis") from erro
 
 
 def _rota_noweb(http, sessao, numero_esperado=None):
     rota = resolver_waha(sessao)
     if not rota.chave_api:
-        raise ValueError
+        raise ErroConsultaNoweb("noweb_configuracao_invalida")
     fisica = quote(rota.sessao, safe="")
     estado = _consultar_noweb(http, rota, f"/api/sessions/{fisica}")
     config = estado.get("config") or {}
@@ -67,7 +82,8 @@ def _rota_noweb(http, sessao, numero_esperado=None):
     if (estado.get("name") != rota.sessao or estado.get("status") != "WORKING" or engine != "NOWEB"
             or config.get("noweb", {}).get("store", {}).get("enabled") is not True
             or sessao.startswith(PREFIXO) and (config.get("metadata") or {}).get("orionSessao") != sessao):
-        raise ValueError
+        raise ErroConsultaNoweb("noweb_sessao_indisponivel" if estado.get("status") != "WORKING"
+                               else "noweb_dados_incompativeis")
     if numero_esperado is not None:
         eu = estado.get("me")
         if not extrair_numero_conta(eu):
@@ -100,28 +116,29 @@ def obter_pagina_noweb(sessao_logica, identificador, *, deslocamento=0, ate=None
                       pagina=False, desde=None, numero_esperado=None):
     from app.services.central_whatsapp_midia import midia_ativa
 
-    baixar_midia = pagina and midia_ativa()
-    limite = 20 if baixar_midia else 50
+    agendar_anexos = pagina and midia_ativa()
+    # Mantém a unidade dos offsets persistidos pela versão anterior.
+    limite = 20 if agendar_anexos else 50
     try:
         grupo = nome_grupo(sessao_logica, identificador)
         chat = quote(jid_noweb(identificador), safe="")
         with requests.Session() as http:
             rota, sessao = _rota_noweb(http, sessao_logica, numero_esperado)
             historico = _consultar_noweb(http, rota, f"/api/{sessao}/chats/{chat}/messages", {
-                "limit": limite, "offset": deslocamento, "downloadMedia": str(baixar_midia).lower(),
+                "limit": limite, "offset": deslocamento, "downloadMedia": "false",
                 **({"filter.timestamp.lte": ate} if ate is not None else {}),
                 **({"filter.timestamp.gte": desde} if desde is not None else {}),
             })
             contato = None if grupo else _consultar_noweb(http, rota, "/api/contacts", {
                 "session": rota.sessao, "contactId": chat_canonico(identificador),
             }, aceitar_ausente=numero_esperado is not None)
-    except NumeroNowebDivergente:
+    except (NumeroNowebDivergente, ErroConsultaNoweb):
         raise
     except (requests.RequestException, ConfiguracaoWahaInvalida, ValueError, AttributeError, TypeError) as erro:
-        raise ValueError("historico_noweb_indisponivel") from erro
+        raise ErroConsultaNoweb("noweb_dados_incompativeis") from erro
     if not isinstance(historico, list) or len(historico) > limite:
         raise ValueError("historico_noweb_invalido")
-    return historico, contato, grupo, baixar_midia, limite
+    return historico, contato, grupo, agendar_anexos, limite
 
 
 def contato_confirma_chat(contato, identificador):
@@ -145,7 +162,19 @@ def aliases_contato(contato, identificador):
 
 def sincronizar_conversa_noweb(db, conexao, conversa_id, *, exigir_contato_confirmado=False,
                               deslocamento=0, ate=None, pagina=False, desde=None, captura=None, chat_waha=None):
-    from app.services.central_whatsapp_midia_entrada import anexar_midia_waha
+    def agendar_midia(registro, ident):
+        from app.services.central_whatsapp_eventos_mensagem import aplicar_eventos_pendentes
+
+        aplicar_eventos_pendentes(db, registro, ident)
+        if registro.tipo == "excluida":
+            return
+        db.execute(text("""
+            INSERT INTO central_sync_midias
+                (mensagem_id, empresa_id, conexao_id, sessao, chat, id_waha)
+            VALUES (:mensagem, :empresa, :conexao, :sessao, :chat, :id_waha)
+            ON CONFLICT (mensagem_id) DO NOTHING
+        """), {"mensagem": registro.id, "empresa": conexao.empresa_id, "conexao": conexao.id,
+               "sessao": conexao.sessao_waha, "chat": identificador, "id_waha": ident})
 
     conversa = db.query(Conversa).filter_by(
         id=conversa_id, empresa_id=conexao.empresa_id, conexao_canal_id=conexao.id,
@@ -154,7 +183,7 @@ def sincronizar_conversa_noweb(db, conexao, conversa_id, *, exigir_contato_confi
     if conversa is None or not destinatario_noweb_valido(conexao.sessao_waha, conversa.identificador):
         raise ValueError("conversa_indisponivel")
     identificador = chat_waha or conversa.identificador
-    historico, contato, grupo, baixar_midia, limite = captura or obter_pagina_noweb(
+    historico, contato, grupo, agendar_anexos, limite = captura or obter_pagina_noweb(
         conexao.sessao_waha, identificador, deslocamento=deslocamento, ate=ate, pagina=pagina,
     )
     aliases = aliases_contato(contato, identificador)
@@ -209,9 +238,9 @@ def sincronizar_conversa_noweb(db, conexao, conversa_id, *, exigir_contato_confi
             empresa_id=conversa.empresa_id, conversa_id=conversa.id,
         ).filter(Mensagem.mensagem_id_externo.in_(ids) | Mensagem.mensagem_id_waha.in_(ids)).first()
         if existente is not None:
-            if baixar_midia and tem_midia and existente.conexao_canal_id == conexao.id and existente.sessao_waha == conexao.sessao_waha:
-                anexar_midia_waha(db, registro=existente, empresa_id=conexao.empresa_id,
-                                  sessao=conexao.sessao_waha, mensagem_id=ident, payload=item)
+            if (agendar_anexos and tem_midia and not existente.midia_url and existente.tipo != "excluida"
+                    and existente.conexao_canal_id == conexao.id and existente.sessao_waha == conexao.sessao_waha):
+                agendar_midia(existente, ident)
             continue
         # Importacao historica nao chama o servico de mensagens em tempo real.
         ack = item.get("ack")
@@ -228,9 +257,9 @@ def sincronizar_conversa_noweb(db, conexao, conversa_id, *, exigir_contato_confi
             central_eventos={"participante": participante} if participante else None,
         )
         db.add(registro)
-        if baixar_midia and tem_midia:
-            anexar_midia_waha(db, registro=registro, empresa_id=conexao.empresa_id,
-                              sessao=conexao.sessao_waha, mensagem_id=ident, payload=item)
+        if agendar_anexos and tem_midia:
+            db.flush()
+            agendar_midia(registro, ident)
         importadas += 1
     if pagina:
         resultado = {"importadas": importadas, "proxima": deslocamento + limite if historico else None}

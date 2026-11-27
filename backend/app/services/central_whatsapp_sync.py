@@ -14,7 +14,7 @@ from app.database.database import SessionLocal
 from app.models.models import ConexaoCanal, Conversa
 from app.services.central_whatsapp_grupos import nome_grupo
 from app.services.central_whatsapp_historico_noweb import (
-    aliases_contato, assinatura_pagina, catalogo_comercial_ativo, chats_autorizados_noweb,
+    ErroConsultaNoweb, aliases_contato, assinatura_pagina, catalogo_comercial_ativo, chats_autorizados_noweb,
     contato_confirma_chat, destinatario_noweb_valido, obter_pagina_noweb, pagina_catalogo_noweb,
     sincronizar_conversa_noweb,
 )
@@ -203,7 +203,7 @@ def executar_passo(db, agora=None):
             "contato_noweb_nao_confirmado", "conversa_noweb_ambigua",
             "paginacao_mensagens_repetida", "paginacao_catalogo_repetida", "catalogo_noweb_invalido",
             "numero_noweb_divergente",
-        } else "provedor_noweb_indisponivel"
+        } else erro.codigo if isinstance(erro, ErroConsultaNoweb) else "noweb_dados_incompativeis"
         if codigo in {"contato_noweb_nao_confirmado", "conversa_noweb_ambigua"}:
             _proximo_chat(cursor)
             cursor["ignorados"] = cursor.get("ignorados", 0) + 1
@@ -244,14 +244,20 @@ def _executar_worker(parar):
 
 @asynccontextmanager
 async def ciclo_sync_noweb(_app):
+    from app.services.central_whatsapp_midia import midia_ativa
+    from app.services.central_whatsapp_sync_midias import executar_worker_midias
+
     parar = Event()
-    worker = None
+    workers = []
     if os.getenv("ORION_WAHA_HISTORICO_ATIVO") == "1":
-        worker = Thread(target=_executar_worker, args=(parar,), name="central-sync-noweb", daemon=True)
+        workers.append(Thread(target=_executar_worker, args=(parar,), name="central-sync-noweb", daemon=True))
+        if midia_ativa():
+            workers.append(Thread(target=executar_worker_midias, args=(parar,), name="central-sync-midias", daemon=True))
+    for worker in workers:
         worker.start()
     try:
         yield
     finally:
         parar.set()
-        if worker is not None:
+        for worker in workers:
             worker.join(timeout=2)

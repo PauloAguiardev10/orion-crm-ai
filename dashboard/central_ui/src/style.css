@@ -106,7 +106,7 @@ button:hover:not(:disabled){border-color:#3f80bc}
 .fixar-chat[aria-pressed=true]{color:#76d9ff;border-color:#478cbd}
 /* The host controls the iframe height. Only these two panes scroll. */
 html,body,#root{height:100%;overflow:hidden}
-.central{height:100%;grid-template-columns:minmax(240px,31%) minmax(0,1fr)}
+.central{height:100%;grid-template-columns:minmax(240px,31%) minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 .central.com-ficha{grid-template-columns:minmax(220px,27%) minmax(0,1fr) minmax(190px,24%)}
 .lista>header{padding:8px 12px}
 .conexao-status{font-size:.68rem}
@@ -114,7 +114,9 @@ html,body,#root{height:100%;overflow:hidden}
 .categorias button{font-size:.76rem;padding:4px 8px;border-radius:14px}
 .categorias button[aria-pressed=true]{background:#1b4877;border-color:#49aaff}
 .compositor,.chat>header,.lista>header{flex:none}
-.historico{min-height:0;padding:8px clamp(8px,3vw,38px)}
+.historico{flex:1 1 0;min-height:0;padding:8px clamp(8px,3vw,38px)}
+.compositor textarea{min-width:0;max-height:min(135px,24dvh)}
+.compositor .emojis,.compositor .arquivo{max-height:16dvh;overflow:auto;overflow-wrap:anywhere}
 .historico article{position:relative;padding:5px 10px}
 .acoes-mensagem{float:right;margin-left:8px}
 .acoes-mensagem>button{min-width:25px}
@@ -141,5 +143,5 @@ html,body,#root{height:100%;overflow:hidden}
  .compositor{gap:3px;padding:5px 4px}
  .compositor>button{padding:5px}
  .compositor>button svg{width:16px;height:16px}
- .compositor textarea{min-width:65px;padding:5px 7px}
+ .compositor textarea{min-width:0;padding:5px 7px}
 }
